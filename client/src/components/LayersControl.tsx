@@ -558,8 +558,11 @@ const LayersControl: FC = () => {
             </div>
           ) : (
             <p style={{ color: "var(--st-gray-40)", textAlign: "center" }}>
-              Drag and drop a GeoJSON
-              <br /> or zipped shapefile
+              Drag and drop (or click) to upload
+              <p style={{ fontSize: "12px" }}>
+                Supported types:
+                <br /> .geojson, .zip (zipped shapefiles), .kml
+              </p>
             </p>
           )}
         </div>
