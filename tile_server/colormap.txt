@@ -1,0 +1,7 @@
+32700 0 0 0 0    # "nv" (no value) ensures transparency
+0    246 232 195 255   # #f6e8c3 (light beige)
+10   216 179 101 255   # #d8b365 (brown)
+50   153 151  74 255   # #99974a (olive green)
+100   83 121  45 255   # #53792d (green)
+150  107 223 210 255   # #6bdfd2 (cyan)
+200   24  57 197 255   # #1839c5 (deep blue)

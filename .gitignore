@@ -26,3 +26,4 @@ local_test
 water_rights_gdrive_creds.txt
 client/CHANGELOG.md
 .temp_s3_credentials.json
+modis_downloads
