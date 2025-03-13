@@ -15,9 +15,11 @@ import LoginButton from "../components/LoginButton";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import UsersList from "../components/UsersList";
 import MapLayersPanel from "../components/MapLayersPanel";
-import { MAP_LAYER_OPTIONS } from "../utils/constants";
+import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
 import ActiveMapLayer from "../components/ActiveMapLayer";
 import { CRS } from "leaflet";
+import chroma from "chroma-js";
+import DrawControls from "../components/DrawControls";
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -43,8 +45,42 @@ const Dashboard = () => {
   const showARDTiles = useStore((state) => state.showARDTiles);
   const ardTiles = useStore((state) => state.ardTiles);
 
+  const visibleReferenceLayers = useStore((state) => state.visibleReferenceLayers);
+
+  const visibleReferenceGeoJSONs = useMemo(() => {
+    if (!visibleReferenceLayers || !REFERENCE_GEOJSONS) {
+      return [];
+    }
+
+    return visibleReferenceLayers.map((layer) => (REFERENCE_GEOJSONS as any)?.[layer]);
+  }, [visibleReferenceLayers, REFERENCE_GEOJSONS]);
+
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const tileDate = useStore((state) => state.tileDate);
+
+  const [minBaseColor, maxBaseColor] = useStore((state) => [state.minimumBaseMapColorBound, state.maximumBaseMapColorBound]);
+  const refreshType = useStore((state) => state.refreshType);
+  const comparisonMode = useStore((state) => state.comparisonMode);
+  const minColor = useMemo(() => {
+    if (refreshType === "static") {
+      return 0;
+    } else {
+      return minBaseColor || 0;
+    }
+  }, [minBaseColor, refreshType]);
+  const maxColor = useMemo(() => {
+    if (refreshType === "static") {
+      return 200;
+    } else {
+      return maxBaseColor || 200;
+    }
+  }, [maxBaseColor, refreshType]);
+
+  const numberOfSteps = 100;
+  const colors = useMemo(() => {
+    let colormap = comparisonMode === "absolute" ? ET_COLORMAP : DIFF_COLORMAP;
+    return chroma.scale(colormap).colors(numberOfSteps).reverse();
+  }, [ET_COLORMAP, DIFF_COLORMAP, numberOfSteps, comparisonMode]);
 
   const activeMapLayer = useMemo(() => {
     let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;
@@ -213,7 +249,67 @@ const Dashboard = () => {
         <ActiveMapLayer />
         <ZoomControl position="topright" />
         <ScaleControl position="bottomleft" />
+        <DrawControls />
+
+        {activeMapLayer?.refresh && (
+          <div
+            style={{
+              position: "absolute",
+              // top: "80px",
+              // right: "10px",
+              top: "12px",
+              right: "50px",
+              zIndex: 1000,
+              borderRadius: "8px",
+              overflow: "hidden",
+              border: "4px solid white",
+              background: "white",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                width: "26px",
+                justifyContent: "center",
+                padding: "4px 8px",
+                background: "white",
+                color: "var(--st-gray-80)",
+                fontWeight: "bold",
+              }}
+            >
+              {maxColor}
+            </div>
+            <div style={{ borderRadius: "8px", overflow: "hidden", background: "white" }}>
+              {colors.map((value, index) => (
+                <div
+                  key={index}
+                  style={{
+                    width: "26px",
+                    height: `calc(200px / ${colors.length})`,
+                    backgroundColor: value,
+                  }}
+                ></div>
+              ))}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: "26px",
+                justifyContent: "center",
+                padding: "4px 8px",
+                background: "white",
+                color: "var(--st-gray-80)",
+                fontWeight: "bold",
+              }}
+            >
+              {minColor}
+            </div>
+          </div>
+        )}
         {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
+        {visibleReferenceGeoJSONs.map((layer) => (
+          <GeoJSONLayer key={layer.name} data={layer.data} validateBounds={false} fitToBounds={false} />
+        ))}
         <GeoJSONLayer data={loadedGeoJSON} />
         <MultiGeoJSONLayer data={multipolygons} locations={locations} />
       </MapContainer>

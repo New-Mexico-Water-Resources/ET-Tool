@@ -456,4 +456,6 @@ if __name__ == "__main__":
         dlog("Starting up water_report_queue.py", notification=True)
         main()
     finally:
-        os.unlink(pidfile)
+        if os.path.isfile(pidfile):
+            dlog("Removing pid file...", notification=True)
+            os.unlink(pidfile)

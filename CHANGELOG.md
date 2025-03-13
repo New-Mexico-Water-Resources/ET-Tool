@@ -1,6 +1,12 @@
-## 1.17.0 (2025-01-30)
+## 1.17.0 (2025-03-12)
 
 ### Features
+- Adds ability to draw custom regions from map
+- Adds New Mexico State Boundary and Counties references to the map
+- Changes legend label for ETo (2008 and after PET) to be more clear
+- Scales ETo to daylight hours to more closely match the daylight hours ET
+  - This is done by multiplying the ETo value by the ratio of daylight hours to 24 hours
+  - Since 2 different models are used for ETo and ET, an additional correction is included to ensure ETo is always greater than ET
 
 
 ### Bug Fixes

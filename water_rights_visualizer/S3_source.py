@@ -12,46 +12,15 @@ from dateutil import parser
 import logging
 import cl
 
-import rasterio
-import raster
 import raster as rt
 
 from .errors import FileUnavailable
 from .data_source import DataSource
 from .variable_types import get_available_variable_source_for_date, get_available_variables_for_date
 
-# from .google_drive import google_drive_login
-
 logger = logging.getLogger(__name__)
 
 REMOVE_TEMPORARY_FILES = True
-
-
-def read_geometry(S3_URL: str, session: boto3.session.Session = None) -> raster.RasterGeometry:
-    if session is None:
-        session = assume_role()
-
-    with rasterio.Env(rasterio.session.AWSSession(session)) as env:
-        with rasterio.open(S3_URL) as remote_file:
-            source_CRS = remote_file.crs
-            source_rows, source_cols = remote_file.shape
-            source_affine = remote_file.transform
-
-            source_grid = raster.RasterGrid.from_affine(
-                affine=source_affine, rows=source_rows, cols=source_cols, crs=source_CRS
-            )
-
-            return source_grid
-
-
-def read_subset(S3_URL: str, geometry: raster.RasterGeometry, session: boto3.session.Session = None) -> raster.Raster:
-    if session is None:
-        session = assume_role()
-
-    with rasterio.Env(rasterio.session.AWSSession(session)) as env:
-        subset = raster.Raster.open(filename=S3_URL, geometry=geometry)
-
-    return subset
 
 
 class S3Source(DataSource):
@@ -126,8 +95,8 @@ class S3Source(DataSource):
 
         variable_source = get_available_variable_source_for_date(variable_name, acquisition_date)
         if not variable_source:
-            logger.warn(f"no variable source found for {variable_name} on {acquisition_date}")
-            return ""
+            logger.warning(f"no variable source found for {variable_name} on {acquisition_date}")
+            raise FileUnavailable(f"no variable source found for {variable_name} on {acquisition_date}")
         mapped_variable = variable_source.mapped_variable
 
         date_str = f"{acquisition_date:%Y-%m}-01" if variable_source.monthly else f"{acquisition_date:%Y-%m-%d}"
@@ -135,7 +104,8 @@ class S3Source(DataSource):
         key = f"{int(tile):06d}_{str(mapped_variable)}_{date_str}"
 
         if key in self.filenames:
-            return self.filenames[key]
+            yield self.filenames[key]
+            return
 
         # acquisition_date = acquisition_date.strftime("%Y-%m-%d")
 
@@ -163,8 +133,7 @@ class S3Source(DataSource):
                 logger.warning(e)
                 logger.warning(f"removing corrupted file: {filename}")
                 remove(filename)
-
-        if not exists(filename):
+        else:
             logger.info(
                 f"retrieving {cl.file(filename_base)} from S3 bucket {cl.name(self.bucket_name)} to file: {cl.file(filename)}"
             )
@@ -181,6 +150,8 @@ class S3Source(DataSource):
 
             if not failed_to_retrieve:
                 logger.info(f"temporary file retrieved from S3 in {cl.time(duration_seconds)} seconds: {cl.file(filename)}")
+            else:
+                logger.error(f"failed to retrieve file from S3: {filename_base} ({filename})")
 
         self.filenames[key] = filename
 

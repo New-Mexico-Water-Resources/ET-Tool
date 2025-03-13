@@ -15,7 +15,13 @@ from .errors import BlankOutput, FileUnavailable
 from .generate_subset import generate_subset
 from .interpolate_stack import interpolate_stack
 from datetime import timedelta
-from .date_helpers import get_days_in_year, get_day_of_year, get_one_month_slice, get_days_in_month
+from .date_helpers import (
+    get_days_in_year,
+    get_day_of_year,
+    get_one_month_slice,
+    get_days_in_month,
+    calculate_hours_of_sunlight,
+)
 from .variable_types import get_available_variable_source_for_date
 
 logger = getLogger(__name__)
@@ -193,6 +199,7 @@ def generate_stack(
         subset_shape = ET_subset.shape
 
         PET_subset = None
+        ESI_subset = None
 
         # Check for PET layers first, then use ESI if not available
         try:
@@ -223,12 +230,18 @@ def generate_stack(
                 PET_sparse_stack = generate_sparse_stack(days_in_year, rows, cols)
 
             source = get_available_variable_source_for_date("PET", date_step)
-
             if source.monthly:
                 # # Fill in the rest of the month
                 day_of_year, last_doy = get_one_month_slice(year, month)
                 days_in_month = get_days_in_month(year, month)
-                PET_sparse_stack[day_of_year:last_doy, :, :] = PET_subset / days_in_month
+
+                # For interpolation, we're converting from a monthly-sum to a daily 24-hour average
+                # Then, we're converting from a daily 24-hour average to an hours-of-sunlight per day average
+                daily_pet_avg = PET_subset / days_in_month
+
+                hours_of_sunlight = calculate_hours_of_sunlight(ROI_latlon, date_step)
+                daily_pet_avg = daily_pet_avg / 24 * hours_of_sunlight
+                PET_sparse_stack[day_of_year:last_doy, :, :] = daily_pet_avg
             else:
                 day_of_year = get_day_of_year(year, month, day)
 
@@ -275,8 +288,8 @@ def generate_stack(
 
         ET_doy_image = ET_sparse_stack[day_of_year, :, :]
         ET_sparse_stack[day_of_year, :, :] = np.where(np.isnan(ET_doy_image), ET_subset, ET_doy_image)
-        source = get_available_variable_source_for_date("PET", date_step)
-        if source and source.monthly:
+        et_source = get_available_variable_source_for_date("ET", date_step)
+        if et_source and et_source.monthly:
             # Fill in the rest of the month
             ET_sparse_stack[day_of_year:last_doy, :, :] = ET_subset / days_in_month
 

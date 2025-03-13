@@ -85,6 +85,14 @@ export type MapLayer = {
   maxZoom: number;
   subdomains: string[];
   time?: string;
+  backgroundProvider?: string;
+  labelsProvider?: string;
+  tms?: boolean;
+  availableDatesURL?: string;
+  hidden?: boolean;
+  refresh?: "static" | "dynamic";
+  units?: string;
+  modes?: Record<string, string>;
   [key: string]: any;
 };
 
@@ -184,9 +192,19 @@ interface Store {
   showARDTiles: boolean;
   toggleARDTiles: () => void;
   ardTiles: Record<string, any>;
+  visibleReferenceLayers: string[];
+  setVisibleReferenceLayers: (visibleReferenceLayers: string[]) => void;
   fetchARDTiles: () => void;
   searchGeoJSONs: () => void;
   allGeoJSONs: any[];
+  refreshType: "static" | "dynamic";
+  setRefreshType: (refreshType: "static" | "dynamic") => void;
+  minimumBaseMapColorBound: number;
+  setMinimumBaseMapColorBound: (minimumBaseMapColorBound: number) => void;
+  maximumBaseMapColorBound: number;
+  setMaximumBaseMapColorBound: (maximumBaseMapColorBound: number) => void;
+  comparisonMode: string;
+  setComparisonMode: (comparisonMode: string) => void;
 }
 
 const useStore = create<Store>()(
@@ -915,6 +933,8 @@ const useStore = create<Store>()(
       toggleARDTiles: () => {
         set({ showARDTiles: !get().showARDTiles });
       },
+      visibleReferenceLayers: [],
+      setVisibleReferenceLayers: (visibleReferenceLayers) => set({ visibleReferenceLayers }),
       ardTiles: {},
       fetchARDTiles: () => {
         let axiosInstance = get().authAxios();
@@ -949,6 +969,14 @@ const useStore = create<Store>()(
           });
       },
       allGeoJSONs: [],
+      refreshType: "static",
+      setRefreshType: (refreshType) => set({ refreshType }),
+      minimumBaseMapColorBound: 0,
+      setMinimumBaseMapColorBound: (minimumBaseMapColorBound) => set({ minimumBaseMapColorBound }),
+      maximumBaseMapColorBound: 200,
+      setMaximumBaseMapColorBound: (maximumBaseMapColorBound) => set({ maximumBaseMapColorBound }),
+      comparisonMode: "absolute",
+      setComparisonMode: (comparisonMode) => set({ comparisonMode }),
     })),
     {
       name: "et-visualizer-state",

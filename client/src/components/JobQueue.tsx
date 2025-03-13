@@ -362,7 +362,7 @@ const JobQueue = () => {
         variant="h5"
         style={{ color: "var(--st-gray-30)", padding: "8px 16px", display: "flex", alignItems: "center" }}
       >
-        {isBacklogOpen ? "Backlog" : "Queue"}
+        {isBacklogOpen ? "Completed" : "Queue"}
 
         {!isBacklogOpen && canDeleteJobs && (
           <Button
@@ -413,7 +413,9 @@ const JobQueue = () => {
           </ToggleButtonGroup>
         )}
       </Typography>
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      <div
+        style={{ display: "flex", flexDirection: "column", visibility: isQueueOpen || isBacklogOpen ? "visible" : "hidden" }}
+      >
         <div className="search-bar">
           <input
             style={{ height: "36px" }}
