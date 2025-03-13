@@ -642,7 +642,7 @@ const LayersControl: FC = () => {
         {loadedGeoJSONArea > 0 && !isValidArea && (
           <div style={{ display: "flex", alignItems: "flex-end", gap: "4px" }}>
             <ErrorIcon style={{ color: "var(--st-red)", fontSize: "32px" }} />
-            {loadedGeoJSON < maximumValidArea ? (
+            {loadedGeoJSONArea < maximumValidArea ? (
               <Typography variant="body2" className="note" style={{ fontSize: "12px", color: "var(--st-gray-40)" }}>
                 Area is too small (min {minimumValidArea} m<sup>2</sup>)<br />
                 Please upload a larger area.

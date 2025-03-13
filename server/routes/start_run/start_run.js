@@ -34,10 +34,12 @@ router.post("/start_run", async (req, res) => {
   }).then((res) => res.json());
 
   let name = req.body.name;
+  name = name.replace(/[^a-zA-Z0-9_+. -]/g, "");
+
   let start_year = req.body.startYear;
   let end_year = req.body.endYear;
   let geojson = req.body.geojson;
-  let epoch = Date.now(); //used to make sure run is unique
+  let epoch = Date.now();
   let key = name + "_" + start_year + "_" + end_year + "_" + epoch;
 
   console.log("receiving start run request");
@@ -45,8 +47,6 @@ router.post("/start_run", async (req, res) => {
   console.log(`key: ${key}`);
   console.log(`start year: ${start_year}`);
   console.log(`end year: ${end_year}`);
-  console.log("GeoJSON:");
-  console.log(geojson);
   var run_directory = path.join(run_directory_base, key);
   console.log(`creating run directory ${run_directory}`);
   fs.mkdirSync(run_directory, { recursive: true });
@@ -62,7 +62,10 @@ router.post("/start_run", async (req, res) => {
   geojson_text = geojson_text.replace(/\\"/g, '"');
 
   fs.writeFile(geojson_filename, geojson_text, "utf8", function (err) {
-    if (err) throw err;
+    if (err) {
+      throw err;
+    }
+
     console.log(`successfully wrote GeoJSON to ${geojson_filename}`);
   });
 

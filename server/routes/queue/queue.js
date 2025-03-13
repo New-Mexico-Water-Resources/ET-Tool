@@ -136,7 +136,10 @@ router.post("/restart_job", async (req, res) => {
   // Change job status to "Pending" and let the cron handle it
   let db = await constants.connectToDatabase();
   let collection = db.collection(constants.report_queue_collection);
-  let result = await collection.updateOne({ key }, { $set: { status: "Pending" } });
+  let result = await collection.updateOne(
+    { key },
+    { $set: { status: "Pending", ended: null, pid: null, status_msg: "Pending" } }
+  );
 
   // Delete everything in the job's output folder so we can regenerate the report
   let job = await collection.findOne({ key });
@@ -151,6 +154,13 @@ router.post("/restart_job", async (req, res) => {
         fs.mkdirSync(job.png_dir);
       });
     }
+  }
+
+  // Clear the status file
+  let run_directory = path.join(constants.run_directory_base, key);
+  let status_filename = path.join(run_directory, "status.txt");
+  if (fs.existsSync(status_filename)) {
+    fs.writeFileSync(status_filename, "Pending");
   }
 
   res.status(200).send(result);

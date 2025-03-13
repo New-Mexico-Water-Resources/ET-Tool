@@ -29,9 +29,11 @@ const GeoJSONLayer = ({
 
     if (data && Object.keys(data).length > 0) {
       let area = turfArea(data);
+
       let isValidArea = !validateBounds || (area >= minimumValidArea && area <= maximumValidArea);
       const geoJsonLayer = new Leaflet.GeoJSON(data);
 
+      // Add metadata to the layer
       if (!isValidArea) {
         geoJsonLayer.setStyle({
           color: "red",

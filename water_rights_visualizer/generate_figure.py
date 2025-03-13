@@ -262,13 +262,20 @@ def generate_figure(
         # Check if it's all 0
         is_ensemble_range_data_null = df["et_ci_ymin"].eq(0).all() or df["et_ci_ymax"].eq(0).all()
 
-    sns.lineplot(x=x, y=y, ax=ax, color=pet_color, label="PET", marker=marker, markersize=marker_size)
+    pet_label = "PET" if year < OPENET_TRANSITION_DATE else "ETo"
+
+    if year >= OPENET_TRANSITION_DATE:
+        logger.info(f"Correcting ETo to based on ET for year {year}")
+        # y = np.where(y < y2, df["et_ci_ymax"], y)
+        y = np.maximum(y, df["et_ci_ymax"])
+
+    sns.lineplot(x=x, y=y, ax=ax, color=pet_color, label=pet_label, marker=marker, markersize=marker_size)
     sns.lineplot(x=x, y=y2, ax=ax, color=et_color, label="ET", marker=marker, markersize=marker_size)
     if int(year) >= OPENET_TRANSITION_DATE and not is_ensemble_range_data_null:
         ax.fill_between(x, df["et_ci_ymin"], df["et_ci_ymax"], color=et_color, alpha=0.1)
 
     legend_items = {
-        "PET": {"color": pet_color, "alpha": 0.8, "lw": 2},
+        pet_label: {"color": pet_color, "alpha": 0.8, "lw": 2},
         "ET": {"color": et_color, "alpha": 0.8, "lw": 2},
         "Ensemble Min/Max": {"color": et_color, "alpha": 0.1, "lw": 4},
     }

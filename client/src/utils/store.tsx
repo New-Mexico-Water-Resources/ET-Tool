@@ -85,6 +85,14 @@ export type MapLayer = {
   maxZoom: number;
   subdomains: string[];
   time?: string;
+  backgroundProvider?: string;
+  labelsProvider?: string;
+  tms?: boolean;
+  availableDatesURL?: string;
+  hidden?: boolean;
+  refresh?: "static" | "dynamic";
+  units?: string;
+  modes?: Record<string, string>;
   [key: string]: any;
 };
 
@@ -184,9 +192,19 @@ interface Store {
   showARDTiles: boolean;
   toggleARDTiles: () => void;
   ardTiles: Record<string, any>;
+  visibleReferenceLayers: string[];
+  setVisibleReferenceLayers: (visibleReferenceLayers: string[]) => void;
   fetchARDTiles: () => void;
   searchGeoJSONs: () => void;
   allGeoJSONs: any[];
+  refreshType: "static" | "dynamic";
+  setRefreshType: (refreshType: "static" | "dynamic") => void;
+  minimumBaseMapColorBound: number;
+  setMinimumBaseMapColorBound: (minimumBaseMapColorBound: number) => void;
+  maximumBaseMapColorBound: number;
+  setMaximumBaseMapColorBound: (maximumBaseMapColorBound: number) => void;
+  comparisonMode: string;
+  setComparisonMode: (comparisonMode: string) => void;
 }
 
 const useStore = create<Store>()(
@@ -367,8 +385,10 @@ const useStore = create<Store>()(
           return;
         }
 
+        let escapedKey = encodeURIComponent(jobKey);
+
         axiosInstance
-          .delete(`${API_URL}/queue/delete_job?key=${jobKey}&deleteFiles=${deleteFiles ? "true" : "false"}`)
+          .delete(`${API_URL}/queue/delete_job?key=${escapedKey}&deleteFiles=${deleteFiles ? "true" : "false"}`)
           .then(() => {
             set((state) => {
               let job = state.queue.find((item) => item.key === jobKey);
@@ -431,9 +451,7 @@ const useStore = create<Store>()(
       },
       submitJob: async () => {
         let jobName = get().jobName.trim() || "Untitled Job";
-
-        // Remove any special characters
-        jobName = jobName.replace(/[^\w\s-_]/gi, "");
+        jobName = jobName.replace(/[^a-zA-Z0-9_+.\s-]/gi, "") || "Untitled Job";
 
         let newJob = formJobForQueue(jobName, get().startYear, get().endYear, get().loadedGeoJSON);
 
@@ -545,8 +563,9 @@ const useStore = create<Store>()(
         }
 
         let escapedName = encodeURIComponent(job.name);
+        let escapedKey = encodeURIComponent(job.key);
         axiosInstance
-          .get(`${API_URL}/geojson?name=${escapedName}&key=${job.key}`)
+          .get(`${API_URL}/geojson?name=${escapedName}&key=${escapedKey}`)
           .then((response) => {
             let loadedGeoJSON = null;
             let multipolygons = [];
@@ -577,12 +596,13 @@ const useStore = create<Store>()(
 
         let shortName = job.name.replace(/[(),]/g, "");
         let escapedName = encodeURIComponent(shortName);
+        let escapedKey = encodeURIComponent(job.key);
 
         // Check if it's a 404 first
         axios
-          .get(`${API_URL}/download?name=${escapedName}&key=${job.key}&units=${imperial ? "in" : "mm"}`)
+          .get(`${API_URL}/download?name=${escapedName}&key=${escapedKey}&units=${imperial ? "in" : "mm"}`)
           .then(() => {
-            window.open(`${API_URL}/download?name=${escapedName}&key=${job.key}&units=${imperial ? "in" : "mm"}`);
+            window.open(`${API_URL}/download?name=${escapedName}&key=${escapedKey}&units=${imperial ? "in" : "mm"}`);
           })
           .catch((error) => {
             set({ errorMessage: error?.message || "Error downloading job" });
@@ -668,8 +688,10 @@ const useStore = create<Store>()(
           return null;
         }
 
+        let escapedKey = encodeURIComponent(jobKey);
+
         return axiosInstance
-          .get(`${API_URL}/job/logs?key=${jobKey}`)
+          .get(`${API_URL}/job/logs?key=${escapedKey}`)
           .then((response) => {
             return response.data;
           })
@@ -685,8 +707,11 @@ const useStore = create<Store>()(
           return null;
         }
 
+        let escapedKey = encodeURIComponent(jobKey);
+        let escapedName = encodeURIComponent(jobName);
+
         return axiosInstance
-          .get(`${API_URL}/job/status?key=${jobKey}&name=${jobName}`)
+          .get(`${API_URL}/job/status?key=${escapedKey}&name=${escapedName}`)
           .then((response) => {
             set((state) => {
               let jobStatuses = { ...state.jobStatuses };
@@ -908,6 +933,8 @@ const useStore = create<Store>()(
       toggleARDTiles: () => {
         set({ showARDTiles: !get().showARDTiles });
       },
+      visibleReferenceLayers: [],
+      setVisibleReferenceLayers: (visibleReferenceLayers) => set({ visibleReferenceLayers }),
       ardTiles: {},
       fetchARDTiles: () => {
         let axiosInstance = get().authAxios();
@@ -942,6 +969,14 @@ const useStore = create<Store>()(
           });
       },
       allGeoJSONs: [],
+      refreshType: "static",
+      setRefreshType: (refreshType) => set({ refreshType }),
+      minimumBaseMapColorBound: 0,
+      setMinimumBaseMapColorBound: (minimumBaseMapColorBound) => set({ minimumBaseMapColorBound }),
+      maximumBaseMapColorBound: 200,
+      setMaximumBaseMapColorBound: (maximumBaseMapColorBound) => set({ maximumBaseMapColorBound }),
+      comparisonMode: "absolute",
+      setComparisonMode: (comparisonMode) => set({ comparisonMode }),
     })),
     {
       name: "et-visualizer-state",

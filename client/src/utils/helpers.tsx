@@ -37,7 +37,8 @@ export const formatElapsedTime = (elapsedTime: number): string => {
 };
 
 export const formJobForQueue = (jobName: string, startYear: number, endYear: number, geojson: any): any => {
-  let jobKey = `${jobName}_${startYear}_${endYear}_${Date.now()}`;
+  let strippedName = jobName.replace(/[^a-zA-Z0-9]/g, "_");
+  let jobKey = `${strippedName}_${startYear}_${endYear}_${Date.now()}`;
   let newJob = {
     key: jobKey,
     cmd: `/opt/conda/bin/python /app/water-rights-visualizer-backend-S3.py /root/data/water_rights_runs/${jobKey}/config.json`,

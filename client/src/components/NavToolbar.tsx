@@ -370,7 +370,7 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
                   }}
                 >
                   <ViewStreamIcon />
-                  Backlog
+                  Completed
                 </Typography>
               </Box>
             </Tooltip>

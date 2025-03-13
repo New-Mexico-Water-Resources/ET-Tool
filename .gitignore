@@ -25,3 +25,4 @@ local_test
 .ipynb_checkpoints
 water_rights_gdrive_creds.txt
 client/CHANGELOG.md
+.temp_s3_credentials.json

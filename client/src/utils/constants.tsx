@@ -1,4 +1,8 @@
+import nm_geojson from "../assets/geojsons/nm.json";
+import nm_counties_geojson from "../assets/geojsons/nm_counties.json";
+
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
+export const TILE_SERVER_URL = import.meta.env.VITE_TILE_SERVER_URL || "/ts_v1/tiles";
 
 export const authConfig = {
   domain: import.meta.env.VITE_AUTH0_DOMAIN || "",
@@ -12,6 +16,20 @@ export const ROLES = {
   NEW_USER: import.meta.env.VITE_NEW_USER_ROLE,
   JOB_APPROVER: import.meta.env.VITE_JOB_APPROVER,
   JOB_SUBMITTER: import.meta.env.VITE_JOB_SUBMITTER,
+};
+
+export const ET_COLORMAP = ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"];
+export const DIFF_COLORMAP = ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"];
+
+export const REFERENCE_GEOJSONS = {
+  "New Mexico (State Boundary)": {
+    name: "New Mexico",
+    data: nm_geojson,
+  },
+  "New Mexico (Counties)": {
+    name: "New Mexico",
+    data: nm_counties_geojson,
+  },
 };
 
 export const MAP_LAYER_OPTIONS = {
@@ -29,26 +47,6 @@ export const MAP_LAYER_OPTIONS = {
     maxZoom: 20,
     subdomains: ["mt0", "mt1", "mt2", "mt3"],
   },
-  // "ESRI World Imagery": {
-  //   name: "ESRI World Imagery",
-  //   attribution:
-  //     "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
-  //   url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-  //   maxZoom: 18,
-  // },
-  // "ESRI NatGeo World Map": {
-  //   name: "ESRI NatGeo World Map",
-  //   attribution:
-  //     "Tiles &copy; Esri &mdash; National Geographic, Esri, DeLorme, NAVTEQ, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, iPC",
-  //   url: "https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}",
-  //   maxZoom: 16,
-  // },
-  // "USGS US Imagery": {
-  //   name: "USGS US Imagery",
-  //   attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>',
-  //   url: "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
-  //   maxZoom: 16,
-  // },
   "USGS US Imagery Topo": {
     name: "USGS US Imagery Topo",
     attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>',
@@ -63,24 +61,38 @@ export const MAP_LAYER_OPTIONS = {
     maxZoom: 9,
     time: "2023-01-01",
   },
-  // https://gibs-b.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi?TIME=2012-07-25T00:00:00Z&layer=AMSRU2_Soil_Moisture_NPD_Day&style=default&tilematrixset=2km&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix=5&TileCol=7&TileRow=5
-  // "AMSRU2 Soil Moisture NPD Day": {
-  //   name: "AMSRU2 Soil Moisture NPD Day",
-  //   attribution:
-  //     'Imagery provided by services from the Global Imagery Browse Services (GIBS), operated by the NASA/GSFC/Earth Science Data and Information System (<a href="https://earthdata.nasa.gov">ESDIS</a>) with funding provided by NASA/HQ.',
-  //   url: "https://gibs-b.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi?TIME={time}&layer=AMSRU2_Soil_Moisture_NPD_Day&style=default&tilematrixset=2km&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix={z}&TileCol={x}&TileRow={y}",
-  //   maxZoom: 9,
-  //   time: "2012-07-25T00:00:00Z",
-  // },
-
+  // ** COMMENTED OUT FOR NOW UNTIL TILE SERVER IS CONFIGURED **
   // "MODIS ET 500": {
   //   name: "MODIS ET 500",
   //   attribution:
   //     'Imagery re-formatted and made available from the NASA MODIS MOD16A2 dataset, "Steve Running, Qiaozhen Mu - University of Montana and MODAPS SIPS - NASA. (2015). MOD16A2 MODIS/Terra Evapotranspiration 8-day L4 Global 500m SIN Grid. NASA LP DAAC. http://doi.org/10.5067/MODIS/MOD16A2.006"',
-  //   url: "http://localhost:5001/tiles/ET/{time}/{z}/{x}/{y}.png",
-  //   maxZoom: 9,
-  //   time: "2023-01-01",
+  //   url: `${TILE_SERVER_URL}/{refresh}/ET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+  //   maxZoom: 11,
+  //   time: "2021-01-01",
+  //   backgroundProvider: "Google Satellite",
+  //   labelsProvider: "CartoDB DarkMatter Labels",
+  //   tms: true,
+  //   refresh: "static",
+  //   availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
+  //   units: "mm/8-days",
+  //   modes: {
+  //     absolute: "Absolute",
+  //     prevPass: "Previous Pass Difference",
+  //     prevMonth: "Previous Month Difference",
+  //     historical: "Historical Difference",
+  //   },
   // },
+
+  // Hidden layers
+  "CartoDB DarkMatter Labels": {
+    name: "CartoDB DarkMatter Labels",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    url: "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
+    maxZoom: 20,
+    subdomains: "abcd",
+    hidden: true,
+  },
 };
 
 export const QUEUE_STATUSES = ["Pending", "In Progress", "WaitingApproval", "Paused"];

@@ -128,9 +128,20 @@ def calculate_cloud_coverage_percent(
         days_in_month = get_days_in_month(int(year), int(month))
 
         ccount_average = get_nan_tiff_roi_average(ccount_subset_file, ROI_geometry, nan_subset_directory)
+        if ccount_average is None:
+            logger.error(f"Failed to calculate cloud coverage percentage for {year}-{month} ({ccount_subset_file})")
+
         et_min_average = get_nan_tiff_roi_average(et_min_subset_file, ROI_geometry, nan_subset_directory)
+        if et_min_average is None:
+            logger.error(f"Failed to calculate ET min average for {year}-{month} ({et_min_subset_file})")
+
         et_max_average = get_nan_tiff_roi_average(et_max_subset_file, ROI_geometry, nan_subset_directory)
+        if et_max_average is None:
+            logger.error(f"Failed to calculate ET max average for {year}-{month} ({et_max_subset_file})")
+
         ppt_average = get_nan_tiff_roi_average(ppt_subset_file, ROI_geometry, nan_subset_directory)
+        if ppt_average is None:
+            logger.error(f"Failed to calculate PPT average for {year}-{month} ({ppt_subset_file})")
 
         yearly_ccount_percentages[year][month] = {
             "avg_cloud_count": ccount_average,

@@ -47,6 +47,21 @@ services:
     networks:
       - water_network
 
+    # modis_tile_server:
+    #   build:
+    #     context: .
+    #     dockerfile: Dockerfile.tile_server
+    #   platform: "linux/amd64"
+    #   container_name: modis-tile-server
+    #   restart: always
+    #   env_file: ".env"
+    #   depends_on:
+    #     - water_mongo
+    #   volumes:
+    #     - ${HOST_DATA_DIRECTORY:-${HOME}/data}:${CONTAINER_DATA_DIRECTORY:-/root/data}
+    #   networks:
+    #     - water_network
+
   water_mongo:
     image: mongo:7.0
     container_name: water-rights-visualizer-mongo
