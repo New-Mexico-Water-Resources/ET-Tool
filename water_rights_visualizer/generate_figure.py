@@ -281,7 +281,7 @@ def generate_figure(
     pet_label = "PET" if year < OPENET_TRANSITION_DATE else "ETo"
 
     if year >= OPENET_TRANSITION_DATE:
-        logger.info(f"Correcting ETo to based on ET for year {year}")
+        logger.info(f"Correcting ETo based on ET for year {year} (ET < ETo)")
         # y = np.where(y < y2, df["et_ci_ymax"], y)
         y = np.maximum(y, df["et_ci_ymax"])
         y = np.maximum(y, y2)

@@ -239,6 +239,7 @@ def generate_stack(
                 # If the PET/ETo source isn't daylight averaged, then we need to convert from a monthly-sum to a daily 24-hour average
                 # Then, convert from a daily 24-hour average to an hours-of-sunlight per day average based on DOY and latitude
                 daily_pet_avg = PET_subset / days_in_month
+                avg_daily_avg = np.nanmean(daily_pet_avg)
                 if not source.daylight_corrected:
                     logger.info(
                         f"PET source is not daylight corrected, applying correction for {date_step} ({day_of_year}, {last_doy})"

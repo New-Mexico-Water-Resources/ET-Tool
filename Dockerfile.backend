@@ -16,7 +16,7 @@ FROM base as python
 # install dependencies
 RUN mamba install -y -c conda-forge "python=3.10" cython gdal pygeos pygrib pyresample h5py
 
-RUN pip install area astropy affine boto3 geojson geopandas jupyter matplotlib numpy pandas pillow pydrive2 pygeos pyresample "rasterio>1.0.0" scikit-image scipy seaborn shapely termcolor tk pymongo python-dotenv
+RUN pip install area astropy affine boto3 geojson geopandas jupyter matplotlib numpy pandas pillow pydrive2 pygeos pyresample "rasterio>1.0.0" scikit-image scipy seaborn shapely termcolor tk pymongo python-dotenv pystac-client planetary_computer
 
 FROM python as app
 

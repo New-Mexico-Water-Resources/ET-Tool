@@ -12,6 +12,8 @@ from logging import getLogger
 import re
 import datetime
 
+from water_rights_visualizer.landsat_pass_count import count_landsat_passes_for_month
+
 logger = getLogger(__name__)
 
 NUMBER_OF_MODELS = 6
@@ -149,12 +151,17 @@ def calculate_cloud_coverage_percent(
         if ppt_average is None:
             logger.error(f"Failed to calculate PPT average for {year}-{month} ({ppt_subset_file})")
 
+        landsat_passes_in_month = count_landsat_passes_for_month(
+            ROI_geometry, int(month), int(year), subset_directory=subset_directory
+        )
+
         yearly_ccount_percentages[year][month] = {
             "avg_cloud_count": ccount_average,
             "days_in_month": days_in_month,
             "avg_min": et_min_average,
             "avg_max": et_max_average,
             "ppt_avg": ppt_average,
+            "landsat_passes": landsat_passes_in_month,
         }
 
     for year, month_percentages in yearly_ccount_percentages.items():
@@ -171,8 +178,16 @@ def calculate_cloud_coverage_percent(
             percentages = month_percentages.get(month_key, {})
 
             percentage = None
-            if percentages and percentages.get("avg_cloud_count") is not None and percentages.get("days_in_month"):
-                percentage = (percentages["days_in_month"] - percentages["avg_cloud_count"]) / percentages["days_in_month"]
+
+            # Old calculation using total number of days in a month
+            # if percentages and percentages.get("avg_cloud_count") is not None and percentages.get("days_in_month"):
+            #     percentage = (percentages["days_in_month"] - percentages["avg_cloud_count"]) / percentages["days_in_month"]
+            # New calculation using landsat passes
+            if percentages and percentages.get("landsat_passes"):
+                percentage = (percentages["landsat_passes"] - percentages["avg_cloud_count"]) / percentages["landsat_passes"]
+                percentage = max(percentage, 0)
+                percentage = min(percentage, 1)
+
             if percentage is None and existing_nan_percent_csv is not None:
                 existing_row = existing_nan_percent_csv.loc[existing_nan_percent_csv["month"] == month_key]
                 if not existing_row.empty:
