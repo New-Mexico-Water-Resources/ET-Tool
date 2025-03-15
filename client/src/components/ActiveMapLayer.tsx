@@ -45,13 +45,13 @@ const ActiveMapLayer = () => {
   }, [mapLayerKey, tileDate, refreshType, minColor, maxColor, comparisonMode]);
 
   useEffect(() => {
-    if (activeMapLayer.maxZoom) {
+    if (activeMapLayer?.maxZoom) {
       map.setMaxZoom(activeMapLayer.maxZoom);
     }
 
     let currentZoom = map.getZoom();
-    if (currentZoom > activeMapLayer.maxZoom) {
-      map.setZoom(activeMapLayer.maxZoom);
+    if (activeMapLayer?.maxZoom && currentZoom > activeMapLayer?.maxZoom) {
+      map.setZoom(activeMapLayer?.maxZoom);
     }
   }, [activeMapLayer, map]);
 

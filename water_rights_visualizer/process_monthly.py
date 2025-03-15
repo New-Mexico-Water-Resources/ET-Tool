@@ -74,18 +74,17 @@ def process_monthly(
             ET_month_stack = ET_stack[start_index:end_index, :, :]
             ET_monthly = np.nansum(ET_month_stack, axis=0)
 
-            logger.info(f"writing monthly ET: {ET_monthly_filename}")
+            logger.info(f"writing monthly ET: {ET_monthly_filename}, avg: {ET_monthly.mean()}")
             subset_geometry = rt.RasterGrid.from_affine(subset_affine, rows, cols, CRS)
             ET_monthly_raster = rt.Raster(array=ET_monthly, geometry=subset_geometry)
             ET_monthly_raster.to_geotiff(ET_monthly_filename)
 
             PET_monthly_filename = join(monthly_sums_directory, f"{year:04d}_{month:02d}_{ROI_name}_PET_monthly_sum.tif")
 
-            logger.info(f"end index: {end_index}")
             PET_month_stack = PET_stack[start_index:end_index, :, :]
             PET_monthly = np.nansum(PET_month_stack, axis=0)
 
-            logger.info(f"writing monthly PET: {PET_monthly_filename}")
+            logger.info(f"writing monthly PET: {PET_monthly_filename}, avg: {PET_monthly.mean()}")
             subset_geometry = rt.RasterGrid.from_affine(subset_affine, rows, cols, CRS)
             PET_monthly_raster = rt.Raster(array=PET_monthly, geometry=subset_geometry)
             PET_monthly_raster.to_geotiff(PET_monthly_filename)
@@ -95,6 +94,15 @@ def process_monthly(
 
             ET_monthly_mean = np.nanmean(ET_values) if len(ET_values) > 0 else 0
             PET_monthly_mean = np.nanmean(PET_values) if len(PET_values) > 0 else 0
+
+            # Remove mask from the mean calculation if we don't have any (small ROI). This is ONLY done for PET as this is an upper bound
+            # and PET is lower resolution for later years
+            if PET_monthly_mean == 0:
+                logger.warning(
+                    f"Monthly PET mean is zero for year {year}, month {month}. Expanding the mask to include the full subset."
+                )
+                PET_monthly_mean = np.nanmean(np.array(PET_monthly).flatten()) or 0
+                logger.info(f"New PET monthly mean: {PET_monthly_mean}, PET value count: {len(PET_values)}")
 
             monthly_means.append([year, month, ET_monthly_mean, PET_monthly_mean])
 

@@ -87,6 +87,8 @@ def solar_dec_deg_from_day_angle_rad(day_angle_rad):
         + 0.00148 * math.sin(3 * day_angle_rad)
     ) * (180 / math.pi)
 
+
+def sha_deg_from_doy_lat(doy, latitude):
     """
     Calculate sunrise hour angle in degrees from latitude in degrees
     and day of year between 1 and 365.
@@ -159,6 +161,8 @@ def calculate_hours_of_sunlight(ROI_latlon, date_step: datetime.date):
 
     doy = date_step.timetuple().tm_yday
     latitude = ROI_latlon.centroid.y
+
+    sha_deg = sha_deg_from_doy_lat(doy, latitude)
 
     daylight_hours = daylight_from_sha(sha_deg)
 

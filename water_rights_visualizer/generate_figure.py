@@ -51,6 +51,7 @@ def generate_figure(
     text_panel: ScrolledText = None,
     image_panel: Text = None,
     status_filename: str = None,
+    requestor: dict[str, str] = None,
     metric_units: bool = True,
 ):
     """
@@ -90,23 +91,32 @@ def generate_figure(
     max_length_short = 15
     max_length_medium = 30
 
+    requestor_name = ""
+    if requestor:
+        requestor_name = requestor.get("name", "")
+        if not requestor_name:
+            requestor_name = requestor.get("email", "")
+        if not requestor_name:
+            requestor_name = requestor.get("sub", "")
+
+    if not requestor_name:
+        requestor_name = "Unknown"
+
     if len(ROI_name) <= max_length_short:
         title = f"Evapotranspiration For {ROI_name}"
-        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}"
+        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}\nRequested By: {requestor_name}"
     elif len(ROI_name) <= max_length_medium:
         title_fontsize = 12
         title = f"Evapotranspiration For {ROI_name}"
-        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}"
+        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}\nRequested By: {requestor_name}"
     else:
         title_fontsize = 12
         short_name = ROI_name[:max_length_medium] + "..."
         title = f"Evapotranspiration For {short_name}"
-        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}"
+        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}\nRequested By: {requestor_name}"
 
-    # Add the title
-    # align left
     fig.suptitle(title, fontsize=title_fontsize, ha="left", x=0.125, fontweight="bold")
-    fig.text(0.125, 0.91, subtitle, fontsize=axis_label_fontsize, ha="left", fontweight="normal")
+    fig.text(0.125, 0.895, subtitle, fontsize=axis_label_fontsize, ha="left", fontweight="normal")
 
     n_months = end_month - start_month + 1
     grid_cols = int(n_months / 3)
@@ -209,8 +219,12 @@ def generate_figure(
 
     df = main_df[main_df["Year"] == year]
     x = df["Month"]
-    y = df["PET"] if metric_units else mm_to_in(df["PET"])
-    y2 = df["ET"] if metric_units else mm_to_in(df["ET"])
+
+    df["ET"] = df["ET"] if metric_units else mm_to_in(df["ET"])
+    df["PET"] = df["PET"] if metric_units else mm_to_in(df["PET"])
+
+    y = df["PET"]
+    y2 = df["ET"]
 
     if "ppt_avg" in df.columns:
         df["ppt_avg"] = df["ppt_avg"] if metric_units else mm_to_in(df["ppt_avg"])
@@ -271,10 +285,9 @@ def generate_figure(
         # y = np.where(y < y2, df["et_ci_ymax"], y)
         y = np.maximum(y, df["et_ci_ymax"])
         y = np.maximum(y, y2)
-
-    # Go through et_ci and make sure ymin is less than y2 and ymax is greater than y2, if not, set et_ci to y2
-    df["et_ci_ymin"] = np.where(df["et_ci_ymin"] < y2, df["et_ci_ymin"], y2)
-    df["et_ci_ymax"] = np.where(df["et_ci_ymax"] > y2, df["et_ci_ymax"], y2)
+        # Go through et_ci and make sure ymin is less than y2 and ymax is greater than y2, if not, set et_ci to y2
+        df["et_ci_ymin"] = np.where(df["et_ci_ymin"] < y2, df["et_ci_ymin"], y2)
+        df["et_ci_ymax"] = np.where(df["et_ci_ymax"] > y2, df["et_ci_ymax"], y2)
 
     sns.lineplot(x=x, y=y, ax=ax, color=pet_color, label=pet_label, marker=marker, markersize=marker_size)
     sns.lineplot(x=x, y=y2, ax=ax, color=et_color, label="ET", marker=marker, markersize=marker_size)
@@ -298,10 +311,10 @@ def generate_figure(
         "Precipitation": {"color": ppt_color, "alpha": 0.8, "lw": 2},
     }
 
-    if int(year) < OPENET_TRANSITION_DATE:
+    if int(year) < OPENET_TRANSITION_DATE or is_ensemble_range_data_null:
         del legend_items["Ensemble Min/Max"]
+
     if is_ensemble_range_data_null:
-        del legend_items["Ensemble Min/Max"]
         legend_items["Ensemble Min/Max (Unavailable)"] = {"color": et_color, "alpha": 0.1, "lw": 4}
 
     legend_labels = legend_items.keys()

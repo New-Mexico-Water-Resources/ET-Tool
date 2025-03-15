@@ -78,15 +78,17 @@ def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir) -> Union[float, None]
 
 
 def calculate_cloud_coverage_percent(
-    ROI_geometry: Polygon, subset_directory: str, nan_subset_directory: str, monthly_nan_directory: str
+    ROI_geometry: Polygon, subset_directory: str, nan_subset_directory: str, monthly_nan_directory: str, target_year: int
 ):
     """
     Calculate the percentage of NaN values in each subset file within the given directory based on CCOUNT data.
 
     Args:
         ROI_geometry (Polygon): The region of interest polygon used for masking the subset files.
-        year (int): The year for which to calculate the cloud coverage percentage.
+        subset_directory (str): The directory containing the subset files.
+        nan_subset_directory (str): The directory to save the masked subset files with NaN values.
         monthly_nan_directory (str): The directory to save the monthly average NaN values.
+        target_year (int): The year for which to calculate the cloud coverage percentage.
 
     Returns:
         None
@@ -107,6 +109,10 @@ def calculate_cloud_coverage_percent(
             filename = basename(subset_file)
             match = re.match(rf"(\d{{4}})\.(\d{{2}})\.(\d{{2}}).*_{variable}_subset\.tif", filename)
             year = match.group(1)
+
+            # Only process the files for the target year
+            if int(year) != target_year:
+                continue
             month = match.group(2)
             key = f"{year}-{month}"
             if not year_month.get(key):
@@ -172,10 +178,7 @@ def calculate_cloud_coverage_percent(
                 if not existing_row.empty:
                     percentage = existing_row["percent_nan"].values[0]
 
-            if percentage is None:
-                percentage = 1
-
-            rounded_percentage = round(percentage * 100, 2)
+            rounded_percentage = round(percentage * 100, 2) if percentage is not None else ""
             avg_min = percentages.get("avg_min") or 0
             avg_max = percentages.get("avg_max") or 0
             ppt_avg = percentages.get("ppt_avg") or 0

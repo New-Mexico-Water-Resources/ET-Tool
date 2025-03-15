@@ -15,7 +15,7 @@ logger = getLogger(__name__)
 
 # Defining the function calculate_percent_nan
 def calculate_percent_nan(
-    ROI_for_nan: Polygon, subset_directory: str, nan_subset_directory: str, monthly_nan_directory: str
+    ROI_for_nan: Polygon, subset_directory: str, nan_subset_directory: str, monthly_nan_directory: str, target_year: int
 ):
     """
     Calculate the percentage of NaN values in each subset file within the given directory.
@@ -25,6 +25,7 @@ def calculate_percent_nan(
         subset_directory (str): The directory containing the subset files.
         nan_subset_directory (str): The directory to save the masked subset files with NaN values.
         monthly_nan_directory (str): The directory to save the monthly average NaN values.
+        target_year (int): The year for which the calculation is performed.
 
     Returns:
         None
@@ -36,11 +37,15 @@ def calculate_percent_nan(
     nan_subsets = nan_subset_directory
 
     # Looping through the files in the subset_directory
-    for items in listdir(subset_directory):
-        # Checking if the file is a valid ET subset file
-        if items.endswith("_ET_subset.tif") and isfile(join(subset_directory, items)):
+    for subset_file in listdir(subset_directory):
+        # Checking if the file is a valid ET subset file and matches year
+        if (
+            subset_file.endswith("_ET_subset.tif")
+            and isfile(join(subset_directory, subset_file))
+            and subset_file.startswith(str(target_year))
+        ):
             # Opening the ET subset file
-            with rasterio.open(join(subset_directory, items)) as p:
+            with rasterio.open(join(subset_directory, subset_file)) as p:
                 # Masking the ET subset file with the ROI_for_nan polygon
                 out_image, out_transform = mask(p, ROI_for_nan, crop=False)
                 out_meta = p.meta.copy()
@@ -58,6 +63,10 @@ def calculate_percent_nan(
 
     # Opening the first ET subset file in the subset_directory
     subset_filenames = sorted(glob(join(subset_directory, "*.tif")))
+
+    # Filter out all files that don't match the year
+    subset_filenames = [filename for filename in subset_filenames if basename(filename).startswith(str(target_year))]
+
     first_subset_filename = subset_filenames[0]
     a_subset = rasterio.open(first_subset_filename)
 
@@ -83,6 +92,9 @@ def calculate_percent_nan(
     subset_in_mskdir = rasterio.open(nan_subsets + "/" + file_name + ".tif")
     percent_nan = []
     msk_subsets = glob(join(nan_subsets, "*.tif"))
+
+    # Filter out all files that don't match the year
+    msk_subsets = [filename for filename in msk_subsets if basename(filename).startswith(str(target_year))]
 
     # Function to read a raster file
     def read_file(file):

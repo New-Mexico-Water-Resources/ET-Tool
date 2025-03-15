@@ -57,6 +57,8 @@ def water_rights(
     text_panel: ScrolledText = None,
     status_filename: str = None,
     debug: bool = False,
+    requestor: dict[str, str] = None,
+    use_stack: bool = False,
 ):
     ROI_base = splitext(basename(ROI))[0]
     DEFAULT_FIGURE_DIRECTORY = Path(f"{output_directory}/figures/{ROI_base}")
@@ -172,6 +174,8 @@ def water_rights(
             image_panel=image_panel,
             status_filename=status_filename,
             debug=debug,
+            requestor=requestor,
+            use_stack=use_stack,
         )
 
         monthly_means.append(monthly_means_df)
