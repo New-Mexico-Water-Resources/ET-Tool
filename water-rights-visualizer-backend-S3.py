@@ -141,6 +141,7 @@ def main(argv=sys.argv):
             monthly_means_directory=monthly_means_directory,
             start_year=year,
             end_year=year,
+            requestor=record.get("user", {"sub": "", "name": "", "email": ""}),
         )
 
         # check and upload the png file to s3

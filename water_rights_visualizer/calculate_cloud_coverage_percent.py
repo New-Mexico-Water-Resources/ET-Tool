@@ -12,6 +12,8 @@ from logging import getLogger
 import re
 import datetime
 
+from water_rights_visualizer.landsat_pass_count import count_landsat_passes_for_month
+
 logger = getLogger(__name__)
 
 NUMBER_OF_MODELS = 6
@@ -45,7 +47,7 @@ def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir) -> Union[float, None]
     filename = basename(tiff_file)
 
     if not tiff_file or not exists(tiff_file):
-        logger.error(f"File '{tiff_file}' does not exist")
+        logger.error(f"NaN TIFF subset file '{tiff_file}' does not exist")
         return None
 
     nan_masked_subset_file = None
@@ -78,15 +80,17 @@ def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir) -> Union[float, None]
 
 
 def calculate_cloud_coverage_percent(
-    ROI_geometry: Polygon, subset_directory: str, nan_subset_directory: str, monthly_nan_directory: str
+    ROI_geometry: Polygon, subset_directory: str, nan_subset_directory: str, monthly_nan_directory: str, target_year: int
 ):
     """
     Calculate the percentage of NaN values in each subset file within the given directory based on CCOUNT data.
 
     Args:
         ROI_geometry (Polygon): The region of interest polygon used for masking the subset files.
-        year (int): The year for which to calculate the cloud coverage percentage.
+        subset_directory (str): The directory containing the subset files.
+        nan_subset_directory (str): The directory to save the masked subset files with NaN values.
         monthly_nan_directory (str): The directory to save the monthly average NaN values.
+        target_year (int): The year for which to calculate the cloud coverage percentage.
 
     Returns:
         None
@@ -107,6 +111,10 @@ def calculate_cloud_coverage_percent(
             filename = basename(subset_file)
             match = re.match(rf"(\d{{4}})\.(\d{{2}})\.(\d{{2}}).*_{variable}_subset\.tif", filename)
             year = match.group(1)
+
+            # Only process the files for the target year
+            if int(year) != target_year:
+                continue
             month = match.group(2)
             key = f"{year}-{month}"
             if not year_month.get(key):
@@ -143,12 +151,17 @@ def calculate_cloud_coverage_percent(
         if ppt_average is None:
             logger.error(f"Failed to calculate PPT average for {year}-{month} ({ppt_subset_file})")
 
+        landsat_passes_in_month = count_landsat_passes_for_month(
+            ROI_geometry, int(month), int(year), subset_directory=subset_directory
+        )
+
         yearly_ccount_percentages[year][month] = {
             "avg_cloud_count": ccount_average,
             "days_in_month": days_in_month,
             "avg_min": et_min_average,
             "avg_max": et_max_average,
             "ppt_avg": ppt_average,
+            "landsat_passes": landsat_passes_in_month,
         }
 
     for year, month_percentages in yearly_ccount_percentages.items():
@@ -165,17 +178,22 @@ def calculate_cloud_coverage_percent(
             percentages = month_percentages.get(month_key, {})
 
             percentage = None
-            if percentages and percentages.get("avg_cloud_count") is not None and percentages.get("days_in_month"):
-                percentage = (percentages["days_in_month"] - percentages["avg_cloud_count"]) / percentages["days_in_month"]
+
+            # Old calculation using total number of days in a month
+            # if percentages and percentages.get("avg_cloud_count") is not None and percentages.get("days_in_month"):
+            #     percentage = (percentages["days_in_month"] - percentages["avg_cloud_count"]) / percentages["days_in_month"]
+            # New calculation using landsat passes
+            if percentages and percentages.get("landsat_passes"):
+                percentage = (percentages["landsat_passes"] - percentages["avg_cloud_count"]) / percentages["landsat_passes"]
+                percentage = max(percentage, 0)
+                percentage = min(percentage, 1)
+
             if percentage is None and existing_nan_percent_csv is not None:
                 existing_row = existing_nan_percent_csv.loc[existing_nan_percent_csv["month"] == month_key]
                 if not existing_row.empty:
                     percentage = existing_row["percent_nan"].values[0]
 
-            if percentage is None:
-                percentage = 1
-
-            rounded_percentage = round(percentage * 100, 2)
+            rounded_percentage = round(percentage * 100, 2) if percentage is not None else ""
             avg_min = percentages.get("avg_min") or 0
             avg_max = percentages.get("avg_max") or 0
             ppt_avg = percentages.get("ppt_avg") or 0

@@ -3,7 +3,7 @@ import datetime
 import logging
 
 from dateutil.relativedelta import relativedelta
-from openet.ptjpl.daylight_hours import sha_deg_from_doy_lat, sunrise_from_sha, daylight_from_sha
+
 
 logger = logging.getLogger(__name__)
 

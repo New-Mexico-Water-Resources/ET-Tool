@@ -1,227 +1,248 @@
 const express = require("express");
 const archiver = require("archiver");
 const glob = require("glob");
-const router = express.Router();
 const path = require("path");
 const fs = require("fs");
 const constants = require("../constants");
 
-const project_directory = constants.project_directory;
-const run_directory_base = constants.run_directory_base;
+const router = express.Router();
+const { run_directory_base, report_queue_collection, connectToDatabase } = constants;
 
-function mm_to_in(mm) {
-  if (typeof mm === "string" && !isNaN(parseFloat(mm))) {
-    mm = parseFloat(mm);
-  }
+const mmToIn = (mm) => {
+  let mmValue = typeof mm === "string" ? parseFloat(mm) : mm;
+  return isNaN(mmValue) ? "" : mmValue / 25.4;
+};
 
-  if (isNaN(mm)) {
-    return "";
-  }
+const getJob = async (key) => {
+  const db = await connectToDatabase();
+  const collection = db.collection(report_queue_collection);
+  return collection.findOne({ key });
+};
 
-  return mm / 25.4;
-}
+const processFigureFiles = (archive, figureDirectory, metricUnits) => {
+  const pattern = path.join(figureDirectory, "*.png");
+  const figureFiles = glob.sync(pattern);
+  figureFiles.forEach((file) => {
+    if (metricUnits && file.endsWith("_in.png")) return;
+    if (!metricUnits && !file.endsWith("_in.png")) return;
 
-router.get("/download", async function (req, res) {
-  let key = req.query.key;
-
-  let db = await constants.connectToDatabase();
-  let collection = db.collection(constants.report_queue_collection);
-
-  let job = await collection.findOne({ key });
-  if (!job) {
-    res.status(404).send("Job not found");
-    return;
-  }
-
-  let name = job.name;
-
-  let metric_units = req.query.units !== "in";
-
-  let units = metric_units ? "mm" : "in";
-
-  let archive = archiver("zip", {
-    zlib: { level: 9 }, // Sets the compression level.
+    const newName = path.basename(file).replace("_in.png", ".png");
+    console.log(`Adding figure file: ${file} as ${newName}`);
+    archive.file(file, { name: newName });
   });
+};
 
-  archive.on("end", function () {
-    console.log("Archive wrote %d bytes", archive.pointer());
+const processReportFiles = (archive, figureDirectory, metricUnits) => {
+  const pattern = path.join(figureDirectory, "*.pdf");
+  const reportFiles = glob.sync(pattern);
+  reportFiles.forEach((file) => {
+    if (metricUnits && file.endsWith("_Imperial_Report.pdf")) return;
+    if (!metricUnits && !file.endsWith("_Imperial_Report.pdf")) return;
+
+    const newName = path.basename(file).replace("_Imperial_Report.pdf", "_Report.pdf");
+    console.log(`Adding report file: ${file} as ${newName}`);
+    archive.file(file, { name: newName });
   });
+};
 
-  archive.on("warning", function (err) {
-    if (err.code === "ENOENT") {
-      console.log(err);
-    } else {
-      throw err;
-    }
-  });
+const processMonthlyNanFiles = (runDir, key, jobName) => {
+  const monthlyNanDir = path.join(runDir, key, "output", "monthly_nan", jobName);
+  const csvPattern = path.join(monthlyNanDir, "*.csv");
+  const nanFiles = glob.sync(csvPattern);
+  const nanValues = {};
 
-  archive.on("error", function (err) {
-    throw err;
-  });
-
-  res.setHeader("Content-Type", "application/zip");
-  res.setHeader("Content-Disposition", `attachment; filename=${name}.zip`);
-
-  archive.pipe(res);
-
-  let figure_directory = path.join(run_directory_base, key, "output", "figures", name);
-
-  if (!fs.existsSync(figure_directory)) {
-    console.log(`Figure directory ${figure_directory} does not exist`);
-    res.status(404).send(`Figure directory ${figure_directory} does not exist`);
-    return;
-  }
-
-  let figure_files = glob.sync(path.join(figure_directory, "*.png"));
-  figure_files.forEach((file) => {
-    if (metric_units && file.endsWith("_in.png")) {
-      return;
-    } else if (!metric_units && !file.endsWith("_in.png")) {
-      return;
-    }
-
-    let new_name = path.basename(file).replace("_in.png", ".png");
-
-    console.log(`Adding figure file: ${file} as ${new_name}`);
-    archive.file(file, { name: new_name });
-  });
-
-  let report_files = glob.sync(path.join(figure_directory, "*.pdf"));
-  report_files.forEach((file) => {
-    if (metric_units && file.endsWith("_Imperial_Report.pdf")) {
-      return;
-    } else if (!metric_units && !file.endsWith("_Imperial_Report.pdf")) {
-      return;
-    }
-
-    let new_name = path.basename(file).replace("_Imperial_Report.pdf", "_Report.pdf");
-    console.log(`Adding report file: ${file} as ${new_name}`);
-    archive.file(file, { name: new_name });
-  });
-
-  let monthly_nan_directory = path.join(run_directory_base, key, "output", "monthly_nan", name);
-  let monthly_nan_files = glob.sync(path.join(monthly_nan_directory, "*.csv"));
-
-  nan_values = {};
-  monthly_nan_files.forEach((file) => {
-    let data = fs.readFileSync(file, "utf8");
-    let lines = data.trim().split("\n");
-    let header = lines.shift();
-    header = header.split(",").map((x) => x.trim());
+  nanFiles.forEach((file) => {
+    const data = fs.readFileSync(file, "utf8");
+    const lines = data.trim().split("\n");
+    const header = lines
+      .shift()
+      .split(",")
+      .map((s) => s.trim());
 
     lines.forEach((line) => {
+      const columns = line.split(",").map((s) => s.trim());
       let row = {};
-      let columns = line.split(",").map((x) => x.trim());
-      columns.forEach((column, i) => {
-        row[header[i]] = column;
-      });
+      header.forEach((col, i) => (row[col] = columns[i]));
 
-      let year = row["year"];
-      let month = row["month"];
-
-      if (!nan_values[year]) {
-        nan_values[year] = {};
+      for (const key in row) {
+        const convertedColumn = Number(row[key]);
+        if (!isNaN(convertedColumn)) {
+          // Round to 2 decimal places
+          row[key] = Math.round(convertedColumn * 100) / 100;
+        }
       }
 
-      nan_values[year][month] = row;
+      const year = row["year"];
+      const month = row["month"];
+      if (!nanValues[year]) {
+        nanValues[year] = {};
+      }
+      nanValues[year][month] = row;
     });
   });
 
-  let CSV_directory = path.join(run_directory_base, key, "output", "monthly_means", name);
-  let CSV_files = glob.sync(path.join(CSV_directory, "*.csv"));
-  CSV_files = CSV_files.filter((file) => path.basename(file).endsWith("_monthly_means.csv"));
+  return nanValues;
+};
+
+const processLandsatPassCounts = (runDir, key, jobName) => {
+  const landsatPassCountDir = path.join(runDir, key, "output", "subset", jobName, "landsat_pass_count_cache");
+  const jsonPattern = path.join(landsatPassCountDir, "*.json");
+  const landsatPassCountFiles = glob.sync(jsonPattern);
+  const landsatPassCounts = {};
+
+  landsatPassCountFiles.forEach((file) => {
+    const data = fs.readFileSync(file, "utf8");
+    const jsonData = JSON.parse(data);
+    landsatPassCounts[jsonData.year] = landsatPassCounts[jsonData.year] || {};
+    landsatPassCounts[jsonData.year][jsonData.month] = jsonData;
+  });
+
+  return landsatPassCounts;
+};
+
+const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsatPassCounts, units, metricUnits) => {
+  const csvDir = path.join(runDir, key, "output", "monthly_means", jobName);
+  let csvFiles = glob.sync(path.join(csvDir, "*.csv")).filter((file) => path.basename(file).endsWith("_monthly_means.csv"));
+
+  const header = [
+    "Year",
+    "Month",
+    `ET (${units}/month)`,
+    `Uncorrected PET (${units}/month)`,
+    `Adjusted PET (${units}/month)`,
+    `Precipitation (${units}/month)`,
+    "Cloud Coverage + Missing Data (%)",
+    "Days with Landsat Passes",
+  ].join(",");
 
   let combinedDataRows = [];
 
-  let header = `Year,Month,ET (${units}/month),PET (${units}/month),Precipitation (${units}/month),Cloud Coverage + Missing Data (%)`;
+  for (const file of csvFiles) {
+    if (path.basename(file).includes("_temp_")) continue;
 
-  CSV_files.forEach((file) => {
-    if (path.basename(file).includes("_temp_")) {
-      return;
-    }
-
-    // If 5 columns, remove the first index column
-    // Make sure units are in header
     let data = fs.readFileSync(file, "utf8");
     let lines = data.trim().split("\n");
-    let existingHeader = lines.shift();
+    const existingHeader = lines.shift();
+
+    // Remove index column if present (when header has 5 columns).
     if (existingHeader.split(",").length === 5) {
-      lines.forEach((line, i) => {
-        let columns = line.split(",").map((x) => x.trim());
-        if (columns.length === 5) {
-          columns.shift(); // remove the first index column
-          lines[i] = columns.join(",");
+      lines = lines.map((line) => {
+        let cols = line.split(",").map((s) => s.trim());
+        if (cols.length === 5) {
+          cols.shift();
         }
+        return cols.join(",");
       });
     }
 
-    lines.forEach((line, i) => {
-      let columns = line.split(",").map((x) => x.trim());
-      let year = columns[0];
-      let month = columns[1];
-      let et = metric_units ? columns[2] : mm_to_in(columns[2]);
-      let pet = metric_units ? columns[3] : mm_to_in(columns[3]);
+    lines = lines.map((line) => {
+      const cols = line.split(",").map((s) => s.trim());
+      let [year, month, etRaw, petRaw] = cols;
+      year = Number(year);
+      month = Number(month);
 
-      lines[i] = `${year},${month},${et},${pet}`;
+      let et = metricUnits ? etRaw : mmToIn(etRaw);
+      et = isNaN(et) ? "" : Math.round(et * 100) / 100;
+      let pet = metricUnits ? petRaw : mmToIn(petRaw);
+      pet = isNaN(pet) ? "" : Math.round(pet * 100) / 100;
 
-      let yearKey = `${year}`;
-      let monthKey = `${Number(month)}`;
-      let nan_row = nan_values?.[yearKey]?.[monthKey];
-      if (nan_row) {
-        let ppt = metric_units ? nan_row["ppt_avg"] : mm_to_in(nan_row["ppt_avg"]);
-        lines[i] = lines[i] + `,${ppt},${nan_row["percent_nan"]}`;
+      let convertedRow = [year, month, et, pet];
+
+      const nanRow = nanValues?.[year]?.[month];
+      if (nanRow) {
+        let ppt = metricUnits ? nanRow["ppt_avg"] : mmToIn(nanRow["ppt_avg"]);
+        ppt = isNaN(ppt) ? "" : Math.round(ppt * 100) / 100;
+        let etMax = metricUnits ? nanRow["avg_max"] : mmToIn(nanRow["avg_max"]);
+        etMax = isNaN(etMax) ? "" : Math.round(etMax * 100) / 100;
+
+        let adjustedPET = pet < etMax ? etMax : pet;
+        adjustedPET = isNaN(adjustedPET) ? "" : Math.round(adjustedPET * 100) / 100;
+
+        convertedRow.push(adjustedPET, ppt, nanRow["percent_nan"]);
       } else {
-        lines[i] = lines[i] + ",,";
+        convertedRow.push("", "");
       }
+
+      const landsatPassCountRow = landsatPassCounts?.[year]?.[month];
+      if (landsatPassCountRow) {
+        convertedRow.push(landsatPassCountRow["pass_count"]);
+      } else {
+        convertedRow.push("");
+      }
+
+      return convertedRow.join(",");
     });
 
-    let new_data = [header].concat(lines).join("\n");
+    const newData = [header, ...lines].join("\n");
+    const tempPath = file.replace(".csv", `_temp_${metricUnits ? "mm" : "in"}.csv`);
+    fs.writeFileSync(tempPath, newData);
+    archive.file(tempPath, { name: path.basename(file) });
     combinedDataRows = combinedDataRows.concat(lines);
+  }
 
-    let temp_path = file.replace(".csv", `_temp_${metric_units ? "mm" : "in"}.csv`);
-    fs.writeFileSync(temp_path, new_data);
+  const combinedCsvPath = path.join(csvDir, `${jobName}_combined.csv`);
+  const combinedStream = fs.createWriteStream(combinedCsvPath);
+  combinedStream.write(header + "\n");
 
-    let new_filename = path.basename(file);
-
-    archive.file(temp_path, { name: new_filename });
-  });
-
-  let combined_csv = path.join(CSV_directory, `${name}_combined.csv`);
-  let combined_csv_stream = fs.createWriteStream(combined_csv);
-  combined_csv_stream.write(`${header}\n`);
-
+  // Remove duplicates and sort by Year then Month.
   combinedDataRows = Array.from(new Set(combinedDataRows)).sort((a, b) => {
-    let rowA = a.split(",").map((x) => x.trim());
-    rowA = header.split(",").reduce((acc, curr, i) => {
-      acc[curr] = rowA[i];
-      return acc;
-    }, {});
+    const [yearA, monthA] = a.split(",").map((s) => s.trim());
+    const [yearB, monthB] = b.split(",").map((s) => s.trim());
+    return yearA === yearB ? Number(monthA) - Number(monthB) : Number(yearA) - Number(yearB);
+  });
+  combinedDataRows.forEach((row) => combinedStream.write(row + "\n"));
+  combinedStream.end();
+  archive.file(combinedCsvPath, { name: `${jobName}_combined.csv` });
+};
 
-    let rowB = b.split(",").map((x) => x.trim());
-    rowB = header.split(",").reduce((acc, curr, i) => {
-      acc[curr] = rowB[i];
-      return acc;
-    }, {});
+router.get("/download", async (req, res) => {
+  try {
+    const key = req.query.key;
+    const metricUnits = req.query.units !== "in";
+    const units = metricUnits ? "mm" : "in";
 
-    if (rowA["Year"] === rowB["Year"]) {
-      return Number(rowA["Month"] || 0) - Number(rowB["Month"] || 0);
-    } else {
-      return Number(rowA["Year"] || 0) - Number(rowB["Year"] || 0);
+    const job = await getJob(key);
+    if (!job) {
+      return res.status(404).send("Job not found");
     }
-  });
+    const jobName = job.name;
 
-  combinedDataRows.forEach((line) => {
-    combined_csv_stream.write(line + "\n");
-  });
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.on("end", () => console.log("Archive wrote %d bytes", archive.pointer()));
+    archive.on("warning", (err) => {
+      if (err.code === "ENOENT") {
+        console.warn(err);
+      } else {
+        throw err;
+      }
+    });
+    archive.on("error", (err) => {
+      throw err;
+    });
 
-  combined_csv_stream.end();
-  archive.file(combined_csv, { name: `${name}_combined.csv` });
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename=${jobName}.zip`);
+    archive.pipe(res);
 
-  // Add geojson file to zip
-  let geojson_filename = path.join(run_directory_base, key, `${name}.geojson`);
-  archive.file(geojson_filename, { name: `${name}.geojson` });
+    const figureDirectory = path.join(run_directory_base, key, "output", "figures", jobName);
+    if (!fs.existsSync(figureDirectory)) {
+      return res.status(404).send(`Figure directory ${figureDirectory} does not exist`);
+    }
+    processFigureFiles(archive, figureDirectory, metricUnits);
+    processReportFiles(archive, figureDirectory, metricUnits);
 
-  archive.finalize();
+    const nanValues = processMonthlyNanFiles(run_directory_base, key, jobName);
+    const landsatPassCounts = processLandsatPassCounts(run_directory_base, key, jobName);
+    await processCSVFiles(archive, run_directory_base, key, jobName, nanValues, landsatPassCounts, units, metricUnits);
+
+    const geojsonPath = path.join(run_directory_base, key, `${jobName}.geojson`);
+    archive.file(geojsonPath, { name: `${jobName}.geojson` });
+
+    await archive.finalize();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Internal Server Error");
+  }
 });
 
 module.exports = router;

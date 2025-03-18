@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import TypedDict
 
 OPENET_TRANSITION_DATE = 2008
 
@@ -14,12 +15,14 @@ class VariableType:
         parent_dir: str,
         start: datetime.date,
         end: datetime.date,
+        daylight_corrected: bool = True,
     ):
         self.name = name
         self.variable = variable
         self.mapped_variable = mapped_variable
         self.file_prefix = file_prefix
         self.monthly = monthly
+        self.daylight_corrected = daylight_corrected
         self.parent_dir = parent_dir
         self.start = start
         self.end = end
@@ -102,6 +105,7 @@ VARIABLE_TYPES = [
         mapped_variable="ETO",
         file_prefix="IDAHO_EPSCOR_GRIDMET_",
         monthly=True,
+        daylight_corrected=False,
         parent_dir="monthly",
         start=datetime(2008, 1, 1).date(),
         end=datetime(2025, 1, 1).date(),

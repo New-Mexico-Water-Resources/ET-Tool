@@ -44,6 +44,7 @@ def generate_stack(
     dates_available: List[date],
     stack_filename: str,
     target_CRS: str = None,
+    use_stack: bool = False,
 ) -> (np.ndarray, np.ndarray, Affine):
     """
     Generates a stack of data for a given region of interest (ROI) and year.
@@ -65,7 +66,7 @@ def generate_stack(
     if target_CRS is None:
         target_CRS = WGS84
 
-    if exists(stack_filename):
+    if use_stack and exists(stack_filename):
         logger.info(f"loading existing stack: {stack_filename}")
 
         with h5py.File(stack_filename, "r") as stack_file:
@@ -235,13 +236,23 @@ def generate_stack(
                 day_of_year, last_doy = get_one_month_slice(year, month)
                 days_in_month = get_days_in_month(year, month)
 
-                # For interpolation, we're converting from a monthly-sum to a daily 24-hour average
-                # Then, we're converting from a daily 24-hour average to an hours-of-sunlight per day average
+                # If the PET/ETo source isn't daylight averaged, then we need to convert from a monthly-sum to a daily 24-hour average
+                # Then, convert from a daily 24-hour average to an hours-of-sunlight per day average based on DOY and latitude
                 daily_pet_avg = PET_subset / days_in_month
-
-                hours_of_sunlight = calculate_hours_of_sunlight(ROI_latlon, date_step)
-                daily_pet_avg = daily_pet_avg / 24 * hours_of_sunlight
-                PET_sparse_stack[day_of_year:last_doy, :, :] = daily_pet_avg
+                if not source.daylight_corrected:
+                    logger.info(
+                        f"PET source is not daylight corrected, applying correction for {date_step} ({day_of_year}, {last_doy})"
+                    )
+                    for current_day in range(day_of_year, last_doy):
+                        current_day_step = datetime(year, month, current_day - day_of_year + 1).date()
+                        hours_of_sunlight = calculate_hours_of_sunlight(ROI_latlon, current_day_step)
+                        corrected_daily_pet_avg = daily_pet_avg / 24 * hours_of_sunlight
+                        PET_sparse_stack[current_day, :, :] = corrected_daily_pet_avg
+                else:
+                    logger.info(
+                        f"PET source is daylight corrected, using daily average for {date_step} ({day_of_year}, {last_doy})"
+                    )
+                    PET_sparse_stack[day_of_year:last_doy, :, :] = daily_pet_avg
             else:
                 day_of_year = get_day_of_year(year, month, day)
 
@@ -249,6 +260,8 @@ def generate_stack(
                 PET_sparse_stack[day_of_year, :, :] = np.where(np.isnan(PET_doy_image), PET_subset, PET_doy_image)
 
         except Exception as e:
+            logger.warning(e)
+
             try:
                 ESI_subset = generate_subset(
                     input_datastore=input_datastore,
@@ -307,7 +320,9 @@ def generate_stack(
     if PET_sparse_stack is None and ESI_sparse_stack is None:
         raise ValueError("no PET or ESI stack generated")
 
-    PET_sparse_stack = PET_sparse_stack if PET_sparse_stack is not None else ET_sparse_stack / ESI_sparse_stack
+    if PET_sparse_stack is None:
+        logger.info("PET stack is None, calculating from ET and ESI")
+        PET_sparse_stack = ET_sparse_stack / ESI_sparse_stack
 
     logger.info(f"interpolating ET stack for year: {year}")
     ET_stack = interpolate_stack(ET_sparse_stack)
@@ -318,18 +333,12 @@ def generate_stack(
     if not exists(stack_directory):
         makedirs(stack_directory)
 
-    logger.info(f"writing stack: {stack_filename}")
-    # with h5py.File(stack_filename, "w") as stack_file:
-    #     stack_file["ET"] = ET_stack
-    #     stack_file["PET"] = PET_stack
+    if use_stack:
+        logger.info(f"writing stack: {stack_filename}")
+        with h5py.File(stack_filename, "w") as stack_file:
+            stack_file["ET"] = ET_stack
+            stack_file["PET"] = PET_stack
 
-    #     stack_file["affine"] = (
-    #         affine.a,
-    #         affine.b,
-    #         affine.c,
-    #         affine.d,
-    #         affine.e,
-    #         affine.f
-    #     )
+            stack_file["affine"] = (affine.a, affine.b, affine.c, affine.d, affine.e, affine.f)
 
     return ET_stack, PET_stack, affine

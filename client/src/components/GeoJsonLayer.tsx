@@ -44,7 +44,7 @@ const GeoJSONLayer = ({
 
       geoJsonLayer.addTo(map);
       if (fitToBounds) {
-        if (mapLayer.maxZoom) {
+        if (mapLayer?.maxZoom) {
           map.setMaxZoom(mapLayer.maxZoom);
         }
         map.fitBounds(geoJsonLayer.getBounds(), { maxZoom: mapLayer.maxZoom });

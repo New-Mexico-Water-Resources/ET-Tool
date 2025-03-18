@@ -67,6 +67,8 @@ def process_year(
     text_panel: ScrolledText = None,
     status_filename: str = None,
     debug: bool = False,
+    requestor: dict[str, str] = None,
+    use_stack: bool = False,
 ):
     logger.info(f"processing year {cl.time(year)} at ROI {cl.name(ROI_name)}")
     message = f"processing: {year}"
@@ -90,12 +92,13 @@ def process_year(
     stack_filename = join(stack_directory, f"{year:04d}_{ROI_name}_stack.h5")
 
     try:
-        write_status(
-            message == f"loading stack: {stack_filename}\n",
-            status_filename=status_filename,
-            text_panel=text_panel,
-            root=root,
-        )
+        if use_stack:
+            write_status(
+                message == f"loading stack: {stack_filename}\n",
+                status_filename=status_filename,
+                text_panel=text_panel,
+                root=root,
+            )
 
         ET_stack, PET_stack, affine = generate_stack(
             ROI_name=ROI_name,
@@ -107,6 +110,7 @@ def process_year(
             dates_available=dates_available,
             stack_filename=stack_filename,
             target_CRS=target_CRS,
+            use_stack=use_stack,
         )
     except Exception as e:
         logger.exception(e)
@@ -138,9 +142,11 @@ def process_year(
     # Check the variable to see if it's monthly
     variable_source = get_available_variable_source_for_date("ET", datetime(year, 1, 1).date())
     if variable_source and variable_source.monthly:
-        calculate_cloud_coverage_percent(ROI_for_nan, subset_directory, nan_subset_directory, monthly_nan_directory)
+        logger.info(f"ET variable is monthly, calculating cloud coverage percent for year {year}")
+        calculate_cloud_coverage_percent(ROI_for_nan, subset_directory, nan_subset_directory, monthly_nan_directory, year)
     else:
-        calculate_percent_nan(ROI_for_nan, subset_directory, nan_subset_directory, monthly_nan_directory)
+        logger.info(f"ET variable is not monthly, calculating percent nan for year {year}")
+        calculate_percent_nan(ROI_for_nan, subset_directory, nan_subset_directory, monthly_nan_directory, year)
 
     write_status(message == "Generating figure\n", status_filename=status_filename, text_panel=text_panel, root=root)
 
@@ -159,7 +165,6 @@ def process_year(
 
     idx = {"Months": range(start_month, end_month + 1)}
     df1 = pd.DataFrame(idx, columns=["Months"])
-    df2 = pd.DataFrame(idx, columns=["Months"])
 
     main_dfa = pd.merge(left=df1, right=mm, how="left", left_on="Months", right_on="Month")
     main_df = pd.merge(left=main_dfa, right=nd, how="left", left_on="Months", right_on="month")
@@ -173,8 +178,18 @@ def process_year(
     # logger.info("monthly_means_df:")
     mean = np.nanmean(monthly_means_df["ET"])
     sd = np.nanstd(monthly_means_df["ET"])
+
+    # Min/Max for this year
     vmin = max(mean - 2 * sd, 0)
     vmax = mean + 2 * sd
+
+    # Min/max for all years
+    for file in Path(monthly_means_directory).glob("*.csv"):
+        year_df = pd.read_csv(file)
+        year_mean = np.nanmean(year_df["ET"])
+        year_sd = np.nanstd(year_df["ET"])
+        vmin = min(vmin, max(year_mean - 2 * year_sd, 0))
+        vmax = max(vmax, year_mean + 2 * year_sd)
 
     today = datetime.today()
     date = str(today)
@@ -198,57 +213,38 @@ def process_year(
         # continue
     else:
         try:
-            generate_figure(
-                ROI_name=ROI_name,
-                ROI_latlon=ROI_latlon,
-                ROI_acres=ROI_acres,
-                creation_date=today,
-                year=year,
-                vmin=vmin,
-                vmax=vmax,
-                affine=affine,
-                main_df=main_df,
-                monthly_sums_directory=monthly_sums_directory,
-                figure_filename=figure_filename,
-                start_month=start_month,
-                end_month=end_month,
-                root=root,
-                text_panel=text_panel,
-                image_panel=image_panel,
-                status_filename=status_filename,
-                metric_units=True,
-            )
+            for metric_units in [True, False]:
+                logger.info(
+                    f"generating figure for year {cl.time(year)} ROI {cl.place(ROI_name)} metric_units: {metric_units}"
+                )
+                generate_figure(
+                    ROI_name=ROI_name,
+                    ROI_latlon=ROI_latlon,
+                    ROI_acres=ROI_acres,
+                    creation_date=today,
+                    year=year,
+                    vmin=vmin,
+                    vmax=vmax,
+                    affine=affine,
+                    main_df=main_df,
+                    monthly_sums_directory=monthly_sums_directory,
+                    figure_filename=figure_filename,
+                    start_month=start_month,
+                    end_month=end_month,
+                    root=root,
+                    text_panel=text_panel,
+                    image_panel=image_panel,
+                    status_filename=status_filename,
+                    requestor=requestor,
+                    metric_units=metric_units,
+                )
 
-            generate_figure(
-                ROI_name=ROI_name,
-                ROI_latlon=ROI_latlon,
-                ROI_acres=ROI_acres,
-                creation_date=today,
-                year=year,
-                vmin=vmin,
-                vmax=vmax,
-                affine=affine,
-                main_df=main_df,
-                monthly_sums_directory=monthly_sums_directory,
-                figure_filename=figure_filename,
-                start_month=start_month,
-                end_month=end_month,
-                root=root,
-                text_panel=text_panel,
-                image_panel=image_panel,
-                status_filename=status_filename,
-                metric_units=False,
-            )
         except Exception as e:
             logger.exception(e)
             logger.info(f"unable to generate figure for year: {year}")
 
             if debug:
                 sys.exit(1)
-
-        # continue
-
-    # FIXME delete the stack file
 
     logger.info(f"finished processing year {year}")
     return monthly_means_df

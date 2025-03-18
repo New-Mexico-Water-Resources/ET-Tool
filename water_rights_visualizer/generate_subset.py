@@ -146,6 +146,10 @@ def generate_subset(
         with input_datastore.get_filename(
             tile=tile, variable_name=variable_name, acquisition_date=acquisition_date
         ) as input_filename:
+            if not input_filename:
+                logger.error(f"Failed to load tile: {tile} for variable: {variable_name} on date: {acquisition_date}")
+                continue
+
             tile_raster = Raster.open(input_filename, geometry=target_geometry, cmap=ET_COLORMAP)
 
         if target_raster is None:

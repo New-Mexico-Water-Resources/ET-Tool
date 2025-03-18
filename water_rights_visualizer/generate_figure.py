@@ -51,6 +51,7 @@ def generate_figure(
     text_panel: ScrolledText = None,
     image_panel: Text = None,
     status_filename: str = None,
+    requestor: dict[str, str] = None,
     metric_units: bool = True,
 ):
     """
@@ -90,23 +91,32 @@ def generate_figure(
     max_length_short = 15
     max_length_medium = 30
 
+    requestor_name = ""
+    if requestor:
+        requestor_name = requestor.get("name", "")
+        if not requestor_name:
+            requestor_name = requestor.get("email", "")
+        if not requestor_name:
+            requestor_name = requestor.get("sub", "")
+
+    if not requestor_name:
+        requestor_name = "Unknown"
+
     if len(ROI_name) <= max_length_short:
         title = f"Evapotranspiration For {ROI_name}"
-        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}"
+        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}\nRequested By: {requestor_name}"
     elif len(ROI_name) <= max_length_medium:
         title_fontsize = 12
         title = f"Evapotranspiration For {ROI_name}"
-        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}"
+        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}\nRequested By: {requestor_name}"
     else:
         title_fontsize = 12
         short_name = ROI_name[:max_length_medium] + "..."
         title = f"Evapotranspiration For {short_name}"
-        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}"
+        subtitle = f"Year: {year}\nArea: {ROI_acres} acres\nCreated: {creation_date.date()}\nRequested By: {requestor_name}"
 
-    # Add the title
-    # align left
     fig.suptitle(title, fontsize=title_fontsize, ha="left", x=0.125, fontweight="bold")
-    fig.text(0.125, 0.91, subtitle, fontsize=axis_label_fontsize, ha="left", fontweight="normal")
+    fig.text(0.125, 0.895, subtitle, fontsize=axis_label_fontsize, ha="left", fontweight="normal")
 
     n_months = end_month - start_month + 1
     grid_cols = int(n_months / 3)
@@ -209,14 +219,20 @@ def generate_figure(
 
     df = main_df[main_df["Year"] == year]
     x = df["Month"]
-    y = df["PET"] if metric_units else mm_to_in(df["PET"])
-    y2 = df["ET"] if metric_units else mm_to_in(df["ET"])
+
+    df["ET"] = df["ET"] if metric_units else mm_to_in(df["ET"])
+    df["PET"] = df["PET"] if metric_units else mm_to_in(df["PET"])
+
+    y = df["PET"]
+    y2 = df["ET"]
 
     if "ppt_avg" in df.columns:
         df["ppt_avg"] = df["ppt_avg"] if metric_units else mm_to_in(df["ppt_avg"])
 
     if "avg_min" in df.columns:
         df["avg_min"] = df["avg_min"] if metric_units else mm_to_in(df["avg_min"])
+
+    if "avg_max" in df.columns:
         df["avg_max"] = df["avg_max"] if metric_units else mm_to_in(df["avg_max"])
 
     df["pet_ci_ymin"] = df.apply(
@@ -265,9 +281,13 @@ def generate_figure(
     pet_label = "PET" if year < OPENET_TRANSITION_DATE else "ETo"
 
     if year >= OPENET_TRANSITION_DATE:
-        logger.info(f"Correcting ETo to based on ET for year {year}")
+        logger.info(f"Correcting ETo based on ET for year {year} (ET < ETo)")
         # y = np.where(y < y2, df["et_ci_ymax"], y)
         y = np.maximum(y, df["et_ci_ymax"])
+        y = np.maximum(y, y2)
+        # Go through et_ci and make sure ymin is less than y2 and ymax is greater than y2, if not, set et_ci to y2
+        df["et_ci_ymin"] = np.where(df["et_ci_ymin"] < y2, df["et_ci_ymin"], y2)
+        df["et_ci_ymax"] = np.where(df["et_ci_ymax"] > y2, df["et_ci_ymax"], y2)
 
     sns.lineplot(x=x, y=y, ax=ax, color=pet_color, label=pet_label, marker=marker, markersize=marker_size)
     sns.lineplot(x=x, y=y2, ax=ax, color=et_color, label="ET", marker=marker, markersize=marker_size)
@@ -291,10 +311,10 @@ def generate_figure(
         "Precipitation": {"color": ppt_color, "alpha": 0.8, "lw": 2},
     }
 
-    if int(year) < OPENET_TRANSITION_DATE:
+    if int(year) < OPENET_TRANSITION_DATE or is_ensemble_range_data_null:
         del legend_items["Ensemble Min/Max"]
+
     if is_ensemble_range_data_null:
-        del legend_items["Ensemble Min/Max"]
         legend_items["Ensemble Min/Max (Unavailable)"] = {"color": et_color, "alpha": 0.1, "lw": 4}
 
     legend_labels = legend_items.keys()
@@ -314,19 +334,16 @@ def generate_figure(
     ax.set(xlabel="", ylabel="")
     ax_precip.set(xlabel="", ylabel="")
 
-    et_df = main_df["ET"] if metric_units else mm_to_in(main_df["ET"])
-    pet_df = main_df["PET"] if metric_units else mm_to_in(main_df["PET"])
+    et_df = y2
+    pet_df = y
 
-    et_ci_ymin = df["et_ci_ymin"] if metric_units else mm_to_in(df["et_ci_ymin"])
-    et_ci_ymax = df["et_ci_ymax"] if metric_units else mm_to_in(df["et_ci_ymax"])
-    pet_ci_ymin = df["pet_ci_ymin"] if metric_units else mm_to_in(df["pet_ci_ymin"])
-    pet_ci_ymax = df["pet_ci_ymax"] if metric_units else mm_to_in(df["pet_ci_ymax"])
+    et_ci_ymin = df["et_ci_ymin"]
+    et_ci_ymax = df["et_ci_ymax"]
+    pet_ci_ymin = df["pet_ci_ymin"]
+    pet_ci_ymax = df["pet_ci_ymax"]
 
-    ymin = min(min(et_df), min(et_df), min(pet_ci_ymin), min(et_ci_ymin))
-    ymax = max(max(pet_df), max(pet_df), max(pet_ci_ymax), max(et_ci_ymax))
-
-    main_line_min = min(min(et_df), min(et_df))
-    main_line_max = max(max(pet_df), max(pet_df))
+    ymin = min(min(et_df), min(pet_df), min(pet_ci_ymin), min(et_ci_ymin))
+    ymax = max(max(et_df), max(pet_df), max(pet_ci_ymax), max(et_ci_ymax))
 
     normalized_min = 0
     normalized_max = 100
@@ -363,9 +380,13 @@ def generate_figure(
     ax_cloud.legend(custom_lines, legend_labels, loc="upper left", fontsize=axis_label_fontsize / 2, frameon=False)
 
     et_padding = 10 if metric_units else mm_to_in(10)
-    ax.set_ylim(0, ymax + et_padding)
+    adjusted_max = ymax + et_padding
+    ax.set_ylim(0, adjusted_max)
 
-    et_ticks = np.linspace(int(main_line_min), int(main_line_max), 6)
+    if metric_units:
+        et_ticks = np.linspace(int(ymin), int(ymax), 6)
+    else:
+        et_ticks = np.linspace(ymin, ymax, 6)
     ax.set_yticks(et_ticks)
     ax.set_yticklabels([f"{round(tick * 10) / 10} {et_unit}" for tick in et_ticks])
 
@@ -421,7 +442,7 @@ def generate_figure(
     start_date = datetime(year, start_month, 1).date()
     available_et = get_available_variable_source_for_date("ET", start_date)
     if available_et and available_et.file_prefix == "OPENET_ENSEMBLE_":
-        caption = f"ET and PET (ETo) calculated from Landsat with the OpenET Ensemble (Melton et al. 2021) and the Idaho EPSCOR GRIDMET (Abatzoglou 2012) models"
+        caption = f"ET and ETo calculated from Landsat with the OpenET Ensemble (Melton et al. 2021) and the Idaho EPSCOR GRIDMET (Abatzoglou 2012) models"
     else:
         caption = f"ET and PET calculated from Landsat with PT-JPL (Fisher et al. 2008)"
     # caption += (
