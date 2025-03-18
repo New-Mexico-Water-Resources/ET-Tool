@@ -47,7 +47,7 @@ def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir) -> Union[float, None]
     filename = basename(tiff_file)
 
     if not tiff_file or not exists(tiff_file):
-        logger.error(f"File '{tiff_file}' does not exist")
+        logger.error(f"NaN TIFF subset file '{tiff_file}' does not exist")
         return None
 
     nan_masked_subset_file = None

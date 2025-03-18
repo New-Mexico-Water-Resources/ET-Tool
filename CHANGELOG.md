@@ -1,3 +1,24 @@
+## 1.18.0 (2025-03-17)
+
+### Features
+- Adds "Requested By" field to the generated report
+- Switches "Avg Cloud Coverage & Missing Data" metric for >= 2008 data to use the total count of Landsat passes as a denominator instead of days in the month
+  - This change provides a more accurate representation of cloud coverage and missing data as it pertains to confidence and more closely aligns with the pre-2008 metric
+  - Total Landsat pass count is determined by querying the Microsoft Planetary Computer STAC API for the given region and month
+    - Landsat 5, 7, 8, and 9 are all included in the count. 
+    - NOTE: Since pass counting is done on demand after the fact instead of stored with the data, there may be some discrepancies between the number of passes and the actual cloud coverage/missing data values in the report (miscounts would likely lead to a higher reported cloud coverage percentage than actual)
+- Includes Landsat pass count in CSV output
+- Includes ET-adjusted and uncorrected PET values in CSV output for transparency
+  - Rounds to 2 decimal places
+- Standardizes ET color scale across years in the report
+  - The color scale is now consistent across all years, making it easier to compare ET values over time
+  - Min and max are determined by looking at 2 standard deviations above and below the mean for all years in the report
+
+### Bug Fixes
+- Fixes bug where a year's monthly CSV would get overwritten in some edge cases, causing null data to be reported in the output CSV (showing up as 100% cloud coverage) despite being correctly displayed in the report
+- Fixes y-scaling issue for pre-2008 PET data in the report
+- Fixes failed to fetch error for some 2019-12 tiles
+
 ## 1.17.0 (2025-03-12)
 
 ### Features

@@ -172,27 +172,6 @@ def water_rights_visualizer(
     ROI_acres = round(ROI_area(ROI, working_directory), 2)
     creation_date = datetime.today()
 
-    # month_means = []
-    # mm = pd.read_csv(f"{monthly_means_directory}/{year}_monthly_means.csv")
-    # month_means.append(mm)
-
-    # idx = {"Months": range(start_month, end_month + 1)}
-    # df1 = pd.DataFrame(idx, columns=["Months"])
-
-    # main_dfa = pd.merge(left=df1, right=mm, how="left", left_on="Months", right_on="Month")
-    # main_df = pd.merge(left=main_dfa, right=nd, how="left", left_on="Months", right_on="month")
-
-    # if "Year" not in main_df.columns and "Year_x" in main_df.columns:
-    #     main_df = main_df.rename(columns={"Year_x": "Year"})
-
-    # main_df = main_df.replace(np.nan, 100)
-    # monthly_means_df = pd.concat(month_means, axis=0)
-    # mean = np.nanmean(monthly_means_df["ET"])
-    # sd = np.nanstd(monthly_means_df["ET"])
-
-    # # Min/Max for this year
-    # vmin = max(mean - 2 * sd, 0)
-    # vmax = mean + 2 * sd
     vmin = None
     vmax = None
 
