@@ -110,7 +110,6 @@ def calculate_percent_nan(
         cell_count = len(subsets[0][roi_mask[0]].flatten())
         count_nan = []
         count_nan.append(counted_nans)
-
         for nans in count_nan:
             # if area == 0:
             #     ratio_of_nan = (nans / 1)
@@ -121,9 +120,6 @@ def calculate_percent_nan(
             #     percent_of_nan = ratio_of_nan * 100
             #     percent_nan.append(percent_of_nan)
             percent_nan.append(nans / cell_count * 100)
-
-            # print(f"nans: {nans}")
-            # print(f"percent_nan: {percent_nan}")
 
     # Extracting the dates from the file names
     dates = []
@@ -188,7 +184,8 @@ def calculate_percent_nan(
 
     # Convert PPT values to DataFrame and merge with monthly averages
     month_ppt_df = pd.DataFrame(ppt_values)
-    nan_monthly_avg = pd.merge(nan_monthly_avg, month_ppt_df, on=["year", "month"], how="left")
+    nan_monthly_avg = pd.merge(nan_monthly_avg, month_ppt_df, on=["year", "month"], how="outer")
+    nan_monthly_avg["Year"] = nan_monthly_avg["year"]
 
     cols_nan = nan_monthly_avg.columns
     # Splitting the data into separate CSV files for each year

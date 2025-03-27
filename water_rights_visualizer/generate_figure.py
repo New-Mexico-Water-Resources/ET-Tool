@@ -355,21 +355,36 @@ def generate_figure(
 
     if not is_confidence_data_null:
         ci_color = "#7F7F7F"
+        # Mask out NaN values so they create gaps in the plot
+        mask = df["percent_nan"].notna()
         sns.lineplot(
-            x=x, y=df["percent_nan"], ax=ax_cloud, color=ci_color, alpha=0.8, lw=2, marker=marker, markersize=marker_size
+            x=x[mask],
+            y=df["percent_nan"][mask],
+            ax=ax_cloud,
+            color=ci_color,
+            alpha=0.8,
+            lw=2,
+            marker=marker,
+            markersize=marker_size,
         )
-        ax_cloud.stackplot(x, df["percent_nan"], colors=[ci_color + "80"])
+        # For the stackplot, we need to handle NaN values differently
+        # Create a masked array where NaN values are set to 0
+        stack_data = np.ma.masked_invalid(df["percent_nan"].values)
+        ax_cloud.stackplot(x, stack_data, colors=[ci_color + "80"])
 
         ax_cloud.set(xlabel="", ylabel="")
-        max_cloud_coverage = max(df["percent_nan"])
-        top_gap = min(max_cloud_coverage / 2, 10)
-        min_non_nan = df["percent_nan"].loc[df["percent_nan"] != 0].min()
-        min_cloud_coverage = max(min_non_nan - 5, 0)
-        ax_cloud.set_ylim(min_cloud_coverage, min(max_cloud_coverage + top_gap, 100))
-        normalized_ticks = np.linspace(min_cloud_coverage, max_cloud_coverage, 3)
-        ax_cloud.set_yticks(normalized_ticks)
-        ax_cloud.set_yticklabels([f"{int(tick)}%" for tick in normalized_ticks])
-        ax_cloud.tick_params(axis="y", labelsize=6)
+        # Only consider non-NaN values when calculating limits
+        valid_data = df["percent_nan"].dropna()
+        if not valid_data.empty:
+            max_cloud_coverage = valid_data.max()
+            top_gap = min(max_cloud_coverage / 2, 10)
+            min_non_nan = valid_data.min()
+            min_cloud_coverage = max(min_non_nan - 5, 0)
+            ax_cloud.set_ylim(min_cloud_coverage, min(max_cloud_coverage + top_gap, 100))
+            normalized_ticks = np.linspace(min_cloud_coverage, max_cloud_coverage, 3)
+            ax_cloud.set_yticks(normalized_ticks)
+            ax_cloud.set_yticklabels([f"{int(tick)}%" for tick in normalized_ticks])
+            ax_cloud.tick_params(axis="y", labelsize=6)
 
     cloud_coverage_label = (
         ["Avg Cloud Coverage & Missing Data"] if year >= OPENET_TRANSITION_DATE else ["Avg Cloud Coverage & Missing Data"]

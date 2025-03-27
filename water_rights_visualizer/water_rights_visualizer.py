@@ -26,6 +26,7 @@ from .write_status import write_status
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib import pyplot as plt
 from glob import glob
+from PyPDF2 import PdfMerger
 
 logger = logging.getLogger(__name__)
 
@@ -288,10 +289,26 @@ def water_rights_visualizer(
         imperial_report_pdf.savefig(fig, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
 
+    # Load static data documentation and add it to the PDF
+    data_documentation_filename = join(abspath(dirname(__file__)), "et_tool_data_docs.pdf")
+
     metric_report_pdf.close()
     logger.info(f"metric report saved to: {cl.file(metric_report_filename)}")
     imperial_report_pdf.close()
     logger.info(f"imperial report saved to: {cl.file(imperial_report_filename)}")
+
+    # Merge the data documentation into the PDF reports
+    metric_merger = PdfMerger()
+    metric_merger.append(metric_report_filename)
+    metric_merger.append(data_documentation_filename)
+    metric_merger.write(metric_report_filename)
+    metric_merger.close()
+
+    imperial_merger = PdfMerger()
+    imperial_merger.append(imperial_report_filename)
+    imperial_merger.append(data_documentation_filename)
+    imperial_merger.write(imperial_report_filename)
+    imperial_merger.close()
 
 
 def main(argv=sys.argv):

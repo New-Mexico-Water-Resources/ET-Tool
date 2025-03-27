@@ -7,6 +7,7 @@ const constants = require("../constants");
 
 const router = express.Router();
 const { run_directory_base, report_queue_collection, connectToDatabase } = constants;
+const OPENET_TRANSITION_DATE = 2008;
 
 const mmToIn = (mm) => {
   let mmValue = typeof mm === "string" ? parseFloat(mm) : mm;
@@ -104,15 +105,24 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
   const csvDir = path.join(runDir, key, "output", "monthly_means", jobName);
   let csvFiles = glob.sync(path.join(csvDir, "*.csv")).filter((file) => path.basename(file).endsWith("_monthly_means.csv"));
 
+  const hasPostTransitionData = csvFiles.some((fileName) => {
+    const year = path.basename(fileName).split("_")[0];
+    if (isNaN(year)) {
+      return false;
+    }
+
+    return Number(year) >= OPENET_TRANSITION_DATE;
+  });
+
   const header = [
     "Year",
     "Month",
     `ET (${units}/month)`,
-    `Uncorrected PET (${units}/month)`,
-    `Adjusted PET (${units}/month)`,
+    hasPostTransitionData ? `Uncorrected PET (${units}/month)` : `PET (${units}/month)`,
+    ...(hasPostTransitionData ? [`Adjusted PET (${units}/month)`] : []),
     `Precipitation (${units}/month)`,
     "Cloud Coverage + Missing Data (%)",
-    "Days with Landsat Passes",
+    ...(hasPostTransitionData ? ["Days with Landsat Passes"] : []),
   ].join(",");
 
   let combinedDataRows = [];
@@ -124,7 +134,7 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
     let lines = data.trim().split("\n");
     const existingHeader = lines.shift();
 
-    // Remove index column if present (when header has 5 columns).
+    // Remove index column if present (when header has 5 columns)
     if (existingHeader.split(",").length === 5) {
       lines = lines.map((line) => {
         let cols = line.split(",").map((s) => s.trim());
@@ -149,25 +159,35 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
       let convertedRow = [year, month, et, pet];
 
       const nanRow = nanValues?.[year]?.[month];
+
+      if (hasPostTransitionData) {
+        if (year >= OPENET_TRANSITION_DATE && nanRow) {
+          let etMax = metricUnits ? nanRow["avg_max"] : mmToIn(nanRow["avg_max"]);
+          etMax = isNaN(etMax) ? "" : Math.round(etMax * 100) / 100;
+          let adjustedPET = pet < etMax ? etMax : pet;
+          adjustedPET = isNaN(adjustedPET) ? "" : Math.round(adjustedPET * 100) / 100;
+          convertedRow.push(adjustedPET);
+        } else {
+          convertedRow.push(""); // Empty for pre-transition years
+        }
+      }
+
+      // Add precipitation and cloud coverage (for all years)
       if (nanRow) {
         let ppt = metricUnits ? nanRow["ppt_avg"] : mmToIn(nanRow["ppt_avg"]);
         ppt = isNaN(ppt) ? "" : Math.round(ppt * 100) / 100;
-        let etMax = metricUnits ? nanRow["avg_max"] : mmToIn(nanRow["avg_max"]);
-        etMax = isNaN(etMax) ? "" : Math.round(etMax * 100) / 100;
-
-        let adjustedPET = pet < etMax ? etMax : pet;
-        adjustedPET = isNaN(adjustedPET) ? "" : Math.round(adjustedPET * 100) / 100;
-
-        convertedRow.push(adjustedPET, ppt, nanRow["percent_nan"]);
+        convertedRow.push(ppt, nanRow["percent_nan"]);
       } else {
         convertedRow.push("", "");
       }
 
-      const landsatPassCountRow = landsatPassCounts?.[year]?.[month];
-      if (landsatPassCountRow) {
-        convertedRow.push(landsatPassCountRow["pass_count"]);
-      } else {
-        convertedRow.push("");
+      if (hasPostTransitionData) {
+        if (year >= OPENET_TRANSITION_DATE) {
+          const landsatPassCountRow = landsatPassCounts?.[year]?.[month];
+          convertedRow.push(landsatPassCountRow ? landsatPassCountRow["pass_count"] : "");
+        } else {
+          convertedRow.push(""); // Empty for pre-transition years
+        }
       }
 
       return convertedRow.join(",");

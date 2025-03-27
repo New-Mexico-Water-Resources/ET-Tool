@@ -1,3 +1,13 @@
+## 1.19.0 (2025-03-27)
+
+### Features
+- Appends data layer documentation to the end of the report
+
+### Bug Fixes
+- Fixes issue where NaN values were being reported as 100% in the monthly CSV output
+- Fixes 0 scaling issue where 0% cloud coverage wasn't being displayed properly in the report
+- Fixes issue where PPT values were being reported as 0 in the monthly CSV output if there was a NaN value in the monthly data
+
 ## 1.18.0 (2025-03-18)
 
 ### Features
