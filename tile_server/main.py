@@ -32,7 +32,7 @@ ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/root/data/modis/et_proce
 PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/root/data/modis/pet_processed")
 BASE_DATA_PRODUCT = os.environ.get("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
 
-AWS_PROFILE = os.environ.get("AWS_PROFILE", "")
+AWS_PROFILE = os.environ.get("AWS_PROFILE", None)
 S3_INPUT_BUCKET = os.environ.get("S3_INPUT_BUCKET", "ose-dev-inputs")
 
 BANDS = ["ET", "PET"]

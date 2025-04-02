@@ -10,7 +10,7 @@ def get_env_path(key, default):
 
 
 # Base directories
-BASE_DATA_DIR = get_env_path("MODIS_BASE_DIR", "~/data/modis_net_et_8_day")
+BASE_DATA_DIR = get_env_path("MODIS_BASE_DIR", "/root/data/modis_net_et_8_day")
 DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", os.path.join(BASE_DATA_DIR, "downloads"))
 INPUT_DIR = get_env_path("MODIS_INPUT_DIR", os.path.join(BASE_DATA_DIR, "et_tiffs"))
 OUTPUT_DIR = get_env_path("MODIS_OUTPUT_DIR", os.path.join(BASE_DATA_DIR, "et_tiles"))
