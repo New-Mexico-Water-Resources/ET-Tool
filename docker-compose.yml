@@ -55,6 +55,8 @@ services:
     container_name: modis-tile-server
     restart: always
     env_file: ".env"
+    ports:
+      - "5001:5001"
     depends_on:
       - water_mongo
     volumes:
