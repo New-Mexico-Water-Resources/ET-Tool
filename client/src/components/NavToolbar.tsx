@@ -339,7 +339,7 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
                     }}
                   >
                     <PendingActionsIcon />
-                    Queue
+                    In Progress
                   </Typography>
                 </Badge>
               </Box>

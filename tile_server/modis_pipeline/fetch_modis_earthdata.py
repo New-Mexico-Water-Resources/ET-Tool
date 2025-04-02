@@ -4,18 +4,15 @@ import boto3
 import json
 import requests
 import datetime
-
-
 from dotenv import load_dotenv
 
 load_dotenv()
 
-S3_ENDPOINT = "https://data.lpdaac.earthdatacloud.nasa.gov/s3credentials"
-
-BUCKET_NAME = "lp-prod-protected"
-# BASE_DATA_PRODUCT = "MOD16A2GF"
-BASE_DATA_PRODUCT = "MOD16A2"
-DATA_PRODUCT_VERSION = "061"
+# Configuration via environment variables with defaults
+S3_ENDPOINT = os.getenv("MODIS_S3_ENDPOINT", "https://data.lpdaac.earthdatacloud.nasa.gov/s3credentials")
+BUCKET_NAME = os.getenv("MODIS_S3_BUCKET", "lp-prod-protected")
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
+DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
 DATA_PRODUCT = f"{BASE_DATA_PRODUCT}.{DATA_PRODUCT_VERSION}"
 
 
@@ -127,4 +124,4 @@ def list_all_tiles_for_year(year):
 
 
 if __name__ == "__main__":
-    download_tile_from_s3("2008.12.18", "h08v05")
+    download_tile_from_s3("2008.12.18", "h08v05", dest_folder="temp_test")

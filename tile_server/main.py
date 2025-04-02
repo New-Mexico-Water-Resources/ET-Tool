@@ -31,7 +31,8 @@ app.add_middleware(
 ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/data/modis/et_processed")
 PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/data/modis/pet_processed")
 
-S3_INPUT_BUCKET = os.environ.get("S3_INPUT_BUCKET", "")
+AWS_PROFILE = os.environ.get("AWS_PROFILE", "ose-nmw")
+S3_INPUT_BUCKET = os.environ.get("S3_INPUT_BUCKET", "ose-dev-inputs")
 
 BANDS = ["ET", "PET"]
 TILE_SIZE = 256
@@ -57,17 +58,21 @@ async def get_modis_dates():
 
     # Now check the S3 bucket
     if S3_INPUT_BUCKET:
-        s3 = boto3.client("s3")
-        response = s3.list_objects_v2(Bucket=S3_INPUT_BUCKET, Prefix="modis/")
-        for obj in response.get("Contents", []):
-            key = obj["Key"]
-            matches = re.match(r"modis/MOD16A2_MERGED_(\d{8})_ET.tif", key)
-            if not matches:
-                continue
-            raw_date = matches.group(1)
-            formatted_date = datetime.datetime.strptime(raw_date, "%Y%m%d").strftime("%Y-%m-%d")
-            if formatted_date not in dates:
-                dates.append(formatted_date)
+        try:
+            session = boto3.Session(profile_name=AWS_PROFILE)
+            s3 = session.client("s3")
+            response = s3.list_objects_v2(Bucket=S3_INPUT_BUCKET, Prefix="modis/")
+            for obj in response.get("Contents", []):
+                key = obj["Key"]
+                matches = re.match(r"modis/MOD16A2_MERGED_(\d{8})_ET.tif", key)
+                if not matches:
+                    continue
+                raw_date = matches.group(1)
+                formatted_date = datetime.datetime.strptime(raw_date, "%Y%m%d").strftime("%Y-%m-%d")
+                if formatted_date not in dates:
+                    dates.append(formatted_date)
+        except Exception as e:
+            print("Error checking S3 bucket for MODIS dates", e)
 
     dates.sort()
 

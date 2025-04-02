@@ -115,7 +115,7 @@ const JobQueue = () => {
     const fetchLogs = async () => {
       if (activeJobLogKey && jobLogsOpen && Date.now() - lastFetchedLogs > 2000) {
         if (viewingJob?.name) {
-          let jobStatusRequest = fetchJobStatus(activeJobLogKey, viewingJob.name);
+          const jobStatusRequest = fetchJobStatus(activeJobLogKey, viewingJob.name);
           if (!jobStatusRequest) {
             return;
           }
@@ -129,18 +129,18 @@ const JobQueue = () => {
             });
         }
 
-        let jobLogsRequest = fetchJobLogs(activeJobLogKey);
+        const jobLogsRequest = fetchJobLogs(activeJobLogKey);
         if (!jobLogsRequest) {
           return;
         }
 
         jobLogsRequest.then((logs) => {
-          let existingLog = jobLogs[activeJobLogKey];
+          const existingLog = jobLogs[activeJobLogKey];
           if (existingLog && existingLog.logs === logs.logs) {
             return;
           }
 
-          let currentLog = { timestamp: 0, logs: "No Logs Available" };
+          const currentLog = { timestamp: 0, logs: "No Logs Available" };
           if (logs?.logs) {
             currentLog.logs = logs.logs;
           }
@@ -177,7 +177,7 @@ const JobQueue = () => {
       );
     }
 
-    let searchTerm = searchField?.toLowerCase() || "";
+    const searchTerm = searchField?.toLowerCase() || "";
 
     if (activeAuthorFilters.length) {
       items = items.filter((item) => activeAuthorFilters.includes(item.user?.name));
@@ -187,8 +187,8 @@ const JobQueue = () => {
       items = items.filter((item) => activeStatusFilters.includes(item.status));
     }
 
-    let filteredItems = items.filter((item) => {
-      let fields = [
+    const filteredItems = items.filter((item) => {
+      const fields = [
         item?.name?.toLowerCase() || "",
         `${item?.start_year}`,
         `${item?.end_year}`,
@@ -202,8 +202,8 @@ const JobQueue = () => {
     });
 
     filteredItems.sort((a, b) => {
-      let aStartedDate = new Date(a.started);
-      let bStartedDate = new Date(b.started);
+      const aStartedDate = new Date(a.started);
+      const bStartedDate = new Date(b.started);
       if (sortAscending) {
         return aStartedDate.getTime() - bStartedDate.getTime();
       } else {
@@ -224,9 +224,9 @@ const JobQueue = () => {
   ]);
 
   const authors = useMemo(() => {
-    let authors = new Set<string>();
+    const authors = new Set<string>();
 
-    let items = isBacklogOpen ? backlog : queue;
+    const items = isBacklogOpen ? backlog : queue;
     items.forEach((job) => {
       authors.add(job.user?.name);
     });
@@ -234,9 +234,9 @@ const JobQueue = () => {
   }, [queue, backlog, isBacklogOpen]);
 
   const availableStatusFilters = useMemo(() => {
-    let statuses = new Set<string>();
+    const statuses = new Set<string>();
 
-    let items = isBacklogOpen ? backlog : queue;
+    const items = isBacklogOpen ? backlog : queue;
     items.forEach((job) => {
       statuses.add(job.status);
     });
@@ -362,7 +362,7 @@ const JobQueue = () => {
         variant="h5"
         style={{ color: "var(--st-gray-30)", padding: "8px 16px", display: "flex", alignItems: "center" }}
       >
-        {isBacklogOpen ? "Completed" : "Queue"}
+        {isBacklogOpen ? "Completed" : "In Progress"}
 
         {!isBacklogOpen && canDeleteJobs && (
           <Button

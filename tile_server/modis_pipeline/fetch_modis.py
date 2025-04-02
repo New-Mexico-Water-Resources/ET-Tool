@@ -4,11 +4,21 @@ from bs4 import BeautifulSoup
 import tqdm
 from fetch_modis_earthdata import download_tile_from_s3
 
-BASE_DATA_PRODUCT = "MOD16A2"
-# BASE_DATA_PRODUCT = "MOD16A2GF"
-MODIS_BASE_URL = f"https://e4ftl01.cr.usgs.gov/MOLT/{BASE_DATA_PRODUCT}.061/"
-DOWNLOAD_FOLDER = "modis_downloads"
-EXISTING_MERGED_FOLDER = os.path.expanduser("~/data/modis_net_et_8_day/raw_et")
+# Configuration
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")  # MOD16A2GF for gap-filled data
+DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
+MODIS_BASE_URL = f"https://e4ftl01.cr.usgs.gov/MOLT/{BASE_DATA_PRODUCT}.{DATA_PRODUCT_VERSION}/"
+
+
+def get_env_path(key, default):
+    """Get path from environment variable or use default."""
+    path = os.getenv(key, default)
+    return os.path.expanduser(path)
+
+
+# Get paths from environment variables
+DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "~/data/modis_net_et_8_day/downloads")
+EXISTING_MERGED_FOLDER = get_env_path("MODIS_MERGED_DIR", "~/data/modis_net_et_8_day/raw_et")
 
 
 def get_available_dates(url=MODIS_BASE_URL):
@@ -62,7 +72,7 @@ def format_date(date_str):
     return f"{date_str[:4]}.{date_str[4:6]}.{date_str[6:]}"
 
 
-if __name__ == "__main__":
+def fetch_new_dates(limit=None):
     available_dates = get_available_dates()
 
     existing_files = os.listdir(EXISTING_MERGED_FOLDER)
@@ -73,7 +83,10 @@ if __name__ == "__main__":
     os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
     if len(new_dates) > 0:
         tiles = ["h08v05", "h09v05"]
-        pbar = tqdm.tqdm(new_dates, desc="Downloading MODIS files", leave=False, total=len(new_dates) * len(tiles))
+        dates_to_process = new_dates[:limit] if limit else new_dates
+        pbar = tqdm.tqdm(
+            dates_to_process, desc="Downloading MODIS files", leave=False, total=len(dates_to_process) * len(tiles)
+        )
         for date in pbar:
             # files = get_files_for_date(date)
             for tile in tqdm.tqdm(tiles, desc=f"Processing {date}", leave=False):
@@ -88,3 +101,7 @@ if __name__ == "__main__":
                 pbar.update(1)
     else:
         print("No new dates to download.")
+
+
+if __name__ == "__main__":
+    fetch_new_dates()

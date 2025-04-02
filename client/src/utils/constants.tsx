@@ -62,26 +62,26 @@ export const MAP_LAYER_OPTIONS = {
     time: "2023-01-01",
   },
   // ** COMMENTED OUT FOR NOW UNTIL TILE SERVER IS CONFIGURED **
-  // "MODIS ET 500": {
-  //   name: "MODIS ET 500",
-  //   attribution:
-  //     'Imagery re-formatted and made available from the NASA MODIS MOD16A2 dataset, "Steve Running, Qiaozhen Mu - University of Montana and MODAPS SIPS - NASA. (2015). MOD16A2 MODIS/Terra Evapotranspiration 8-day L4 Global 500m SIN Grid. NASA LP DAAC. http://doi.org/10.5067/MODIS/MOD16A2.006"',
-  //   url: `${TILE_SERVER_URL}/{refresh}/ET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
-  //   maxZoom: 11,
-  //   time: "2021-01-01",
-  //   backgroundProvider: "Google Satellite",
-  //   labelsProvider: "CartoDB DarkMatter Labels",
-  //   tms: true,
-  //   refresh: "static",
-  //   availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
-  //   units: "mm/8-days",
-  //   modes: {
-  //     absolute: "Absolute",
-  //     prevPass: "Previous Pass Difference",
-  //     prevMonth: "Previous Month Difference",
-  //     historical: "Historical Difference",
-  //   },
-  // },
+  "MODIS ET 500": {
+    name: "MODIS ET 500",
+    attribution:
+      'Imagery re-formatted and made available from the NASA MODIS MOD16A2 dataset, "Steve Running, Qiaozhen Mu - University of Montana and MODAPS SIPS - NASA. (2015). MOD16A2 MODIS/Terra Evapotranspiration 8-day L4 Global 500m SIN Grid. NASA LP DAAC. http://doi.org/10.5067/MODIS/MOD16A2.006"',
+    url: `${TILE_SERVER_URL}/{refresh}/ET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    maxZoom: 11,
+    time: "2021-01-01",
+    backgroundProvider: "Google Satellite",
+    labelsProvider: "CartoDB DarkMatter Labels",
+    tms: true,
+    refresh: "static",
+    availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
+    units: "mm/8-days",
+    modes: {
+      absolute: "Absolute",
+      prevPass: "Previous Pass Difference",
+      prevMonth: "Previous Month Difference",
+      historical: "Historical Difference",
+    },
+  },
 
   // Hidden layers
   "CartoDB DarkMatter Labels": {

@@ -7,6 +7,17 @@ import datetime
 from tqdm import tqdm
 
 
+def get_env_path(key, default):
+    """Get path from environment variable or use default."""
+    path = os.getenv(key, default)
+    return os.path.expanduser(path)
+
+
+# Get paths from environment variables
+DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "~/data/modis_net_et_8_day/downloads")
+INPUT_DIR = get_env_path("MODIS_INPUT_DIR", "~/data/modis_net_et_8_day/et_tiffs")
+
+
 def convert_date(yyyyddd):
     """Convert YYYYDDD to YYYYMMDD."""
     year = int(yyyyddd[:4])
@@ -15,9 +26,14 @@ def convert_date(yyyyddd):
     return date.strftime("%Y%m%d")
 
 
-def extract_band_name(hdf_file, band_name, output_tif):
+def extract_band_name(hdf_file, band_name="ET_500m", output_tif=None):
     """
     Extract the band name from the HDF file name.
+
+    Args:
+        hdf_file: Path to the HDF file
+        band_name: Name of the band to extract (default: "ET_500m")
+        output_tif: Path to save the output TIFF (if None, will be derived from hdf_file)
     """
     hdf = SD(hdf_file, SDC.READ)
 
@@ -56,12 +72,15 @@ def extract_band_name(hdf_file, band_name, output_tif):
     dst_ds = None
 
 
-if __name__ == "__main__":
-    # modis_folder = "/Users/rstonebr/data/modis_net_et_8_day/MOD16A2_061-20250117_195929"
-    modis_folder = "/Users/rstonebr/Documents/Programming/Water-Rights-Visualizer/tile_server/modis_downloads"
-    et_tile_folder = "/Users/rstonebr/data/modis_net_et_8_day/et_tiffs"
+def process_hdf_files(band_name="ET_500m"):
+    """Process downloaded HDF files into TIFFs.
 
-    for hdf_file in tqdm(os.listdir(modis_folder)):
+    Args:
+        band_name: Name of the band to extract (default: "ET_500m")
+    """
+    et_tile_folder = INPUT_DIR
+
+    for hdf_file in tqdm(os.listdir(DOWNLOAD_FOLDER), desc="Processing HDF files"):
         if hdf_file.endswith(".hdf"):
             match = re.search(r"MOD16A2(?:GF)?\.A(\d{7})\.(h\d{2}v\d{2})", hdf_file)
             if not match:
@@ -70,12 +89,12 @@ if __name__ == "__main__":
 
             yyyyddd, tile_id = match.groups()
             date_str = convert_date(yyyyddd)
-            year_month = date_str[:6]
 
-            if not os.path.exists(os.path.join(et_tile_folder, date_str)):
-                os.makedirs(os.path.join(et_tile_folder, date_str))
+            output_dir = os.path.join(et_tile_folder, date_str)
+            os.makedirs(output_dir, exist_ok=True)
 
-            output_tif = os.path.join(et_tile_folder, date_str, f"MOD16A2_ET_500m_{date_str}_{tile_id}.tif")
-            hdf_file = os.path.join(modis_folder, hdf_file)
+            output_tif = os.path.join(output_dir, f"MOD16A2_ET_500m_{date_str}_{tile_id}.tif")
+            hdf_path = os.path.join(DOWNLOAD_FOLDER, hdf_file)
 
-            extract_band_name(hdf_file, "ET_500m", output_tif)
+            if not os.path.exists(output_tif):
+                extract_band_name(hdf_path, band_name, output_tif)
