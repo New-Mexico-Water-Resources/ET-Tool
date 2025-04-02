@@ -31,6 +31,7 @@ app.add_middleware(
 ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/root/data/modis/et_processed")
 PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/root/data/modis/pet_processed")
 BASE_DATA_PRODUCT = os.environ.get("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
+BUCKET_PREFIX = os.environ.get("MODIS_S3_BUCKET_PREFIX", "modis/")
 
 AWS_PROFILE = os.environ.get("AWS_PROFILE", None)
 S3_INPUT_BUCKET = os.environ.get("S3_INPUT_BUCKET", "ose-dev-inputs")
@@ -62,16 +63,19 @@ async def get_modis_dates():
         try:
             session = boto3.Session(profile_name=AWS_PROFILE)
             s3 = session.client("s3")
-            response = s3.list_objects_v2(Bucket=S3_INPUT_BUCKET, Prefix="modis/")
-            for obj in response.get("Contents", []):
-                key = obj["Key"]
-                matches = re.match(rf"modis/{BASE_DATA_PRODUCT}_MERGED_(\d{{8}})_.+\.tif", key)
-                if not matches:
-                    continue
-                raw_date = matches.group(1)
-                formatted_date = datetime.datetime.strptime(raw_date, "%Y%m%d").strftime("%Y-%m-%d")
-                if formatted_date not in dates:
-                    dates.append(formatted_date)
+            paginator = s3.get_paginator("list_objects_v2")
+            pages = paginator.paginate(Bucket=S3_INPUT_BUCKET, Prefix=BUCKET_PREFIX)
+
+            for response in pages:
+                for obj in response.get("Contents", []):
+                    key = obj["Key"]
+                    matches = re.match(rf"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_(\d{{8}})_.+\.tif", key)
+                    if not matches:
+                        continue
+                    raw_date = matches.group(1)
+                    formatted_date = datetime.datetime.strptime(raw_date, "%Y%m%d").strftime("%Y-%m-%d")
+                    if formatted_date not in dates:
+                        dates.append(formatted_date)
         except Exception as e:
             print("Error checking S3 bucket for MODIS dates", e)
 
@@ -207,11 +211,11 @@ async def serve_dynamic_tile(
 
     if not os.path.exists(path):
         if S3_INPUT_BUCKET:
-            s3 = boto3.client("s3")
-            key = f"modis/{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+            s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
+            key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
 
             try:
-                s3.download_file(S3_INPUT_BUCKET, key, path)
+                await s3.download_file(S3_INPUT_BUCKET, key, path)
             except Exception as e:
                 raise HTTPException(status_code=404, detail="Tile not found")
         else:
