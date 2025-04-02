@@ -48,6 +48,7 @@ def main():
     parser.add_argument("--limit", type=int, help="Limit the number of dates to process", default=None)
     parser.add_argument("--min-zoom", type=int, help="Minimum zoom level", default=1)
     parser.add_argument("--max-zoom", type=int, help="Maximum zoom level", default=11)
+    parser.add_argument("--band-name", type=str, help="Band name", default="ET_500m")
     args = parser.parse_args()
 
     print("Starting MODIS processing workflow...")
@@ -71,7 +72,7 @@ def main():
 
     # Step 2: Process HDF files
     print("\nStep 2: Processing HDF files...")
-    process_hdf_files()
+    process_hdf_files(band_name=args.band_name)
 
     # Step 3: Merge and process TIFFs
     print("\nStep 3: Merging and processing TIFFs...")

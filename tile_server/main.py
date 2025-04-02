@@ -28,10 +28,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/data/modis/et_processed")
-PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/data/modis/pet_processed")
+ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/root/data/modis/et_processed")
+PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/root/data/modis/pet_processed")
+BASE_DATA_PRODUCT = os.environ.get("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
 
-AWS_PROFILE = os.environ.get("AWS_PROFILE", "ose-nmw")
+AWS_PROFILE = os.environ.get("AWS_PROFILE", "")
 S3_INPUT_BUCKET = os.environ.get("S3_INPUT_BUCKET", "ose-dev-inputs")
 
 BANDS = ["ET", "PET"]
@@ -48,7 +49,7 @@ async def get_modis_dates():
     # Return a list of available MODIS dates
     dates = []
     for tiff_file in os.listdir(ET_PROCESSED_DIR):
-        matches = re.match(r"MOD16A2_MERGED_(\d{8})_ET.tif", tiff_file)
+        matches = re.match(rf"{BASE_DATA_PRODUCT}_MERGED_(\d{{8}})_.+\.tif", tiff_file)
         if not matches:
             continue
         raw_date = matches.group(1)
@@ -64,7 +65,7 @@ async def get_modis_dates():
             response = s3.list_objects_v2(Bucket=S3_INPUT_BUCKET, Prefix="modis/")
             for obj in response.get("Contents", []):
                 key = obj["Key"]
-                matches = re.match(r"modis/MOD16A2_MERGED_(\d{8})_ET.tif", key)
+                matches = re.match(rf"modis/{BASE_DATA_PRODUCT}_MERGED_(\d{{8}})_.+\.tif", key)
                 if not matches:
                     continue
                 raw_date = matches.group(1)
@@ -202,12 +203,12 @@ async def serve_dynamic_tile(
         raise HTTPException(status_code=404, detail="Time must be in format: YYYY-MM-DD")
 
     time_str = datetime.datetime.strptime(time, "%Y-%m-%d").strftime("%Y%m%d")
-    path = os.path.join(ET_PROCESSED_DIR, f"MOD16A2_MERGED_{time_str}_ET.tif")
+    path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
 
     if not os.path.exists(path):
         if S3_INPUT_BUCKET:
             s3 = boto3.client("s3")
-            key = f"modis/MOD16A2_MERGED_{time_str}_ET.tif"
+            key = f"modis/{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
 
             try:
                 s3.download_file(S3_INPUT_BUCKET, key, path)
@@ -232,7 +233,7 @@ async def serve_dynamic_tile(
             else:
                 prev_date = None
         prev_time_str = datetime.datetime.strptime(prev_date, "%Y-%m-%d").strftime("%Y%m%d")
-        prev_path = os.path.join(ET_PROCESSED_DIR, f"MOD16A2_MERGED_{prev_time_str}_ET.tif")
+        prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{band}.tif")
         prev_data = get_tile(prev_path, z, x, y)
         if prev_data is None or np.isnan(prev_data).all():
             return Response(content=b"", media_type="image/png", status_code=404)

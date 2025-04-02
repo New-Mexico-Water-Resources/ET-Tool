@@ -16,6 +16,7 @@ def get_env_path(key, default):
 # Get paths from environment variables
 DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "~/data/modis_net_et_8_day/downloads")
 INPUT_DIR = get_env_path("MODIS_INPUT_DIR", "~/data/modis_net_et_8_day/et_tiffs")
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
 
 
 def convert_date(yyyyddd):
@@ -79,10 +80,15 @@ def process_hdf_files(band_name="ET_500m"):
         band_name: Name of the band to extract (default: "ET_500m")
     """
     et_tile_folder = INPUT_DIR
+    pattern = (
+        rf"{BASE_DATA_PRODUCT}(?:GF)?\.A(\d{{7}})\.(h\d{{2}}v\d{{2}})"
+        if BASE_DATA_PRODUCT == "MOD16A2"
+        else rf"{BASE_DATA_PRODUCT}\.A(\d{{7}})\.(h\d{{2}}v\d{{2}})"
+    )
 
     for hdf_file in tqdm(os.listdir(DOWNLOAD_FOLDER), desc="Processing HDF files"):
         if hdf_file.endswith(".hdf"):
-            match = re.search(r"MOD16A2(?:GF)?\.A(\d{7})\.(h\d{2}v\d{2})", hdf_file)
+            match = re.search(pattern, hdf_file)
             if not match:
                 print(f"Skipping {hdf_file}")
                 continue
@@ -93,7 +99,7 @@ def process_hdf_files(band_name="ET_500m"):
             output_dir = os.path.join(et_tile_folder, date_str)
             os.makedirs(output_dir, exist_ok=True)
 
-            output_tif = os.path.join(output_dir, f"MOD16A2_ET_500m_{date_str}_{tile_id}.tif")
+            output_tif = os.path.join(output_dir, f"{BASE_DATA_PRODUCT}_{band_name}_{date_str}_{tile_id}.tif")
             hdf_path = os.path.join(DOWNLOAD_FOLDER, hdf_file)
 
             if not os.path.exists(output_tif):
