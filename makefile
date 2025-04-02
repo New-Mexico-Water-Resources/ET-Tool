@@ -127,6 +127,9 @@ update:
 	cp .env.ose-production .env
 	./update.sh
 
+fix-mongo:
+	docker exec -it water-rights-visualizer-mongo mongosh --eval "db.adminCommand({replSetReconfig: {_id: 'rs0', version: 1, members: [{_id: 0, host: 'water-rights-visualizer-mongo:27017'}]}, force: true})"
+
 gdrive-credentials:
 	@echo "Please paste the contents of your Google Drive credentials file (Ctrl-D to finish):";
 	@cat > misc/water_rights_gdrive_creds.txt;
