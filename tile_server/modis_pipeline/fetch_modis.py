@@ -75,6 +75,9 @@ def format_date(date_str):
 def fetch_new_dates(limit=None):
     available_dates = get_available_dates()
 
+    if not os.path.exists(EXISTING_MERGED_FOLDER):
+        os.makedirs(EXISTING_MERGED_FOLDER, exist_ok=True)
+
     existing_files = os.listdir(EXISTING_MERGED_FOLDER)
     existing_dates = [format_date(f.split("_")[2]) for f in existing_files if f.endswith(".tif")]
 
