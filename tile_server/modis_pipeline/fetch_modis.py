@@ -17,8 +17,8 @@ def get_env_path(key, default):
 
 
 # Get paths from environment variables
-DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "~/data/modis_net_et_8_day/downloads")
-EXISTING_MERGED_FOLDER = get_env_path("MODIS_MERGED_DIR", "~/data/modis_net_et_8_day/raw_et")
+DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "/root/data/modis/downloads")
+EXISTING_MERGED_FOLDER = get_env_path("MODIS_MERGED_DIR", "/root/data/modis/raw_et")
 
 
 def get_available_dates(url=MODIS_BASE_URL):
