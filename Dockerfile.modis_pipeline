@@ -21,4 +21,4 @@ RUN mkdir -p /root/data/modis
 
 EXPOSE 5001
 
-CMD ["python", "process_modis.py", "--band-name", "ET_500m", "--monitor", "true"]
+CMD ["python", "process_modis.py", "--band-name", "ET_500m", "--monitor"]
