@@ -7,6 +7,7 @@ RUN mamba install -y -c conda-forge \
     python=3.10 \
     gdal \
     numpy \
+    proj-data \
     && mamba clean -afy
 
 # Copy requirements and install Python dependencies
@@ -20,6 +21,9 @@ COPY .env.secrets .
 COPY ./tile_server/modis_pipeline/ .
 
 RUN mkdir -p /root/data/modis
+
+# Set PROJ_LIB environment variable to point to the PROJ data directory
+ENV PROJ_LIB=/opt/conda/share/proj
 
 EXPOSE 5001
 

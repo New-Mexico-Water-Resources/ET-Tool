@@ -70,6 +70,8 @@ services:
       dockerfile: Dockerfile.modis_pipeline
     platform: "linux/amd64"
     container_name: modis-pipeline
+    volumes:
+      - ${HOST_DATA_DIRECTORY:-${HOME}/data}:${CONTAINER_DATA_DIRECTORY:-/root/data}
     restart: always
     env_file: ".env"
 
