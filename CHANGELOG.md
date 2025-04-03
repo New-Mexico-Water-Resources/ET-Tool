@@ -1,3 +1,14 @@
+## 1.20.0 (2025-04-03)
+
+### Features
+- Adds a new MODIS tile server for displaying MODIS data
+  - From "Map Layers", you can now select "MODIS ET 500", then select static or dynamic data (currently only dynamic is available), and then select a date and min/max
+- Adds a new MODIS pipeline for processing MODIS data
+  - Data is polled from NASA Earthdata Cloud and converted into GeoTIFFs every 24 hours
+- "Queue" tab wording updated to "In Progress"
+- Minor optimizations and bug fixes with interpolation
+
+
 ## 1.19.0 (2025-03-27)
 
 ### Features
