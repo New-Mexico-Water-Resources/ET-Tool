@@ -28,8 +28,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/root/data/modis/et_processed")
-PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/root/data/modis/pet_processed")
+ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/root/data/modis/raw_et")
+PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/root/data/modis/raw_pet")
 BASE_DATA_PRODUCT = os.environ.get("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
 BUCKET_PREFIX = os.environ.get("MODIS_S3_BUCKET_PREFIX", "modis/")
 
