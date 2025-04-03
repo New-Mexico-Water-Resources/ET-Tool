@@ -16,7 +16,6 @@ load_dotenv(dotenv_path)
 
 dotenv_path = Path(dirname(__file__)).parent.parent / ".env"
 load_dotenv(dotenv_path)
-print(os.environ.get("BASE_DATA_DIR"))
 
 
 # Configuration via environment variables with defaults

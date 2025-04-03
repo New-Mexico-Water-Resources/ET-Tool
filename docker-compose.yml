@@ -64,6 +64,15 @@ services:
     networks:
       - water_network
 
+  modis_pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.modis_pipeline
+    platform: "linux/amd64"
+    container_name: modis-pipeline
+    restart: always
+    env_file: ".env"
+
   water_mongo:
     image: mongo:7.0
     container_name: water-rights-visualizer-mongo

@@ -4,10 +4,8 @@ botocore==1.37.26
 bs4==0.0.2
 certifi==2025.1.31
 charset-normalizer==3.4.1
-GDAL @ file:///Users/runner/miniforge3/conda-bld/gdal-split_1694634677696/work/build/swig/python
 idna==3.10
 jmespath==1.0.1
-numpy @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_a51i_mbs7m/croot/numpy_and_numpy_base_1708638620867/work/dist/numpy-1.26.4-cp310-cp310-macosx_11_0_arm64.whl#sha256=c4b11b3c4d4fdb810039503fe01f311ade06cd1d675fcd6d208800a393f19b69
 pyhdf==0.11.6
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
