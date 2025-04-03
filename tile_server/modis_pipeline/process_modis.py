@@ -11,6 +11,9 @@ from pathlib import Path
 
 load_dotenv()
 
+dotenv_path = Path(dirname(__file__)) / ".env.secrets"
+load_dotenv(dotenv_path)
+
 dotenv_path = Path(dirname(__file__)).parent.parent / ".env.secrets"
 load_dotenv(dotenv_path)
 

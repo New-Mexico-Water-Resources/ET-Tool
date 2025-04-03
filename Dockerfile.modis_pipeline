@@ -14,6 +14,8 @@ COPY ./tile_server/modis_pipeline/requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+COPY .env.secrets .
+
 # Copy the application code
 COPY ./tile_server/modis_pipeline/ .
 
