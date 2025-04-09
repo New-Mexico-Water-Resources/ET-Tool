@@ -159,7 +159,20 @@ const JobQueue = () => {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [activeJobLogKey, jobLogsOpen, lastFetchedLogs]);
+  }, [
+    activeJobLogKey,
+    jobLogsOpen,
+    lastFetchedLogs,
+    pauseLogs,
+    viewingJob,
+    fetchJobStatus,
+    fetchJobLogs,
+    jobStatuses,
+    queue,
+    backlog,
+    sortAscending,
+    jobLogs,
+  ]);
 
   const [searchField, setSearchField] = useState("");
 

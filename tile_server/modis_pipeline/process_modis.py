@@ -101,6 +101,8 @@ def start_workflow(
     """
     while True:
         logging.info(f"Starting MODIS processing workflow ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})...")
+        if AWS_PROFILE:
+            logging.info(f"AWS profile: {AWS_PROFILE}")
         logging.info("\nUsing the following directories:")
         logging.info(f"Base data directory: {BASE_DATA_DIR}")
         logging.info(f"Download directory: {DOWNLOAD_FOLDER}")

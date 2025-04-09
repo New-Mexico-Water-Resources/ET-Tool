@@ -27,7 +27,6 @@ const ActiveMapLayer = () => {
   const maxColor = useStore((state) => state.maximumBaseMapColorBound);
   const tileDate = useStore((state) => state.tileDate);
   const comparisonMode = useStore((state) => state.comparisonMode);
-  // const tileDate = "2021-01-01";
 
   const activeMapLayer = useMemo(() => {
     let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;

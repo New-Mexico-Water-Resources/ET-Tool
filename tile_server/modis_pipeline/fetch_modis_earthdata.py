@@ -39,6 +39,9 @@ def retrieve_credentials():
     EDL_USERNAME = os.environ.get("EDL_USERNAME", "")
     EDL_PASSWORD = os.environ.get("EDL_PASSWORD", "")
 
+    if not EDL_USERNAME or not EDL_PASSWORD:
+        raise ValueError("EDL_USERNAME and EDL_PASSWORD must be set")
+
     auth = f"{EDL_USERNAME}:{EDL_PASSWORD}"
     encoded_auth = base64.b64encode(auth.encode("ascii")).decode("ascii")
 
@@ -53,7 +56,6 @@ def retrieve_credentials():
     final = requests.get(auth_redirect.headers["location"], allow_redirects=False)
     results = requests.get(S3_ENDPOINT, cookies={"accessToken": final.cookies["accessToken"]})
     results.raise_for_status()
-
     creds = json.loads(results.content)
 
     with open(".temp_s3_credentials.json", "w") as f:
@@ -124,4 +126,4 @@ def list_all_tiles_for_year(year):
 
 
 if __name__ == "__main__":
-    download_tile_from_s3("2008.12.18", "h08v05", dest_folder="temp_test")
+    download_tile_from_s3("2025.03.14", "h08v05", dest_folder="temp_test")

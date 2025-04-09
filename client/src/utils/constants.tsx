@@ -61,7 +61,6 @@ export const MAP_LAYER_OPTIONS = {
     maxZoom: 9,
     time: "2023-01-01",
   },
-  // ** COMMENTED OUT FOR NOW UNTIL TILE SERVER IS CONFIGURED **
   "MODIS ET 500": {
     name: "MODIS ET 500",
     attribution:
@@ -72,14 +71,12 @@ export const MAP_LAYER_OPTIONS = {
     backgroundProvider: "Google Satellite",
     labelsProvider: "CartoDB DarkMatter Labels",
     tms: true,
-    refresh: "static",
+    refresh: "dynamic",
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
     units: "mm/8-days",
     modes: {
       absolute: "Absolute",
       prevPass: "Previous Pass Difference",
-      prevMonth: "Previous Month Difference",
-      historical: "Historical Difference",
     },
   },
 

@@ -1,13 +1,19 @@
 import os
 import requests
 from bs4 import BeautifulSoup
+import boto3
 import tqdm
+import re
 from fetch_modis_earthdata import download_tile_from_s3
 
 # Configuration
 BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")  # MOD16A2GF for gap-filled data
 DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
 MODIS_BASE_URL = f"https://e4ftl01.cr.usgs.gov/MOLT/{BASE_DATA_PRODUCT}.{DATA_PRODUCT_VERSION}/"
+
+S3_INPUT_BUCKET = os.getenv("S3_INPUT_BUCKET", "ose-dev-inputs")
+AWS_PROFILE = os.getenv("AWS_PROFILE", None)
+BUCKET_PREFIX = os.getenv("BUCKET_PREFIX", "modis/")
 
 
 def get_env_path(key, default):
@@ -72,19 +78,35 @@ def format_date(date_str):
     return f"{date_str[:4]}.{date_str[4:6]}.{date_str[6:]}"
 
 
+def get_date_from_s3_key(key):
+    # Ex: modis/MOD16A2_MERGED_20210226_ET.tif
+    product_name = key.split("/")[-1].split(".")[0]
+    return format_date(re.search(r"\d{8}", product_name).group(0))
+
+
 def fetch_new_dates(limit=None):
     available_dates = get_available_dates()
 
     if not os.path.exists(EXISTING_MERGED_FOLDER):
         os.makedirs(EXISTING_MERGED_FOLDER, exist_ok=True)
 
+    # Check existing files in local folder first
     existing_files = os.listdir(EXISTING_MERGED_FOLDER)
-    existing_dates = [format_date(f.split("_")[2]) for f in existing_files if f.endswith(".tif")]
+    dates_in_existing_files = [format_date(f.split("_")[2]) for f in existing_files if f.endswith(".tif")]
+    existing_dates = [d for d in available_dates if d not in dates_in_existing_files]
 
+    # Check S3 for existing dates
+    s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
+    response = s3.list_objects_v2(Bucket=S3_INPUT_BUCKET, Prefix=BUCKET_PREFIX)
+    dates_in_s3 = [get_date_from_s3_key(item["Key"]) for item in response["Contents"]]
+    existing_dates = [d for d in existing_dates if d not in dates_in_s3]
+
+    # Check if there are any dates left to download
     new_dates = [d for d in available_dates if d not in existing_dates]
 
     os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
     if len(new_dates) > 0:
+        print(f"Downloading {len(new_dates)} new dates.")
         tiles = ["h08v05", "h09v05"]
         dates_to_process = new_dates[:limit] if limit else new_dates
         pbar = tqdm.tqdm(
