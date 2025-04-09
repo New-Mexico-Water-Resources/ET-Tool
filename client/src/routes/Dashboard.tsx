@@ -20,6 +20,7 @@ import ActiveMapLayer from "../components/ActiveMapLayer";
 import { CRS } from "leaflet";
 import chroma from "chroma-js";
 import DrawControls from "../components/DrawControls";
+import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -246,6 +247,7 @@ const Dashboard = () => {
         maxZoom={activeMapLayer.maxZoom}
         crs={CRS.EPSG3857}
       >
+        <ActiveMonthlyMapLayer />
         <ActiveMapLayer />
         <ZoomControl position="topright" />
         <ScaleControl position="bottomleft" />

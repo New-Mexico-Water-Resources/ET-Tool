@@ -48,7 +48,7 @@ const ActiveMapLayer = () => {
       map.setMaxZoom(activeMapLayer.maxZoom);
     }
 
-    let currentZoom = map.getZoom();
+    const currentZoom = map.getZoom();
     if (activeMapLayer?.maxZoom && currentZoom > activeMapLayer?.maxZoom) {
       map.setZoom(activeMapLayer?.maxZoom);
     }
@@ -56,7 +56,7 @@ const ActiveMapLayer = () => {
 
   const BackgroundTileLayer = useMemo(() => {
     if (activeMapLayer.backgroundProvider && (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider]) {
-      let backgroundLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider] as MapLayer;
+      const backgroundLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider] as MapLayer;
 
       let layer = injectTimeIntoLayer(backgroundLayer, tileDate);
       layer = injectLayer(layer, "refresh", refreshType);

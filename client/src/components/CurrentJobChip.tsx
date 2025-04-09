@@ -1,9 +1,11 @@
-import { Button, IconButton, Tooltip, Typography } from "@mui/material";
+import { Button, FormControl, InputLabel, MenuItem, Select, IconButton, Tooltip, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import useStore, { JobStatus } from "../utils/store";
 import { useEffect, useMemo } from "react";
 
 import "../scss/CurrentJobChip.scss";
+import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
+import { API_URL } from "../utils/constants";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -16,6 +18,15 @@ const CurrentJobChip = () => {
   const queue = useStore((state) => state.queue);
   const backlog = useStore((state) => state.backlog);
 
+  const [previewMonth, setPreviewMonth] = useCurrentJobStore((state) => [state.previewMonth, state.setPreviewMonth]);
+  const [previewYear, setPreviewYear] = useCurrentJobStore((state) => [state.previewYear, state.setPreviewYear]);
+  const [showPreview, setShowPreview] = useCurrentJobStore((state) => [state.showPreview, state.setShowPreview]);
+  const setCurrentJob = useCurrentJobStore((state) => state.setCurrentJob);
+  const [previewVariable, setPreviewVariable] = useCurrentJobStore((state) => [
+    state.previewVariable,
+    state.setPreviewVariable,
+  ]);
+
   const liveJob = useMemo(() => {
     let job = queue.find((job) => job.key === activeJob?.key);
     if (!job) {
@@ -26,9 +37,9 @@ const CurrentJobChip = () => {
   }, [queue, backlog, activeJob?.key]);
 
   useEffect(() => {
-    let interval = setInterval(() => {
+    const interval = setInterval(() => {
       if (activeJob && activeJob?.status !== "Complete") {
-        let jobStatusRequest = fetchJobStatus(activeJob.key, activeJob.name);
+        const jobStatusRequest = fetchJobStatus(activeJob.key, activeJob.name);
         if (!jobStatusRequest) {
           return;
         }
@@ -36,7 +47,6 @@ const CurrentJobChip = () => {
         jobStatusRequest
           .then(() => {
             if (liveJob?.status && activeJob.status !== liveJob?.status) {
-              console.log("Setting active job to live job", liveJob, "ACTIVE", activeJob);
               setActiveJob(liveJob);
             }
           })
@@ -50,6 +60,17 @@ const CurrentJobChip = () => {
       clearInterval(interval);
     };
   }, [activeJob, liveJob]);
+
+  useEffect(() => {
+    if (activeJob?.start_year && activeJob?.end_year) {
+      if (!previewMonth) {
+        setPreviewMonth(1);
+      }
+      if (!previewYear) {
+        setPreviewYear(activeJob.start_year);
+      }
+    }
+  }, [activeJob, previewMonth, previewYear]);
 
   const jobStatuses = useStore((state) => state.jobStatuses);
   const jobStatus = useMemo(() => {
@@ -79,7 +100,7 @@ const CurrentJobChip = () => {
     if (!activeJob?.loaded_geo_json) return [];
 
     let properties = {};
-    let features = activeJob.loaded_geo_json?.features;
+    const features = activeJob.loaded_geo_json?.features;
     if (features && features.length > 0) {
       properties = activeJob.loaded_geo_json.features[0].properties;
     } else if (!features && activeJob.loaded_geo_json?.properties) {
@@ -87,7 +108,7 @@ const CurrentJobChip = () => {
     }
 
     return Object.entries(properties).map(([key, value]) => {
-      let propertyName = key
+      const propertyName = key
         .split(" ")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
@@ -217,19 +238,101 @@ const CurrentJobChip = () => {
                 return;
               }
 
-              let blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
-              let url = window.URL.createObjectURL(blob);
-              let a = document.createElement("a");
+              const blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
               a.href = url;
 
-              let shortName = activeJob.name.replace(/[(),]/g, "");
-              let escapedName = encodeURIComponent(shortName);
+              const shortName = activeJob.name.replace(/[(),]/g, "");
+              const escapedName = encodeURIComponent(shortName);
               a.download = `${escapedName}.geojson`;
               a.click();
             }}
           >
             Download GeoJSON
           </Button>
+        </div>
+      )}
+      {activeJob && activeJob.status === "Complete" && (
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: "8px", margin: "8px 0", width: "100%", marginTop: "16px" }}
+        >
+          <div style={{ display: "flex", gap: "8px" }}>
+            <FormControl sx={{ flex: 1 }}>
+              <InputLabel size="small">Variable</InputLabel>
+              <Select
+                label="Variable"
+                size="small"
+                value={previewVariable}
+                onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
+              >
+                <MenuItem value="ET">ET</MenuItem>
+                <MenuItem value="PET">PET</MenuItem>
+                <MenuItem value="ET_MIN">ET_MIN</MenuItem>
+              </Select>
+            </FormControl>
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <FormControl sx={{ flex: 1 }}>
+              <InputLabel size="small">Month</InputLabel>
+              <Select label="Month" size="small" value={previewMonth} onChange={(e) => setPreviewMonth(e.target.value)}>
+                <MenuItem value={1}>January</MenuItem>
+                <MenuItem value={2}>February</MenuItem>
+                <MenuItem value={3}>March</MenuItem>
+                <MenuItem value={4}>April</MenuItem>
+                <MenuItem value={5}>May</MenuItem>
+                <MenuItem value={6}>June</MenuItem>
+                <MenuItem value={7}>July</MenuItem>
+                <MenuItem value={8}>August</MenuItem>
+                <MenuItem value={9}>September</MenuItem>
+                <MenuItem value={10}>October</MenuItem>
+                <MenuItem value={11}>November</MenuItem>
+                <MenuItem value={12}>December</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl sx={{ flex: 1 }}>
+              <InputLabel size="small">Year</InputLabel>
+              <Select label="Year" size="small" value={previewYear} onChange={(e) => setPreviewYear(e.target.value)}>
+                {Array.from(
+                  { length: activeJob.end_year - activeJob.start_year + 1 },
+                  (_, i) => activeJob.start_year + i
+                ).map((year) => (
+                  <MenuItem value={year}>{year}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <Button
+              variant="contained"
+              color="secondary"
+              size="small"
+              sx={{ flex: 1 }}
+              onClick={() => {
+                if (!showPreview) {
+                  // Set current job
+                  setCurrentJob(activeJob);
+                }
+                setShowPreview(!showPreview);
+              }}
+            >
+              {showPreview ? "Hide" : "Preview"} TIFF
+            </Button>
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <Button
+              variant="contained"
+              color="secondary"
+              size="small"
+              sx={{ flex: 1 }}
+              onClick={() => {
+                const tiffUrl = `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${previewMonth}&year=${previewYear}&variable=${previewVariable}`;
+                window.open(tiffUrl, "_blank");
+              }}
+            >
+              Download TIFF
+            </Button>
+          </div>
         </div>
       )}
     </div>

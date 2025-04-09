@@ -91,6 +91,11 @@ def process_year(
 
     stack_filename = join(stack_directory, f"{year:04d}_{ROI_name}_stack.h5")
 
+    daily_interpolation = True
+    variable_source = get_available_variable_source_for_date("ET", datetime(year, 1, 1).date())
+    if variable_source and variable_source.monthly:
+        daily_interpolation = False
+
     try:
         if use_stack:
             write_status(
@@ -111,6 +116,7 @@ def process_year(
             stack_filename=stack_filename,
             target_CRS=target_CRS,
             use_stack=use_stack,
+            daily_interpolation=daily_interpolation,
         )
     except Exception as e:
         logger.exception(e)
@@ -133,6 +139,7 @@ def process_year(
         end_month=end_month,
         monthly_sums_directory=monthly_sums_directory,
         monthly_means_directory=monthly_means_directory,
+        daily_interpolation=daily_interpolation,
     )
 
     # monthly_means.append(monthly_means_df)
