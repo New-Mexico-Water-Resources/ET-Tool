@@ -59,7 +59,7 @@ const CurrentJobChip = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [activeJob, liveJob]);
+  }, [activeJob, liveJob, setActiveJob, fetchJobStatus]);
 
   useEffect(() => {
     if (activeJob?.start_year && activeJob?.end_year) {
@@ -67,10 +67,10 @@ const CurrentJobChip = () => {
         setPreviewMonth(1);
       }
       if (!previewYear) {
-        setPreviewYear(activeJob.start_year);
+        setPreviewYear(Number(activeJob.start_year));
       }
     }
-  }, [activeJob, previewMonth, previewYear]);
+  }, [activeJob, previewMonth, previewYear, setPreviewYear, setPreviewMonth]);
 
   const jobStatuses = useStore((state) => state.jobStatuses);
   const jobStatus = useMemo(() => {
@@ -269,6 +269,7 @@ const CurrentJobChip = () => {
                 <MenuItem value="ET">ET</MenuItem>
                 <MenuItem value="PET">PET</MenuItem>
                 <MenuItem value="ET_MIN">ET_MIN</MenuItem>
+                <MenuItem value="ET_MAX">ET_MAX</MenuItem>
               </Select>
             </FormControl>
           </div>
@@ -290,17 +291,19 @@ const CurrentJobChip = () => {
                 <MenuItem value={12}>December</MenuItem>
               </Select>
             </FormControl>
-            <FormControl sx={{ flex: 1 }}>
-              <InputLabel size="small">Year</InputLabel>
-              <Select label="Year" size="small" value={previewYear} onChange={(e) => setPreviewYear(e.target.value)}>
-                {Array.from(
-                  { length: activeJob.end_year - activeJob.start_year + 1 },
-                  (_, i) => activeJob.start_year + i
-                ).map((year) => (
-                  <MenuItem value={year}>{year}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            {previewYear && (
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel size="small">Year</InputLabel>
+                <Select label="Year" size="small" value={previewYear} onChange={(e) => setPreviewYear(e.target.value)}>
+                  {Array.from(
+                    { length: activeJob.end_year - activeJob.start_year + 1 },
+                    (_, i) => activeJob.start_year + i
+                  ).map((year) => (
+                    <MenuItem value={year}>{year}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <Button

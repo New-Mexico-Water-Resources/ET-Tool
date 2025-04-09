@@ -99,10 +99,15 @@ const ActiveMonthlyMapLayer: FC = () => {
         const georaster = await parseGeoraster(arrayBuffer);
 
         // Determine colormap based on variable type
-        const colormap = previewVariable === "ET" || previewVariable === "ET_MIN" ? ET_COLORMAP : DIFF_COLORMAP;
+        const colormap = ET_COLORMAP;
 
-        const minValue = georaster.mins[0];
-        const maxValue = georaster.maxs[0];
+        let minValue = georaster.mins[0];
+        let maxValue = georaster.maxs[0];
+
+        if (minValue === maxValue) {
+          minValue = 0;
+          maxValue = Math.max(maxValue, 300);
+        }
 
         // Create the GeoRasterLayer
         const layer = new GeoRasterLayer({
