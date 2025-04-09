@@ -256,7 +256,7 @@ const MapLayersPanel: FC = () => {
                               </MenuItem>
                             ))}
                           </Select>
-                          {/* <Typography
+                          <Typography
                             variant="body2"
                             style={{
                               color: "var(--st-gray-30)",
@@ -267,7 +267,7 @@ const MapLayersPanel: FC = () => {
                             }}
                           >
                             Units: {option.units}
-                          </Typography> */}
+                          </Typography>
                         </div>
                       )}
                       {/* {option?.refresh &&
