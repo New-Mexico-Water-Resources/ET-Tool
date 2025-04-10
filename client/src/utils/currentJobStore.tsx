@@ -29,6 +29,8 @@ interface Store {
   showPreview: boolean;
   previewDay: number | string | null;
   availableDays: AvailableDay[];
+
+  monthlyGeojsonCache: Record<string, ArrayBuffer>;
 }
 
 interface Setters {
@@ -59,6 +61,7 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   availableDays: [],
   setAvailableDays: (days) => set({ availableDays: days }),
 
+  monthlyGeojsonCache: {},
   fetchMonthlyGeojson: async () => {
     const { previewMonth, previewYear, previewVariable } = get();
 
@@ -72,6 +75,13 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
     if (!previewMonth || !previewYear) {
       console.error("No preview month or year selected");
       return null;
+    }
+
+    const cache = get().monthlyGeojsonCache;
+    const cacheKey = `${previewMonth}-${previewYear}-${previewVariable}-${activeJob?.key}`;
+
+    if (cache[cacheKey]) {
+      return cache[cacheKey];
     }
 
     const month = parseInt(previewMonth as string);
@@ -99,6 +109,11 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
         `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${month}&year=${year}&variable=${previewVariable}`,
         { responseType: "arraybuffer" }
       );
+
+      if (cache && cacheKey && response.data && response.data.length > 0) {
+        cache[cacheKey] = response.data;
+        set({ monthlyGeojsonCache: cache });
+      }
 
       return response.data;
     } catch (error) {

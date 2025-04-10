@@ -1,14 +1,24 @@
-import { Button, FormControl, InputLabel, MenuItem, Select, IconButton, Tooltip, Typography, Menu } from "@mui/material";
+import {
+  Button,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  IconButton,
+  Tooltip,
+  Typography,
+  Menu,
+  Slider,
+} from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import useStore, { JobStatus } from "../utils/store";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 
 import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
 import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
 import {
-  ALL_VARIABLE_OPTIONS,
   API_URL,
   OPENET_TRANSITION_DATE,
   POST_OPENET_VARIABLE_OPTIONS,
@@ -40,6 +50,7 @@ const CurrentJobChip = () => {
   const availableDays = useCurrentJobStore((state) => state.availableDays);
   const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
   const getAvailableDays = useCurrentJobStore((state) => state.getAvailableDays);
+  // const [sliderValue, setSliderValue] = useState<number>(0);
 
   const canPreview = useMemo(() => {
     return !!previewYear && Number(previewYear) && !!previewMonth && Number(previewMonth);
@@ -159,6 +170,52 @@ const CurrentJobChip = () => {
       return { property: propertyName, value };
     });
   }, [activeJob?.loaded_geo_json]);
+
+  // const totalMonths = useMemo(() => {
+  //   if (!activeJob?.start_year || !activeJob?.end_year) return 0;
+  //   return (activeJob.end_year - activeJob.start_year + 1) * 12;
+  // }, [activeJob?.start_year, activeJob?.end_year]);
+
+  // Memoize the month/year calculation to avoid recalculation on every render
+  // const monthYearFromSlider = useMemo(() => {
+  //   const yearOffset = Math.floor(sliderValue / 12);
+  //   const monthOffset = sliderValue % 12;
+  //   return {
+  //     year: Number(activeJob?.start_year) + yearOffset,
+  //     month: monthOffset + 1,
+  //   };
+  // }, [sliderValue, activeJob?.start_year]);
+
+  // Update preview month/year only when slider value changes
+  // useEffect(() => {
+  //   if (monthYearFromSlider.year && monthYearFromSlider.month) {
+  //     setPreviewYear(monthYearFromSlider.year);
+  //     setPreviewMonth(monthYearFromSlider.month);
+  //   }
+  // }, [monthYearFromSlider, setPreviewYear, setPreviewMonth]);
+
+  // const handleSliderChange = (_: Event, newValue: number | number[]) => {
+  //   if (typeof newValue !== "number") return;
+  //   setSliderValue(newValue);
+  // };
+
+  // Memoize the value label formatter to avoid recreation on every render
+  // const valueLabelFormat = useCallback(
+  //   (value: number) => {
+  //     const yearOffset = Math.floor(value / 12);
+  //     const monthOffset = value % 12;
+  //     const year = Number(activeJob?.start_year) + yearOffset;
+  //     const month = monthOffset + 1;
+  //     return `${new Date(year, month - 1).toLocaleString("default", { month: "short" })} ${year}`;
+  //   },
+  //   [activeJob?.start_year]
+  // );
+
+  const valueLabelFormat = (value: number) => {
+    // Convert value to month name
+    const month = new Date(0, value - 1).toLocaleString("default", { month: "short" });
+    return `${month} ${previewYear}`;
+  };
 
   return (
     <>
@@ -334,7 +391,24 @@ const CurrentJobChip = () => {
                 </FormControl>
               )}
             </div>
-            <Tooltip title={!canPreview ? `ET data isn't available for previewing before ${OPENET_TRANSITION_DATE}` : ""}>
+            {canPreview && (
+              <div style={{ padding: "0 16px" }}>
+                <Slider
+                  // value={sliderValue}
+                  value={previewMonth ? Number(previewMonth) : 1}
+                  min={1}
+                  // max={totalMonths - 1}
+                  max={12}
+                  // onChange={handleSliderChange}
+                  onChange={(e, newValue) => setPreviewMonth(Number(newValue) || 1)}
+                  valueLabelDisplay="auto"
+                  valueLabelFormat={valueLabelFormat}
+                  marks
+                  sx={{ color: "#334155", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
+                />
+              </div>
+            )}
+            <Tooltip title={!canPreview ? `Select a variable and month/year to preview` : ""}>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Button
                   variant="contained"
