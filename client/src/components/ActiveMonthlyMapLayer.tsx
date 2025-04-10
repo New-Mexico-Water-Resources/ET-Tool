@@ -1,4 +1,4 @@
-import { FC, useEffect, useState, useRef } from "react";
+import { FC, useEffect, useState, useRef, useCallback } from "react";
 import { useMap } from "react-leaflet";
 // @ts-expect-error - No type definitions available
 import parseGeoraster from "georaster";
@@ -130,7 +130,7 @@ const ActiveMonthlyMapLayer: FC = () => {
   const activeJob = useStore((state) => state.activeJob);
 
   // Clean up function to remove all layers and event listeners
-  const cleanupLayers = () => {
+  const cleanupLayers = useCallback(() => {
     // Clear any pending fade timeouts
     if (fadeTimeoutRef.current) {
       clearTimeout(fadeTimeoutRef.current);
@@ -159,7 +159,7 @@ const ActiveMonthlyMapLayer: FC = () => {
       map.off("mouseout", mouseoutHandlerRef.current);
       mouseoutHandlerRef.current = null;
     }
-  };
+  }, [map]);
 
   // Function to create a new layer with crossfade
   const createLayerWithCrossfade = async (georaster: GeoRaster, minValue: number, maxValue: number, colormap: string[]) => {
