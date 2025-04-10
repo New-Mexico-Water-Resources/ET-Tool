@@ -4,7 +4,6 @@ import axios, { AxiosInstance } from "axios";
 import { API_URL, QUEUE_STATUSES, ROLES } from "./constants";
 import { formatElapsedTime, formJobForQueue } from "./helpers";
 import packageJson from "../../package.json";
-import dayjs from "dayjs";
 
 export interface PolygonLocation {
   visible: boolean;
