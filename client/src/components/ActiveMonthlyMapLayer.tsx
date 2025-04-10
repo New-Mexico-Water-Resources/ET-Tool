@@ -106,12 +106,28 @@ const ActiveMonthlyMapLayer: FC = () => {
         map.removeLayer(geoTiffLayer);
         setGeoTiffLayer(null);
       }
+
       if (tooltip) {
         map.removeLayer(tooltip);
         setTooltip(null);
       }
     };
   }, [map, geoTiffLayer, tooltip]);
+
+  // Add a new useEffect to handle tooltip visibility when showPreview changes
+  useEffect(() => {
+    if (!showPreview) {
+      // Remove tooltip if it exists
+      if (tooltip) {
+        map.removeLayer(tooltip);
+        setTooltip(null);
+      }
+
+      // Remove event listeners
+      map.off("mousemove");
+      map.off("mouseout");
+    }
+  }, [showPreview, tooltip, map]);
 
   useEffect(() => {
     const loadGeoTiff = async () => {
@@ -126,6 +142,10 @@ const ActiveMonthlyMapLayer: FC = () => {
         map.removeLayer(tooltip);
         setTooltip(null);
       }
+
+      // Remove any existing event listeners
+      map.off("mousemove");
+      map.off("mouseout");
 
       // Only proceed if preview is enabled and we have all required data
       if (!showPreview || !previewMonth || !previewYear || !previewVariable) {
@@ -187,7 +207,7 @@ const ActiveMonthlyMapLayer: FC = () => {
           }
 
           if (value !== null && value !== undefined) {
-            const units = previewYear && Number(previewYear) < OPENET_TRANSITION_DATE ? "mm/day" : "mm/month";
+            const units = "mm/month";
             newTooltip
               .setLatLng(e.latlng)
               .setContent(`${variableName}: ${value.toFixed(2)} ${units}`)
@@ -208,6 +228,8 @@ const ActiveMonthlyMapLayer: FC = () => {
         map.fitBounds(layer.getBounds());
       } catch (error) {
         console.error("Error loading GeoTIFF:", error);
+        setGeoTiffLayer(null);
+        setTooltip(null);
       }
     };
 

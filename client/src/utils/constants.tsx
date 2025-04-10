@@ -23,6 +23,10 @@ export const OPENET_TRANSITION_DATE = 2008;
 export const ET_COLORMAP = ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"];
 export const DIFF_COLORMAP = ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"];
 
+export const ALL_VARIABLE_OPTIONS = ["ET", "ET_MIN", "ET_MAX", "PET", "PPT"];
+export const PRE_OPENET_VARIABLE_OPTIONS = ["ET", "PET", "PPT"];
+export const POST_OPENET_VARIABLE_OPTIONS = ["ET", "PET", "PPT", "ET_MIN", "ET_MAX"];
+
 export const REFERENCE_GEOJSONS = {
   "New Mexico (State Boundary)": {
     name: "New Mexico",

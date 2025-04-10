@@ -373,11 +373,11 @@ const MapLayersPanel: FC = () => {
                               >
                                 Target Date
                               </FormLabel>
-                              {latestAvailableDate && (
+                              {(latestAvailableDate || !option.refresh) && (
                                 <DatePicker
                                   sx={{ marginTop: "0", padding: 0 }}
                                   className="date-picker"
-                                  defaultValue={dayjs(latestAvailableDate)}
+                                  defaultValue={dayjs(!option.refresh ? undefined : latestAvailableDate)}
                                   value={dayjs(tempTileDate)}
                                   disableFuture={true}
                                   minDate={availableDates.length === 0 ? undefined : dayjs(availableDates[0])}

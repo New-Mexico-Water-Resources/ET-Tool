@@ -7,7 +7,13 @@ import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
 import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
-import { API_URL, OPENET_TRANSITION_DATE } from "../utils/constants";
+import {
+  ALL_VARIABLE_OPTIONS,
+  API_URL,
+  OPENET_TRANSITION_DATE,
+  POST_OPENET_VARIABLE_OPTIONS,
+  PRE_OPENET_VARIABLE_OPTIONS,
+} from "../utils/constants";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -36,8 +42,16 @@ const CurrentJobChip = () => {
   const getAvailableDays = useCurrentJobStore((state) => state.getAvailableDays);
 
   const canPreview = useMemo(() => {
-    return !!previewYear && Number(previewYear) >= OPENET_TRANSITION_DATE;
-  }, [previewYear]);
+    return !!previewYear && Number(previewYear) && !!previewMonth && Number(previewMonth);
+  }, [previewYear, previewMonth]);
+
+  const displayVariableOptions = useMemo(() => {
+    if (activeJob?.start_year && Number(activeJob.start_year) < OPENET_TRANSITION_DATE) {
+      return PRE_OPENET_VARIABLE_OPTIONS;
+    }
+
+    return POST_OPENET_VARIABLE_OPTIONS;
+  }, [activeJob?.start_year]);
 
   const liveJob = useMemo(() => {
     let job = queue.find((job) => job.key === activeJob?.key);
@@ -268,10 +282,9 @@ const CurrentJobChip = () => {
                   value={previewVariable}
                   onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
                 >
-                  <MenuItem value="ET">ET</MenuItem>
-                  <MenuItem value="PET">PET</MenuItem>
-                  <MenuItem value="ET_MIN">ET_MIN</MenuItem>
-                  <MenuItem value="ET_MAX">ET_MAX</MenuItem>
+                  {displayVariableOptions.map((variable) => (
+                    <MenuItem value={variable}>{variable}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </div>

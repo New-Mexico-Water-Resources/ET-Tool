@@ -4,7 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const constants = require("../../constants");
 
-const run_directory_base = constants.run_directory_base;
+const runDirectoryBase = constants.run_directory_base;
 
 /**
  * GET /api/historical/available_dates
@@ -38,18 +38,18 @@ router.get("/available_dates", async (req, res) => {
     }
 
     // Construct the path to the directory containing the geotiff files
-    const run_directory = path.join(run_directory_base, key);
-    const output_dir = path.join(run_directory, "output");
-    const subset_dir = path.join(output_dir, "subset");
-    const job_name_dir = path.join(subset_dir, job.name);
+    const runDirectory = path.join(runDirectoryBase, key);
+    const outputDir = path.join(runDirectory, "output");
+    const subsetDir = path.join(outputDir, "subset");
+    const jobNameDir = path.join(subsetDir, job.name);
 
     // Check if the directory exists
-    if (!fs.existsSync(job_name_dir)) {
+    if (!fs.existsSync(jobNameDir)) {
       return res.status(404).json({ error: "No data directory found for this job" });
     }
 
     // Get all files in the directory
-    const files = fs.readdirSync(job_name_dir);
+    const files = fs.readdirSync(jobNameDir);
 
     // Filter files that match the variable pattern and extract dates
     const datePattern = new RegExp(`(\\d{4}\\.\\d{2}\\.\\d{2})_.+_${variable}_subset\\.tif`);
@@ -113,9 +113,11 @@ router.get("/monthly_geojson", async (req, res) => {
   }
 
   // Validate variable
-  const validVariables = ["ET", "ET_MIN", "ET_MAX", "PET", "COUNT"];
+  const validVariables = ["ET", "ET_MIN", "ET_MAX", "PET", "COUNT", "PPT"];
+  const monthlyVariables = ["ET", "PET"];
+
   if (!validVariables.includes(variable)) {
-    return res.status(400).json({ error: "Variable must be one of: ET, ET_MIN, ET_MAX, PET, or COUNT" });
+    return res.status(400).json({ error: "Variable must be one of: ET, ET_MIN, ET_MAX, PET, COUNT, or PPT" });
   }
 
   try {
@@ -129,19 +131,27 @@ router.get("/monthly_geojson", async (req, res) => {
     }
 
     // Construct the path to the geotiff file based on the example path structure
-    const run_directory = path.join(run_directory_base, key);
-    const output_dir = path.join(run_directory, "output");
-    const subset_dir = path.join(output_dir, "subset");
-    const job_name_dir = path.join(subset_dir, job.name);
+    const runDirectory = path.join(runDirectoryBase, key);
+    const outputDir = path.join(runDirectory, "output");
+    const subsetDir = path.join(outputDir, "subset");
+    const monthlyDir = path.join(outputDir, "monthly");
 
-    // Format the date as YYYY.MM.DD (using the first day of the month)
-    const formattedDate = `${yearNum}.${monthNum.toString().padStart(2, "0")}.01`;
+    const monthlyJobDir = path.join(monthlyDir, job.name);
+    const subsetJobDir = path.join(subsetDir, job.name);
 
-    // Construct the full filename
-    const geotiff_filename = path.join(job_name_dir, `${formattedDate}_${job.name}_${variable}_subset.tif`);
+    let geotiffFilename = "";
+    let formattedDate = "";
+    // ET and PET have additional corrections, which are applied in the monthly directory
+    if (monthlyVariables.includes(variable)) {
+      formattedDate = `${yearNum}_${monthNum.toString().padStart(2, "0")}`;
+      geotiffFilename = path.join(monthlyJobDir, `${formattedDate}_${job.name}_${variable}_monthly_sum.tif`);
+    } else {
+      formattedDate = `${yearNum}.${monthNum.toString().padStart(2, "0")}.01`;
+      geotiffFilename = path.join(subsetJobDir, `${formattedDate}_${job.name}_${variable}_subset.tif`);
+    }
 
     // Check if the file exists
-    if (!fs.existsSync(geotiff_filename)) {
+    if (!fs.existsSync(geotiffFilename)) {
       return res
         .status(404)
         .json({ error: `Geotiff file not found for month ${monthNum}, year ${yearNum}, and variable ${variable}` });
@@ -152,7 +162,7 @@ router.get("/monthly_geojson", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename=${formattedDate}_${job.name}_${variable}_subset.tif`);
 
     // Stream the file to the response
-    const fileStream = fs.createReadStream(geotiff_filename);
+    const fileStream = fs.createReadStream(geotiffFilename);
     fileStream.pipe(res);
 
     // Handle errors
