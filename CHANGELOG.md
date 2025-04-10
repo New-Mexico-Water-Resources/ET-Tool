@@ -1,3 +1,19 @@
+## 1.21.0 (2025-04-10)
+
+### Features
+- **New Active Job Controls** 
+  - Adds ability to download geotiff subsets for a given job under the new "Download" dropdown menu
+  - Adds live geotiff preview capabilities for monthly data
+- **MODIS Data Layer Updates**
+  - New "Update" button for MODIS data layers panel
+    - Allows settings to be configured before updating the map layer
+  - Adds a "jump to latest day" button to switch the target date to the latest available day
+- **Performance Improvements**
+  - Interpolation is skipped for monthly data for all dates on 2008 and after
+### Bug Fixes
+- Hides unimplemented MODIS options in the "Map Layers" panel
+
+
 ## 1.20.0 (2025-04-03)
 
 ### Features
