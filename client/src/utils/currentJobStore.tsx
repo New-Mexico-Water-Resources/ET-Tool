@@ -44,7 +44,9 @@ interface Setters {
 
 interface Actions {
   fetchMonthlyGeojson: () => Promise<ArrayBuffer | null>;
-  getAvailableDays: () => Promise<AvailableDay[] | null>;
+  downloadGeotiff: (jobId: string, variable: PreviewVariableType, month: number, year: number) => Promise<void>;
+  downloadAllGeotiffs: (jobId: string) => Promise<void>;
+  downloadGeojson: (jobId: string, name: string) => Promise<void>;
 }
 
 const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
@@ -122,33 +124,86 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
     }
   },
 
-  getAvailableDays: async () => {
-    const { previewVariable } = get();
+  downloadGeotiff: async (jobId: string, variable: PreviewVariableType, month: number, year: number) => {
+    const { authAxios } = useStore.getState();
 
+    const axiosInstance = authAxios();
+
+    if (!axiosInstance) {
+      console.error("No authAxios instance found");
+      return;
+    }
+
+    const response = await axiosInstance.get(
+      `${API_URL}/historical/monthly?key=${jobId}&month=${month}&year=${year}&variable=${variable}`,
+      { responseType: "arraybuffer" }
+    );
+
+    if (response.data) {
+      const blob = new Blob([response.data], { type: "image/tiff" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${jobId}-${month}-${year}-${variable}.tif`;
+      a.click();
+    } else {
+      console.error("No response data from downloadGeotiff");
+    }
+  },
+
+  downloadAllGeotiffs: async (jobId: string) => {
+    const { authAxios } = useStore.getState();
+
+    const axiosInstance = authAxios();
+
+    if (!axiosInstance) {
+      console.error("No authAxios instance found");
+      return;
+    }
+
+    const escapedKey = encodeURIComponent(jobId);
+    const response = await axiosInstance.get(`${API_URL}/historical/download?key=${escapedKey}`, {
+      responseType: "arraybuffer",
+    });
+
+    if (response.data) {
+      const blob = new Blob([response.data], { type: "application/zip" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${jobId}-all-geotiffs.zip`;
+      a.click();
+    } else {
+      console.error("No response data from downloadAllGeotiffs");
+    }
+  },
+
+  downloadGeojson: async (jobId: string, name: string) => {
     const { activeJob, authAxios } = useStore.getState();
 
-    if (!activeJob || !activeJob.key) {
-      console.error("No current job selected");
-      return null;
+    const axiosInstance = authAxios();
+
+    if (!axiosInstance) {
+      console.error("No authAxios instance found");
+      return;
     }
 
-    try {
-      const axiosInstance = authAxios();
-      if (!axiosInstance) {
-        console.error("No authAxios instance found");
-        return null;
-      }
+    const escapedKey = encodeURIComponent(jobId);
+    axiosInstance
+      .get(`${API_URL}/geojson?key=${escapedKey}`)
+      .then((response) => {
+        const blob = new Blob([JSON.stringify(response.data)], { type: "application/json" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
 
-      const response = await axiosInstance.get(
-        `${API_URL}/historical/available_dates?key=${activeJob.key}&variable=${previewVariable}`,
-        { responseType: "json" }
-      );
-
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching available days:", error);
-      return null;
-    }
+        const escapedName = encodeURIComponent(name);
+        a.download = `${escapedName}.geojson`;
+        a.click();
+      })
+      .catch((error) => {
+        console.error("Error downloading geojson:", error);
+      });
   },
 }));
 

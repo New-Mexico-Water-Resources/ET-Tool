@@ -3,88 +3,12 @@ const router = express.Router();
 const path = require("path");
 const fs = require("fs");
 const constants = require("../../constants");
+const archiver = require("archiver");
 
 const runDirectoryBase = constants.run_directory_base;
 
 /**
- * GET /api/historical/available_dates
- * Returns all available dates for a specific job and variable
- * Query parameters:
- *   - key: Job ID
- *   - variable: Variable type (ET, ET_MIN, ET_MAX, PET, or COUNT)
- */
-router.get("/available_dates", async (req, res) => {
-  const { key, variable } = req.query;
-
-  // Validate required parameters
-  if (!key || !variable) {
-    return res.status(400).json({ error: "Missing required parameters: key and variable are required" });
-  }
-
-  // Validate variable
-  const validVariables = ["ET", "ET_MIN", "ET_MAX", "PET", "COUNT"];
-  if (!validVariables.includes(variable)) {
-    return res.status(400).json({ error: "Variable must be one of: ET, ET_MIN, ET_MAX, PET, or COUNT" });
-  }
-
-  try {
-    // Make sure job exists
-    const db = await constants.connectToDatabase();
-    const collection = db.collection(constants.report_queue_collection);
-    const job = await collection.findOne({ key });
-
-    if (!job) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-
-    // Construct the path to the directory containing the geotiff files
-    const runDirectory = path.join(runDirectoryBase, key);
-    const outputDir = path.join(runDirectory, "output");
-    const subsetDir = path.join(outputDir, "subset");
-    const jobNameDir = path.join(subsetDir, job.name);
-
-    // Check if the directory exists
-    if (!fs.existsSync(jobNameDir)) {
-      return res.status(404).json({ error: "No data directory found for this job" });
-    }
-
-    // Get all files in the directory
-    const files = fs.readdirSync(jobNameDir);
-
-    // Filter files that match the variable pattern and extract dates
-    const datePattern = new RegExp(`(\\d{4}\\.\\d{2}\\.\\d{2})_.+_${variable}_subset\\.tif`);
-    const availableDates = [];
-
-    files.forEach((file) => {
-      const match = file.match(datePattern);
-      if (match) {
-        const dateStr = match[1]; // Format: YYYY.MM.DD
-        const [year, month, day] = dateStr.split(".");
-        availableDates.push({
-          year: parseInt(year),
-          month: parseInt(month),
-          day: parseInt(day),
-          date: dateStr,
-        });
-      }
-    });
-
-    // Sort dates chronologically
-    availableDates.sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      if (a.month !== b.month) return a.month - b.month;
-      return a.day - b.day;
-    });
-
-    res.json({ availableDates });
-  } catch (error) {
-    console.error(`Error processing request: ${error.message}`);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-/**
- * GET /api/historical/monthly_geojson
+ * GET /api/historical/monthly
  * Returns a geotiff file for a specific job, month, year, and variable
  * Query parameters:
  *   - key: Job ID
@@ -92,7 +16,7 @@ router.get("/available_dates", async (req, res) => {
  *   - year: Year
  *   - variable: Variable type (ET, ET_MIN, ET_MAX, PET, or COUNT)
  */
-router.get("/monthly_geojson", async (req, res) => {
+router.get("/monthly", async (req, res) => {
   const { key, month, year, variable } = req.query;
 
   // Validate required parameters
@@ -169,6 +93,90 @@ router.get("/monthly_geojson", async (req, res) => {
     fileStream.on("error", (error) => {
       console.error(`Error streaming file: ${error.message}`);
       res.status(500).json({ error: "Error streaming file" });
+    });
+  } catch (error) {
+    console.error(`Error processing request: ${error.message}`);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/historical/download
+ * Returns a ZIP file containing all geotiff files for a specific job across all months, years, and variables
+ * Query parameters:
+ *   - key: Job ID
+ */
+router.get("/download", async (req, res) => {
+  const { key } = req.query;
+
+  // Validate required parameters
+  if (!key) {
+    return res.status(400).json({ error: "Missing required parameter: key (Job ID) is required" });
+  }
+
+  try {
+    // Make sure job exists
+    const db = await constants.connectToDatabase();
+    const collection = db.collection(constants.report_queue_collection);
+    const job = await collection.findOne({ key });
+
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    const runDirectory = path.join(runDirectoryBase, key);
+    const outputDir = path.join(runDirectory, "output");
+    const subsetDir = path.join(outputDir, "subset");
+    const monthlyDir = path.join(outputDir, "monthly");
+
+    const monthlyJobDir = path.join(monthlyDir, job.name);
+    const subsetJobDir = path.join(subsetDir, job.name);
+
+    // Check if directories exist
+    if (!fs.existsSync(monthlyJobDir) && !fs.existsSync(subsetJobDir)) {
+      return res.status(404).json({ error: "No geotiff files found for this job" });
+    }
+
+    const archive = archiver("zip", {
+      zlib: { level: 9 },
+    });
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename=${job.name}_all_geotiffs.zip`);
+
+    archive.pipe(res);
+
+    const addFilesFromDirectory = (directory, file_postfix, variables) => {
+      if (fs.existsSync(directory)) {
+        const files = fs.readdirSync(directory);
+        for (const file of files) {
+          let fileVariable = "";
+          variables.forEach((variable) => {
+            if (file.endsWith(`${variable}_${file_postfix}.tif`)) {
+              fileVariable = variable;
+            }
+          });
+
+          if (fileVariable) {
+            const filePath = path.join(directory, file);
+            archive.file(filePath, { name: `${fileVariable}/${file}` });
+          }
+        }
+      }
+    };
+
+    addFilesFromDirectory(monthlyJobDir, "monthly_sum", ["ET", "PET"]);
+    addFilesFromDirectory(subsetJobDir, "subset", ["ET_MIN", "ET_MAX", "PPT"]);
+
+    await archive.finalize();
+
+    archive.on("error", (error) => {
+      console.error(`Error creating ZIP archive: ${error.message}`);
+      res.status(500).json({ error: "Error creating ZIP archive" });
+    });
+
+    res.on("finish", () => {
+      console.log("ZIP archive created successfully, size:", archive.pointer());
     });
   } catch (error) {
     console.error(`Error processing request: ${error.message}`);

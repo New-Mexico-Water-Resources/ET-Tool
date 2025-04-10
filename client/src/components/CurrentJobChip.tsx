@@ -18,12 +18,7 @@ import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
 import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
-import {
-  API_URL,
-  OPENET_TRANSITION_DATE,
-  POST_OPENET_VARIABLE_OPTIONS,
-  PRE_OPENET_VARIABLE_OPTIONS,
-} from "../utils/constants";
+import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS } from "../utils/constants";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -32,7 +27,9 @@ const CurrentJobChip = () => {
   const setShowUploadDialog = useStore((state) => state.setShowUploadDialog);
   const loadJob = useStore((state) => state.loadJob);
   const fetchJobStatus = useStore((state) => state.fetchJobStatus);
-
+  const downloadJob = useStore((state) => state.downloadJob);
+  const downloadGeotiff = useCurrentJobStore((state) => state.downloadGeotiff);
+  const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
   const queue = useStore((state) => state.queue);
   const backlog = useStore((state) => state.backlog);
 
@@ -61,6 +58,12 @@ const CurrentJobChip = () => {
 
     return POST_OPENET_VARIABLE_OPTIONS;
   }, [activeJob?.start_year]);
+
+  const formattedPreviewDate = useMemo(() => {
+    return `${new Date(Number(previewYear), Number(previewMonth) - 1).toLocaleString("default", {
+      month: "short",
+    })} ${previewYear}`;
+  }, [previewMonth, previewYear]);
 
   const liveJob = useMemo(() => {
     let job = queue.find((job) => job.key === activeJob?.key);
@@ -375,7 +378,7 @@ const CurrentJobChip = () => {
                   valueLabelDisplay="auto"
                   valueLabelFormat={valueLabelFormat}
                   marks
-                  sx={{ color: "#334155", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
+                  sx={{ color: "primary", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
                 />
               </div>
             )}
@@ -430,6 +433,13 @@ const CurrentJobChip = () => {
               onClose={() => setDownloadMenuOpen(false)}
               sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
             >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+              >
+                Map Data
+              </Typography>
               <MenuItem
                 sx={{ backgroundColor: "var(--st-gray-80)" }}
                 disableRipple
@@ -449,7 +459,7 @@ const CurrentJobChip = () => {
                   a.click();
                 }}
               >
-                Download GeoJSON
+                GeoJSON
               </MenuItem>
 
               {canPreview && activeJob?.status === "Complete" && previewMonth && previewYear && (
@@ -457,11 +467,61 @@ const CurrentJobChip = () => {
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
                   onClick={() => {
-                    const tiffUrl = `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${previewMonth}&year=${previewYear}&variable=${previewVariable}`;
-                    window.open(tiffUrl, "_blank");
+                    if (!previewVariable || !previewMonth || !previewYear) {
+                      console.error("Missing preview variable, month, or year");
+                      return;
+                    }
+
+                    downloadGeotiff(activeJob.key, previewVariable, Number(previewMonth), Number(previewYear));
                   }}
                 >
-                  Download TIFF
+                  {formattedPreviewDate} {previewVariable} GeoTIFF
+                </MenuItem>
+              )}
+              {activeJob?.status === "Complete" && (
+                <MenuItem
+                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  disableRipple
+                  onClick={() => {
+                    if (!previewVariable || !previewMonth || !previewYear) {
+                      console.error("Missing preview variable, month, or year");
+                      return;
+                    }
+
+                    downloadAllGeotiffs(activeJob.key);
+                  }}
+                >
+                  All GeoTIFFs
+                </MenuItem>
+              )}
+              <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+              >
+                Report
+              </Typography>
+              {activeJob?.status === "Complete" && (
+                <MenuItem
+                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  disableRipple
+                  onClick={() => {
+                    downloadJob(activeJob.key, false);
+                  }}
+                >
+                  Report (mm/month)
+                </MenuItem>
+              )}
+              {activeJob?.status === "Complete" && (
+                <MenuItem
+                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  disableRipple
+                  onClick={() => {
+                    downloadJob(activeJob.key, true);
+                  }}
+                >
+                  Report (in/month)
                 </MenuItem>
               )}
             </Menu>

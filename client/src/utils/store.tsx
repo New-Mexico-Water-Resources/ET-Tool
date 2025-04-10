@@ -296,7 +296,7 @@ const useStore = create<Store>()(
       },
       userInfo: null,
       fetchUserInfo: async () => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -583,6 +583,11 @@ const useStore = create<Store>()(
         set({ activeJob: job });
       },
       downloadJob: (jobKey, imperial = false) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
         let job = get().queue.find((item) => item.key === jobKey);
         if (!job) {
           job = get().backlog.find((item) => item.key === jobKey);
@@ -593,22 +598,29 @@ const useStore = create<Store>()(
           return;
         }
 
-        let shortName = job.name.replace(/[(),]/g, "");
-        let escapedName = encodeURIComponent(shortName);
-        let escapedKey = encodeURIComponent(job.key);
+        const shortName = job.name.replace(/[(),]/g, "");
+        const escapedName = encodeURIComponent(shortName);
+        const escapedKey = encodeURIComponent(job.key);
 
-        // Check if it's a 404 first
-        axios
-          .get(`${API_URL}/download?name=${escapedName}&key=${escapedKey}&units=${imperial ? "in" : "mm"}`)
-          .then(() => {
-            window.open(`${API_URL}/download?name=${escapedName}&key=${escapedKey}&units=${imperial ? "in" : "mm"}`);
+        axiosInstance
+          .get(`${API_URL}/download?name=${escapedName}&key=${escapedKey}&units=${imperial ? "in" : "mm"}`, {
+            responseType: "arraybuffer",
+          })
+          .then((response) => {
+            const blob = new Blob([response.data], { type: "application/zip" });
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${escapedName}.zip`;
+            a.click();
           })
           .catch((error) => {
             set({ errorMessage: error?.message || "Error downloading job" });
           });
       },
       restartJob: (jobKey) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }

@@ -53,9 +53,6 @@ app.get(`${basePath}/`, (req, res) => {
   });
 });
 
-app.use(`${basePath}/`, download);
-app.use(`${basePath}/historical`, monthly_geojson);
-
 app.use(`${basePath}/`, verifyAuthToken, user);
 app.use(`${basePath}/`, verifyAuthToken, status);
 app.use(`${basePath}/`, verifyAuthToken, logs);
@@ -67,6 +64,8 @@ app.use(`${basePath}/`, verifyAuthToken, result);
 app.use(`${basePath}/`, verifyAuthToken, result_base64);
 app.use(`${basePath}/`, verifyAuthToken, start_run);
 app.use(`${basePath}/`, verifyAuthToken, runs);
+app.use(`${basePath}/`, verifyAuthToken, download);
+app.use(`${basePath}/historical`, verifyAuthToken, monthly_geojson);
 app.use(`${basePath}/queue`, verifyAuthToken, queue);
 app.post(`${basePath}/prepare_geojson`, prepare_geojson.upload.single("file"), prepare_geojson.prepareGeojson);
 

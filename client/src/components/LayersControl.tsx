@@ -377,7 +377,7 @@ const LayersControl: FC = () => {
   );
 
   return (
-    <div className="layers-control" style={{ top: activeJob ? 125 : 49 }}>
+    <div className="layers-control" style={{ top: 49 }}>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <span
           style={{
