@@ -549,9 +549,12 @@ const LayersControl: FC = () => {
         <div className={`dropzone-area ${isDragActive ? "drag-active" : ""}`} {...getRootProps()} style={{ padding: "8px" }}>
           <input {...getInputProps()} />
           {loadedFile ? (
-            <div className="loaded-file" style={{ margin: "8px" }}>
+            <div
+              className="loaded-file"
+              style={{ margin: "8px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
+            >
               <MapIcon style={{ color: "var(--st-gray-20)" }} />
-              <p style={{ color: "var(--st-gray-20)", marginBottom: 0 }}>{loadedFile.name}</p>
+              <p style={{ color: "var(--st-gray-20)", marginBottom: 0, textAlign: "center" }}>{loadedFile.name}</p>
               <p style={{ color: "var(--st-gray-50)", margin: 0, fontSize: "12px" }}>
                 Area: {roundedLoadedGeoJSONArea} Acres
               </p>
