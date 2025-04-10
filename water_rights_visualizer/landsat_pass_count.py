@@ -5,6 +5,9 @@ import pystac_client
 import planetary_computer
 import calendar
 import geopandas as gpd
+from requests.adapters import HTTPAdapter, Retry
+from pystac_client.stac_api_io import StacApiIO
+
 
 from shapely.geometry import Polygon
 from logging import getLogger
@@ -12,6 +15,16 @@ from logging import getLogger
 logger = getLogger(__name__)
 
 WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+
+
+def search_catalog_with_retries(catalog, bbox, datetime, collections=["landsat-c2-l2"], retries=3):
+    for _ in range(retries):
+        try:
+            return catalog.search(collections=collections, bbox=bbox, datetime=datetime)
+        except Exception as e:
+            logger.error(f"Error searching for Landsat passes: {e}")
+            continue
+    raise Exception("Failed to search for Landsat passes")
 
 
 def count_landsat_passes_for_month(
@@ -51,9 +64,14 @@ def count_landsat_passes_for_month(
                 logger.info(f"Retrieved cached pass count: {pass_count} for {year}-{month:02d} from {cache_filename}")
                 return pass_count
 
+    stac_api_io = StacApiIO()
+    retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
+    stac_api_io.session.mount("http://", HTTPAdapter(max_retries=retries))
+
     catalog = pystac_client.Client.open(
         "https://planetarycomputer.microsoft.com/api/stac/v1",
         modifier=planetary_computer.sign_inplace,
+        stac_io=stac_api_io,
     )
 
     start_date = f"{year}-{month:02d}-01"
@@ -63,7 +81,9 @@ def count_landsat_passes_for_month(
     pass_list = []
     rois = [roi] if isinstance(roi, Polygon) else roi
     for area in rois:
-        search = catalog.search(collections=["landsat-c2-l2"], bbox=area.bounds, datetime=f"{start_date}/{end_date}")
+        # Want to retry a few times if we get an error
+        search = search_catalog_with_retries(catalog, area.bounds, f"{start_date}/{end_date}")
+
         for item in search.items():
             platform = item.properties.get("platform")
             if platform in sat_ids:

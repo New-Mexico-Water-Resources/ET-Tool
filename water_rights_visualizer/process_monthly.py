@@ -30,6 +30,7 @@ def process_monthly(
     monthly_means_directory: str,
     start_month: int = START_MONTH,
     end_month: int = END_MONTH,
+    daily_interpolation: bool = False,
 ) -> pd.DataFrame:
     """
     Process monthly values for a given year and generate monthly means.
@@ -44,7 +45,9 @@ def process_monthly(
         year (int): Year for which to process the monthly values.
         monthly_sums_directory (str): Directory to store monthly sum files.
         monthly_means_directory (str): Directory to store monthly means files.
-
+        start_month (int): Start month for the monthly values.
+        end_month (int): End month for the monthly values.
+        daily_interpolation (bool): Whether to use daily interpolation. If false, we assume the stacks are 1 per month.
     Returns:
         pd.DataFrame: DataFrame containing the monthly means.
     """
@@ -70,9 +73,13 @@ def process_monthly(
 
             ET_monthly_filename = join(monthly_sums_directory, f"{year:04d}_{month:02d}_{ROI_name}_ET_monthly_sum.tif")
 
-            start_index, end_index = get_one_month_slice(year, month)
-            ET_month_stack = ET_stack[start_index:end_index, :, :]
-            ET_monthly = np.nansum(ET_month_stack, axis=0)
+            if daily_interpolation:
+                start_index, end_index = get_one_month_slice(year, month)
+                ET_month_stack = ET_stack[start_index:end_index, :, :]
+                ET_monthly = np.nansum(ET_month_stack, axis=0)
+            else:
+                ET_month_stack = ET_stack[month - 1, :, :]
+                ET_monthly = ET_month_stack
 
             logger.info(f"writing monthly ET: {ET_monthly_filename}, avg: {ET_monthly.mean()}")
             subset_geometry = rt.RasterGrid.from_affine(subset_affine, rows, cols, CRS)
@@ -81,8 +88,12 @@ def process_monthly(
 
             PET_monthly_filename = join(monthly_sums_directory, f"{year:04d}_{month:02d}_{ROI_name}_PET_monthly_sum.tif")
 
-            PET_month_stack = PET_stack[start_index:end_index, :, :]
-            PET_monthly = np.nansum(PET_month_stack, axis=0)
+            if daily_interpolation:
+                PET_month_stack = PET_stack[start_index:end_index, :, :]
+                PET_monthly = np.nansum(PET_month_stack, axis=0)
+            else:
+                PET_month_stack = PET_stack[month - 1, :, :]
+                PET_monthly = PET_month_stack
 
             logger.info(f"writing monthly PET: {PET_monthly_filename}, avg: {PET_monthly.mean()}")
             subset_geometry = rt.RasterGrid.from_affine(subset_affine, rows, cols, CRS)

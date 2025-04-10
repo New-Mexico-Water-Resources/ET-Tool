@@ -17,6 +17,7 @@ const queue = require("./routes/queue/queue");
 const user = require("./routes/user");
 const constants = require("./constants");
 const admin = require("./routes/admin/admin");
+const monthly_geojson = require("./routes/historical/monthly_geojson");
 
 const { auth } = require("express-oauth2-jwt-bearer");
 
@@ -53,6 +54,7 @@ app.get(`${basePath}/`, (req, res) => {
 });
 
 app.use(`${basePath}/`, download);
+app.use(`${basePath}/historical`, monthly_geojson);
 
 app.use(`${basePath}/`, verifyAuthToken, user);
 app.use(`${basePath}/`, verifyAuthToken, status);

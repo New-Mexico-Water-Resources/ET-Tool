@@ -212,7 +212,7 @@ const useStore = create<Store>()(
     devtools((set, get) => ({
       minimumValidArea: 900,
       maximumValidArea: 100000000,
-      tileDate: dayjs().format("YYYY-MM-DD"),
+      tileDate: "",
       setTileDate: (tileDate) => set({ tileDate }),
       mapLayerKey: "Google Satellite",
       setMapLayerKey: (mapLayerKey) => set({ mapLayerKey }),
@@ -969,7 +969,7 @@ const useStore = create<Store>()(
           });
       },
       allGeoJSONs: [],
-      refreshType: "static",
+      refreshType: "dynamic",
       setRefreshType: (refreshType) => set({ refreshType }),
       minimumBaseMapColorBound: 0,
       setMinimumBaseMapColorBound: (minimumBaseMapColorBound) => set({ minimumBaseMapColorBound }),

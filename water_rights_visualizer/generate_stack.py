@@ -45,6 +45,7 @@ def generate_stack(
     stack_filename: str,
     target_CRS: str = None,
     use_stack: bool = False,
+    daily_interpolation: bool = True,
 ) -> (np.ndarray, np.ndarray, Affine):
     """
     Generates a stack of data for a given region of interest (ROI) and year.
@@ -59,7 +60,8 @@ def generate_stack(
         dates_available (List[date]): A list of available dates for the data.
         stack_filename (str): The filename of the generated stack.
         target_CRS (str, optional): The target coordinate reference system (CRS) for the stack. Defaults to None.
-
+        use_stack (bool, optional): Whether to use the existing stack. Defaults to False.
+        daily_interpolation (bool, optional): Whether to use daily interpolation or monthly interpolation. Defaults to True (daily).
     Returns:
         Tuple[np.ndarray, np.ndarray, Affine]: A tuple containing the generated stack, the interpolated stack, and the affine transformation.
     """
@@ -85,8 +87,9 @@ def generate_stack(
     PET_sparse_stack = None
 
     dates_in_year = [date_step for date_step in dates_available if date_step.year == year]
-
     dates_in_year = sorted(set(dates_in_year))
+
+    days_in_year = get_days_in_year(year) if daily_interpolation else 12
 
     # Process monthly PPT data first
     for month in range(1, 13):
@@ -130,20 +133,17 @@ def generate_stack(
         ET_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_subset.tif")
         logger.info(f"ET subset file: {ET_subset_filename}")
 
-        count_source = get_available_variable_source_for_date("COUNT", date_step)
-
-        if count_source and count_source.monthly:
-            count_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_COUNT_subset.tif")
+        count_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_COUNT_subset.tif")
+        et_min_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_MIN_subset.tif")
+        et_max_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_MAX_subset.tif")
+        if not daily_interpolation:
             logger.info(f"COUNT subset file: {count_subset_filename}")
-
-            et_min_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_MIN_subset.tif")
             logger.info(f"ET MIN subset file: {et_min_subset_filename}")
-
-            et_max_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_MAX_subset.tif")
             logger.info(f"ET MAX subset file: {et_max_subset_filename}")
 
         ESI_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ESI_subset.tif")
-        logger.info(f"ESI subset file: {ESI_subset_filename}")
+        if daily_interpolation:
+            logger.info(f"ESI subset file: {ESI_subset_filename}")
 
         PET_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_PET_subset.tif")
         logger.info(f"PET subset file: {PET_subset_filename}")
@@ -173,7 +173,7 @@ def generate_stack(
             continue
 
         try:
-            if count_source and count_source.monthly:
+            if not daily_interpolation:
                 # These are just used to get error percentage
                 uncertainty_variables = {
                     "ET_MIN": et_min_subset_filename,
@@ -227,12 +227,17 @@ def generate_stack(
             day = date_step.day
 
             if PET_sparse_stack is None:
-                days_in_year = get_days_in_year(year)
                 PET_sparse_stack = generate_sparse_stack(days_in_year, rows, cols)
 
             source = get_available_variable_source_for_date("PET", date_step)
-            if source.monthly:
-                # # Fill in the rest of the month
+            if not daily_interpolation and source and source.monthly:
+                # # Correct the PET for the month, then fill in the month
+                days_in_month = get_days_in_month(year, month)
+                middle_day_of_month = datetime(year, month, days_in_month // 2).date()
+                avg_hours_of_sunlight = calculate_hours_of_sunlight(ROI_latlon, middle_day_of_month)
+                PET_sparse_stack[month - 1, :, :] = PET_subset / 24 * avg_hours_of_sunlight
+            elif daily_interpolation and source and source.monthly:
+                # Fill in the rest of the month
                 day_of_year, last_doy = get_one_month_slice(year, month)
                 days_in_month = get_days_in_month(year, month)
 
@@ -289,22 +294,28 @@ def generate_stack(
         day = date_step.day
 
         if ET_sparse_stack is None:
-            days_in_year = get_days_in_year(year)
             ET_sparse_stack = generate_sparse_stack(days_in_year, rows, cols)
 
         if ESI_sparse_stack is None:
-            days_in_year = get_days_in_year(year)
             ESI_sparse_stack = generate_sparse_stack(days_in_year, rows, cols)
 
         day_of_year, last_doy = get_one_month_slice(year, month)
         days_in_month = get_days_in_month(year, month)
 
-        ET_doy_image = ET_sparse_stack[day_of_year, :, :]
-        ET_sparse_stack[day_of_year, :, :] = np.where(np.isnan(ET_doy_image), ET_subset, ET_doy_image)
+        if daily_interpolation:
+            ET_doy_image = ET_sparse_stack[day_of_year, :, :]
+            ET_sparse_stack[day_of_year, :, :] = np.where(np.isnan(ET_doy_image), ET_subset, ET_doy_image)
+        else:
+            ET_sparse_stack[month - 1, :, :] = ET_subset
+
         et_source = get_available_variable_source_for_date("ET", date_step)
         if et_source and et_source.monthly:
-            # Fill in the rest of the month
-            ET_sparse_stack[day_of_year:last_doy, :, :] = ET_subset / days_in_month
+            if not daily_interpolation:
+                # Fill in the month
+                ET_sparse_stack[month - 1, :, :] = ET_subset
+            else:
+                # Convert from a monthly sum to a daily average, then fill in the month
+                ET_sparse_stack[day_of_year:last_doy, :, :] = ET_subset / days_in_month
 
         if not PET_subset and PET_sparse_stack is None and ESI_subset:
             ESI_doy_image = ESI_sparse_stack[day_of_year, :, :]
@@ -324,9 +335,14 @@ def generate_stack(
         logger.info("PET stack is None, calculating from ET and ESI")
         PET_sparse_stack = ET_sparse_stack / ESI_sparse_stack
 
-    logger.info(f"interpolating ET stack for year: {year}")
-    ET_stack = interpolate_stack(ET_sparse_stack)
-    PET_stack = interpolate_stack(PET_sparse_stack)
+    # Only interpolate if daily interpolation is requested
+    if daily_interpolation:
+        logger.info(f"interpolating ET stack for year: {year}")
+        ET_stack = interpolate_stack(ET_sparse_stack)
+        PET_stack = interpolate_stack(PET_sparse_stack)
+    else:
+        ET_stack = ET_sparse_stack
+        PET_stack = PET_sparse_stack
 
     stack_directory = dirname(stack_filename)
 

@@ -4,7 +4,7 @@ import { MAP_LAYER_OPTIONS } from "../utils/constants";
 import useStore, { MapLayer } from "../utils/store";
 
 const injectLayer = (layer: MapLayer, variable: string, value: string | number) => {
-  let newLayer = JSON.parse(JSON.stringify(layer));
+  const newLayer = JSON.parse(JSON.stringify(layer));
   if (variable) {
     newLayer.url = newLayer.url.replace(`{${variable}}`, value);
   } else if (newLayer?.[variable]) {
@@ -27,7 +27,6 @@ const ActiveMapLayer = () => {
   const maxColor = useStore((state) => state.maximumBaseMapColorBound);
   const tileDate = useStore((state) => state.tileDate);
   const comparisonMode = useStore((state) => state.comparisonMode);
-  // const tileDate = "2021-01-01";
 
   const activeMapLayer = useMemo(() => {
     let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;
@@ -49,7 +48,7 @@ const ActiveMapLayer = () => {
       map.setMaxZoom(activeMapLayer.maxZoom);
     }
 
-    let currentZoom = map.getZoom();
+    const currentZoom = map.getZoom();
     if (activeMapLayer?.maxZoom && currentZoom > activeMapLayer?.maxZoom) {
       map.setZoom(activeMapLayer?.maxZoom);
     }
@@ -57,7 +56,7 @@ const ActiveMapLayer = () => {
 
   const BackgroundTileLayer = useMemo(() => {
     if (activeMapLayer.backgroundProvider && (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider]) {
-      let backgroundLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider] as MapLayer;
+      const backgroundLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider] as MapLayer;
 
       let layer = injectTimeIntoLayer(backgroundLayer, tileDate);
       layer = injectLayer(layer, "refresh", refreshType);

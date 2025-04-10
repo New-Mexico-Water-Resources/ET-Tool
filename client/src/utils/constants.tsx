@@ -18,6 +18,8 @@ export const ROLES = {
   JOB_SUBMITTER: import.meta.env.VITE_JOB_SUBMITTER,
 };
 
+export const OPENET_TRANSITION_DATE = 2008;
+
 export const ET_COLORMAP = ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"];
 export const DIFF_COLORMAP = ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"];
 
@@ -61,7 +63,6 @@ export const MAP_LAYER_OPTIONS = {
     maxZoom: 9,
     time: "2023-01-01",
   },
-  // ** COMMENTED OUT FOR NOW UNTIL TILE SERVER IS CONFIGURED **
   "MODIS ET 500": {
     name: "MODIS ET 500",
     attribution:
@@ -72,14 +73,12 @@ export const MAP_LAYER_OPTIONS = {
     backgroundProvider: "Google Satellite",
     labelsProvider: "CartoDB DarkMatter Labels",
     tms: true,
-    refresh: "static",
+    refresh: "dynamic",
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
     units: "mm/8-days",
     modes: {
       absolute: "Absolute",
       prevPass: "Previous Pass Difference",
-      prevMonth: "Previous Month Difference",
-      historical: "Historical Difference",
     },
   },
 
