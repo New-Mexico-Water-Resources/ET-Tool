@@ -180,11 +180,17 @@ const ActiveMonthlyMapLayer: FC = () => {
         // Add mouse move handler to update tooltip
         map.on("mousemove", (e: LeafletMouseEvent) => {
           const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
+
+          let variableName: string = previewVariable;
+          if (previewVariable === "PET" && previewYear && Number(previewYear) >= OPENET_TRANSITION_DATE) {
+            variableName = "ETo (Unadjusted)";
+          }
+
           if (value !== null && value !== undefined) {
             const units = previewYear && Number(previewYear) < OPENET_TRANSITION_DATE ? "mm/day" : "mm/month";
             newTooltip
               .setLatLng(e.latlng)
-              .setContent(`${previewVariable}: ${value.toFixed(2)} ${units}`)
+              .setContent(`${variableName}: ${value.toFixed(2)} ${units}`)
               .openOn(map);
           } else {
             newTooltip.close();

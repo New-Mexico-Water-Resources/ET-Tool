@@ -10,8 +10,10 @@
   - Adds a "jump to latest day" button to switch the target date to the latest available day
 - **Performance Improvements**
   - Interpolation is skipped for monthly data for all dates on 2008 and after
+
 ### Bug Fixes
 - Hides unimplemented MODIS options in the "Map Layers" panel
+- Fixes time out error when fetching Landsat pass count from Microsoft Planetary Computer STAC API
 
 
 ## 1.20.0 (2025-04-03)

@@ -35,6 +35,10 @@ const CurrentJobChip = () => {
   const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
   const getAvailableDays = useCurrentJobStore((state) => state.getAvailableDays);
 
+  const canPreview = useMemo(() => {
+    return !!previewYear && Number(previewYear) >= OPENET_TRANSITION_DATE;
+  }, [previewYear]);
+
   const liveJob = useMemo(() => {
     let job = queue.find((job) => job.key === activeJob?.key);
     if (!job) {
@@ -317,19 +321,22 @@ const CurrentJobChip = () => {
                 </FormControl>
               )}
             </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <Button
-                variant="contained"
-                color="secondary"
-                size="small"
-                sx={{ flex: 1 }}
-                onClick={() => {
-                  setShowPreview(!showPreview);
-                }}
-              >
-                {showPreview ? "Hide" : "Show"} Preview
-              </Button>
-            </div>
+            <Tooltip title={!canPreview ? `ET data isn't available for previewing before ${OPENET_TRANSITION_DATE}` : ""}>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  size="small"
+                  sx={{ flex: 1 }}
+                  onClick={() => {
+                    setShowPreview(!showPreview);
+                  }}
+                  disabled={!canPreview}
+                >
+                  {showPreview ? "Hide" : "Show"} Preview
+                </Button>
+              </div>
+            </Tooltip>
           </div>
         )}
         {activeJob && (
@@ -386,16 +393,19 @@ const CurrentJobChip = () => {
               >
                 Download GeoJSON
               </MenuItem>
-              <MenuItem
-                sx={{ backgroundColor: "var(--st-gray-80)" }}
-                disableRipple
-                onClick={() => {
-                  const tiffUrl = `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${previewMonth}&year=${previewYear}&variable=${previewVariable}`;
-                  window.open(tiffUrl, "_blank");
-                }}
-              >
-                Download TIFF
-              </MenuItem>
+
+              {canPreview && activeJob?.status === "Complete" && previewMonth && previewYear && (
+                <MenuItem
+                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  disableRipple
+                  onClick={() => {
+                    const tiffUrl = `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${previewMonth}&year=${previewYear}&variable=${previewVariable}`;
+                    window.open(tiffUrl, "_blank");
+                  }}
+                >
+                  Download TIFF
+                </MenuItem>
+              )}
             </Menu>
           </div>
         )}
