@@ -4,7 +4,7 @@ import { MAP_LAYER_OPTIONS } from "../utils/constants";
 import useStore, { MapLayer } from "../utils/store";
 
 const injectLayer = (layer: MapLayer, variable: string, value: string | number) => {
-  let newLayer = JSON.parse(JSON.stringify(layer));
+  const newLayer = JSON.parse(JSON.stringify(layer));
   if (variable) {
     newLayer.url = newLayer.url.replace(`{${variable}}`, value);
   } else if (newLayer?.[variable]) {

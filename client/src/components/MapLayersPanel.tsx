@@ -3,6 +3,7 @@ import {
   Button,
   Checkbox,
   Divider,
+  FormControl,
   FormControlLabel,
   FormGroup,
   FormLabel,
@@ -15,6 +16,7 @@ import {
   Select,
   Typography,
 } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import axios from "axios";
@@ -24,8 +26,9 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import useStore, { MapLayer } from "../utils/store";
 
 import "../scss/MapLayersPanel.scss";
-import { MAP_LAYER_OPTIONS, REFERENCE_GEOJSONS } from "../utils/constants";
+import { API_URL, MAP_LAYER_OPTIONS, REFERENCE_GEOJSONS } from "../utils/constants";
 import dayjs from "dayjs";
+import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
 
 const MapLayersPanel: FC = () => {
   const isMapLayersPanelOpen = useStore((state) => state.isMapLayersPanelOpen);
@@ -58,6 +61,15 @@ const MapLayersPanel: FC = () => {
 
   const [comparisonMode, setComparisonMode] = useStore((state) => [state.comparisonMode, state.setComparisonMode]);
   const [tempComparisonMode, setTempComparisonMode] = useState<string | undefined>(comparisonMode || "absolute");
+
+  const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
+  const [showPreview, setShowPreview] = useCurrentJobStore((state) => [state.showPreview, state.setShowPreview]);
+  const [previewVariable, setPreviewVariable] = useCurrentJobStore((state) => [
+    state.previewVariable,
+    state.setPreviewVariable,
+  ]);
+  const [previewMonth, setPreviewMonth] = useCurrentJobStore((state) => [state.previewMonth, state.setPreviewMonth]);
+  const [previewYear, setPreviewYear] = useCurrentJobStore((state) => [state.previewYear, state.setPreviewYear]);
 
   const updateSettings = () => {
     if (tempTileDate) {
@@ -204,7 +216,7 @@ const MapLayersPanel: FC = () => {
             value={mapLayerKey}
             onChange={(evt) => {
               if (evt.target.value && mapLayerOptions.find((option) => option.name === evt.target.value)) {
-                let selectedLayer = mapLayerOptions.find((option) => option.name === evt.target.value) as MapLayer;
+                const selectedLayer = mapLayerOptions.find((option) => option.name === evt.target.value) as MapLayer;
                 setMapLayerKey(selectedLayer.name);
               }
             }}
@@ -517,6 +529,115 @@ const MapLayersPanel: FC = () => {
               })}
           </RadioGroup>
         </div>
+        <Typography
+          variant="h6"
+          sx={{
+            color: "var(--st-gray-20)",
+            padding: 0,
+            margin: 0,
+            marginTop: "8px",
+            display: "flex",
+            alignItems: "center",
+            borderBottom: "1px solid var(--st-gray-70)",
+          }}
+        >
+          Active Job
+        </Typography>
+        {activeJob && activeJob.status === "Complete" && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              margin: "8px 0",
+              // width: currentJobChipRef.current?.clientWidth || "225px",
+              // position: "absolute",
+              backgroundColor: "var(--st-gray-90)",
+              // left: 4,
+              // top: 46 + currentJobChipHeight,
+              zIndex: 1000,
+              borderRadius: "8px",
+              padding: "8px",
+              paddingTop: 0,
+            }}
+          >
+            <div style={{ display: "flex", gap: "8px" }}>
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel size="small">Variable</InputLabel>
+                <Select
+                  label="Variable"
+                  size="small"
+                  value={previewVariable}
+                  onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
+                >
+                  <MenuItem value="ET">ET</MenuItem>
+                  <MenuItem value="PET">PET</MenuItem>
+                  <MenuItem value="ET_MIN">ET_MIN</MenuItem>
+                  <MenuItem value="ET_MAX">ET_MAX</MenuItem>
+                </Select>
+              </FormControl>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel size="small">Month</InputLabel>
+                <Select label="Month" size="small" value={previewMonth} onChange={(e) => setPreviewMonth(e.target.value)}>
+                  <MenuItem value={1}>January</MenuItem>
+                  <MenuItem value={2}>February</MenuItem>
+                  <MenuItem value={3}>March</MenuItem>
+                  <MenuItem value={4}>April</MenuItem>
+                  <MenuItem value={5}>May</MenuItem>
+                  <MenuItem value={6}>June</MenuItem>
+                  <MenuItem value={7}>July</MenuItem>
+                  <MenuItem value={8}>August</MenuItem>
+                  <MenuItem value={9}>September</MenuItem>
+                  <MenuItem value={10}>October</MenuItem>
+                  <MenuItem value={11}>November</MenuItem>
+                  <MenuItem value={12}>December</MenuItem>
+                </Select>
+              </FormControl>
+              {previewYear && (
+                <FormControl sx={{ flex: 1 }}>
+                  <InputLabel size="small">Year</InputLabel>
+                  <Select label="Year" size="small" value={previewYear} onChange={(e) => setPreviewYear(e.target.value)}>
+                    {Array.from(
+                      { length: activeJob.end_year - activeJob.start_year + 1 },
+                      (_, i) => activeJob.start_year + i
+                    ).map((year) => (
+                      <MenuItem value={year}>{year}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button
+                variant="contained"
+                color="secondary"
+                size="small"
+                sx={{ flex: 1 }}
+                onClick={() => {
+                  setShowPreview(!showPreview);
+                }}
+              >
+                {showPreview ? "Hide" : "Preview"} TIFF
+              </Button>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button
+                variant="contained"
+                color="secondary"
+                size="small"
+                sx={{ flex: 1 }}
+                onClick={() => {
+                  const tiffUrl = `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${previewMonth}&year=${previewYear}&variable=${previewVariable}`;
+                  window.open(tiffUrl, "_blank");
+                }}
+              >
+                Download TIFF
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

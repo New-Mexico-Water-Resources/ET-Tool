@@ -1,11 +1,13 @@
-import { Button, FormControl, InputLabel, MenuItem, Select, IconButton, Tooltip, Typography } from "@mui/material";
+import { Button, FormControl, InputLabel, MenuItem, Select, IconButton, Tooltip, Typography, Menu } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import useStore, { JobStatus } from "../utils/store";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 
+import MapIcon from "@mui/icons-material/Map";
+import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
 import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
-import { API_URL } from "../utils/constants";
+import { API_URL, OPENET_TRANSITION_DATE } from "../utils/constants";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -21,11 +23,17 @@ const CurrentJobChip = () => {
   const [previewMonth, setPreviewMonth] = useCurrentJobStore((state) => [state.previewMonth, state.setPreviewMonth]);
   const [previewYear, setPreviewYear] = useCurrentJobStore((state) => [state.previewYear, state.setPreviewYear]);
   const [showPreview, setShowPreview] = useCurrentJobStore((state) => [state.showPreview, state.setShowPreview]);
-  const setCurrentJob = useCurrentJobStore((state) => state.setCurrentJob);
   const [previewVariable, setPreviewVariable] = useCurrentJobStore((state) => [
     state.previewVariable,
     state.setPreviewVariable,
   ]);
+  const [previewDay, setPreviewDay] = useCurrentJobStore((state) => [state.previewDay, state.setPreviewDay]);
+  const currentJobChipRef = useRef<HTMLDivElement>(null);
+  const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const availableDays = useCurrentJobStore((state) => state.availableDays);
+  const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
+  const getAvailableDays = useCurrentJobStore((state) => state.getAvailableDays);
 
   const liveJob = useMemo(() => {
     let job = queue.find((job) => job.key === activeJob?.key);
@@ -35,6 +43,24 @@ const CurrentJobChip = () => {
 
     return job;
   }, [queue, backlog, activeJob?.key]);
+
+  useEffect(() => {
+    // Fetch dates
+    if (activeJob?.start_year && activeJob?.end_year) {
+      const fetchDays = async () => {
+        const days = await getAvailableDays();
+        if (days && days.length > 0) {
+          setAvailableDays(days);
+          setPreviewDay(days[0].day);
+        } else {
+          setAvailableDays([]);
+          setPreviewDay(1);
+        }
+      };
+
+      fetchDays();
+    }
+  }, [activeJob, getAvailableDays, setAvailableDays, setPreviewDay]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -117,228 +143,264 @@ const CurrentJobChip = () => {
   }, [activeJob?.loaded_geo_json]);
 
   return (
-    <div className="current-job">
-      <Typography
-        variant="body1"
-        style={{
-          color: "var(--st-gray-30)",
-          fontWeight: "bold",
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-          minWidth: activeJob ? "225px" : "auto",
-        }}
-      >
-        {activeJob ? activeJob.name : "No active job"}
-        {activeJob && (
-          <IconButton
-            size="small"
-            sx={{ color: "var(--st-gray-30)", padding: 0, marginLeft: "auto" }}
-            className="close-btn"
-            onClick={() => {
-              setActiveJob(null);
-              closeNewJob();
-            }}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        )}
-      </Typography>
-      {activeJob && (
-        <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
-          Years:{" "}
-          <b>
-            {activeJob.start_year} - {activeJob.end_year}
-          </b>
-        </Typography>
-      )}
-
-      {activeJob && (
-        <Tooltip title={jobStatus?.status || "N/A"}>
-          <Typography
-            variant="body2"
-            style={{ color: "var(--st-gray-40)", display: "flex", alignItems: "center", gap: "4px" }}
-          >
-            Status:{" "}
-            <b
-              style={{
-                maxWidth: "178px",
-                display: "inline-block",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "pre",
+    <>
+      <div className="current-job" ref={currentJobChipRef}>
+        <Typography
+          variant="body1"
+          style={{
+            color: "var(--st-gray-30)",
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            minWidth: activeJob ? "225px" : "auto",
+          }}
+        >
+          {activeJob ? activeJob.name : "No active job"}
+          {activeJob && (
+            <IconButton
+              size="small"
+              sx={{ color: "var(--st-gray-30)", padding: 0, marginLeft: "auto" }}
+              className="close-btn"
+              onClick={() => {
+                setActiveJob(null);
+                closeNewJob();
               }}
             >
-              {jobStatus?.status || "N/A"}
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          )}
+        </Typography>
+        {activeJob && (
+          <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
+            Years:{" "}
+            <b>
+              {activeJob.start_year} - {activeJob.end_year}
             </b>
           </Typography>
-        </Tooltip>
-      )}
+        )}
 
-      {activeJob && activeJobProperties.length > 0 && (
-        <Typography variant="body1" style={{ color: "var(--st-gray-40)", marginTop: "8px" }}>
-          Properties:
-        </Typography>
-      )}
-      {activeJob && activeJobProperties.length > 0 && (
-        <div
-          style={{
-            maxHeight: "300px",
-            maxWidth: "400px",
-            overflow: "auto",
-            border: "2px solid #404243",
-            borderRadius: "8px",
-            padding: "4px",
-            textOverflow: "ellipsis",
-            whiteSpace: "pre",
-            marginBottom: "4px",
-          }}
-        >
-          {activeJobProperties.map((property, index) => (
-            <Typography key={index} variant="body2" style={{ color: "var(--st-gray-40)" }}>
-              {property.property}: <b>{property.value}</b>
-            </Typography>
-          ))}
-        </div>
-      )}
-
-      {previewMode && (
-        <Button
-          sx={{ margin: "8px 0" }}
-          variant="contained"
-          onClick={() => {
-            setPreviewMode(false);
-            setActiveJob(null);
-            setShowUploadDialog(true);
-          }}
-        >
-          Continue Editing
-        </Button>
-      )}
-      {activeJob && (
-        <div style={{ display: "flex", gap: "8px", margin: "8px 0" }}>
-          <Button
-            sx={{ fontSize: "12px" }}
-            size="small"
-            variant="contained"
-            color="secondary"
-            onClick={() => {
-              loadJob(activeJob);
-            }}
-          >
-            Locate
-          </Button>
-          <Button
-            sx={{ fontSize: "12px" }}
-            size="small"
-            variant="contained"
-            color="secondary"
-            onClick={() => {
-              if (!activeJob?.loaded_geo_json) {
-                return;
-              }
-
-              const blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-
-              const shortName = activeJob.name.replace(/[(),]/g, "");
-              const escapedName = encodeURIComponent(shortName);
-              a.download = `${escapedName}.geojson`;
-              a.click();
-            }}
-          >
-            Download GeoJSON
-          </Button>
-        </div>
-      )}
-      {activeJob && activeJob.status === "Complete" && (
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "8px", margin: "8px 0", width: "100%", marginTop: "16px" }}
-        >
-          <div style={{ display: "flex", gap: "8px" }}>
-            <FormControl sx={{ flex: 1 }}>
-              <InputLabel size="small">Variable</InputLabel>
-              <Select
-                label="Variable"
-                size="small"
-                value={previewVariable}
-                onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
+        {activeJob && (
+          <Tooltip title={jobStatus?.status || "N/A"}>
+            <Typography
+              variant="body2"
+              style={{ color: "var(--st-gray-40)", display: "flex", alignItems: "center", gap: "4px" }}
+            >
+              Status:{" "}
+              <b
+                style={{
+                  maxWidth: "178px",
+                  display: "inline-block",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "pre",
+                }}
               >
-                <MenuItem value="ET">ET</MenuItem>
-                <MenuItem value="PET">PET</MenuItem>
-                <MenuItem value="ET_MIN">ET_MIN</MenuItem>
-                <MenuItem value="ET_MAX">ET_MAX</MenuItem>
-              </Select>
-            </FormControl>
+                {jobStatus?.status || "N/A"}
+              </b>
+            </Typography>
+          </Tooltip>
+        )}
+
+        {activeJob && activeJobProperties.length > 0 && (
+          <Typography variant="body1" style={{ color: "var(--st-gray-40)", marginTop: "8px" }}>
+            Properties:
+          </Typography>
+        )}
+        {activeJob && activeJobProperties.length > 0 && (
+          <div
+            style={{
+              maxHeight: "300px",
+              maxWidth: "400px",
+              overflow: "auto",
+              border: "2px solid #404243",
+              borderRadius: "8px",
+              padding: "4px",
+              textOverflow: "ellipsis",
+              whiteSpace: "pre",
+              marginBottom: "4px",
+            }}
+          >
+            {activeJobProperties.map((property, index) => (
+              <Typography key={index} variant="body2" style={{ color: "var(--st-gray-40)" }}>
+                {property.property}: <b>{property.value}</b>
+              </Typography>
+            ))}
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <FormControl sx={{ flex: 1 }}>
-              <InputLabel size="small">Month</InputLabel>
-              <Select label="Month" size="small" value={previewMonth} onChange={(e) => setPreviewMonth(e.target.value)}>
-                <MenuItem value={1}>January</MenuItem>
-                <MenuItem value={2}>February</MenuItem>
-                <MenuItem value={3}>March</MenuItem>
-                <MenuItem value={4}>April</MenuItem>
-                <MenuItem value={5}>May</MenuItem>
-                <MenuItem value={6}>June</MenuItem>
-                <MenuItem value={7}>July</MenuItem>
-                <MenuItem value={8}>August</MenuItem>
-                <MenuItem value={9}>September</MenuItem>
-                <MenuItem value={10}>October</MenuItem>
-                <MenuItem value={11}>November</MenuItem>
-                <MenuItem value={12}>December</MenuItem>
-              </Select>
-            </FormControl>
-            {previewYear && (
+        )}
+
+        {previewMode && (
+          <Button
+            sx={{ margin: "8px 0" }}
+            variant="contained"
+            onClick={() => {
+              setPreviewMode(false);
+              setActiveJob(null);
+              setShowUploadDialog(true);
+            }}
+          >
+            Continue Editing
+          </Button>
+        )}
+        {activeJob && activeJob.status === "Complete" && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              backgroundColor: "var(--st-gray-90)",
+              zIndex: 1000,
+              borderRadius: "8px",
+              marginBottom: 16,
+              marginTop: 16,
+            }}
+          >
+            <div style={{ display: "flex", gap: "8px" }}>
               <FormControl sx={{ flex: 1 }}>
-                <InputLabel size="small">Year</InputLabel>
-                <Select label="Year" size="small" value={previewYear} onChange={(e) => setPreviewYear(e.target.value)}>
-                  {Array.from(
-                    { length: activeJob.end_year - activeJob.start_year + 1 },
-                    (_, i) => activeJob.start_year + i
-                  ).map((year) => (
-                    <MenuItem value={year}>{year}</MenuItem>
-                  ))}
+                <InputLabel size="small">Variable</InputLabel>
+                <Select
+                  label="Variable"
+                  size="small"
+                  value={previewVariable}
+                  onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
+                >
+                  <MenuItem value="ET">ET</MenuItem>
+                  <MenuItem value="PET">PET</MenuItem>
+                  <MenuItem value="ET_MIN">ET_MIN</MenuItem>
+                  <MenuItem value="ET_MAX">ET_MAX</MenuItem>
                 </Select>
               </FormControl>
-            )}
+            </div>
+            {availableDays &&
+              availableDays.length > 0 &&
+              activeJob?.start_year < OPENET_TRANSITION_DATE &&
+              previewYear &&
+              Number(previewYear) < OPENET_TRANSITION_DATE && (
+                <FormControl sx={{ flex: 1 }}>
+                  <InputLabel size="small">Day</InputLabel>
+                  <Select label="Day" size="small" value={previewDay} onChange={(e) => setPreviewDay(e.target.value)}>
+                    {(availableDays || []).map((day) => (
+                      <MenuItem value={day.day}>{day.day}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+            <div style={{ display: "flex", gap: "8px" }}>
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel size="small">Month</InputLabel>
+                <Select label="Month" size="small" value={previewMonth} onChange={(e) => setPreviewMonth(e.target.value)}>
+                  <MenuItem value={1}>January</MenuItem>
+                  <MenuItem value={2}>February</MenuItem>
+                  <MenuItem value={3}>March</MenuItem>
+                  <MenuItem value={4}>April</MenuItem>
+                  <MenuItem value={5}>May</MenuItem>
+                  <MenuItem value={6}>June</MenuItem>
+                  <MenuItem value={7}>July</MenuItem>
+                  <MenuItem value={8}>August</MenuItem>
+                  <MenuItem value={9}>September</MenuItem>
+                  <MenuItem value={10}>October</MenuItem>
+                  <MenuItem value={11}>November</MenuItem>
+                  <MenuItem value={12}>December</MenuItem>
+                </Select>
+              </FormControl>
+              {previewYear && (
+                <FormControl sx={{ flex: 1 }}>
+                  <InputLabel size="small">Year</InputLabel>
+                  <Select label="Year" size="small" value={previewYear} onChange={(e) => setPreviewYear(e.target.value)}>
+                    {Array.from(
+                      { length: activeJob.end_year - activeJob.start_year + 1 },
+                      (_, i) => activeJob.start_year + i
+                    ).map((year) => (
+                      <MenuItem value={year}>{year}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button
+                variant="contained"
+                color="secondary"
+                size="small"
+                sx={{ flex: 1 }}
+                onClick={() => {
+                  setShowPreview(!showPreview);
+                }}
+              >
+                {showPreview ? "Hide" : "Show"} Preview
+              </Button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
+        )}
+        {activeJob && (
+          <div style={{ display: "flex", gap: "8px", margin: "8px 0" }}>
             <Button
+              sx={{ fontSize: "12px", flex: 1, display: "flex", alignItems: "center", gap: "4px" }}
+              size="small"
               variant="contained"
               color="secondary"
-              size="small"
-              sx={{ flex: 1 }}
               onClick={() => {
-                if (!showPreview) {
-                  // Set current job
-                  setCurrentJob(activeJob);
-                }
-                setShowPreview(!showPreview);
+                loadJob(activeJob);
               }}
             >
-              {showPreview ? "Hide" : "Preview"} TIFF
+              <MapIcon fontSize="inherit" />
+              Locate
             </Button>
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
             <Button
+              sx={{ fontSize: "12px", flex: 1, display: "flex", alignItems: "center", gap: "4px" }}
+              size="small"
               variant="contained"
               color="secondary"
-              size="small"
-              sx={{ flex: 1 }}
-              onClick={() => {
-                const tiffUrl = `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${previewMonth}&year=${previewYear}&variable=${previewVariable}`;
-                window.open(tiffUrl, "_blank");
+              onClick={(evt) => {
+                setDownloadAnchorEl(evt.currentTarget);
+                setDownloadMenuOpen(true);
               }}
             >
-              Download TIFF
+              <DownloadIcon fontSize="inherit" />
+              Download
             </Button>
+            <Menu
+              anchorEl={downloadAnchorEl}
+              open={downloadMenuOpen}
+              onClose={() => setDownloadMenuOpen(false)}
+              sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
+            >
+              <MenuItem
+                sx={{ backgroundColor: "var(--st-gray-80)" }}
+                disableRipple
+                onClick={() => {
+                  if (!activeJob?.loaded_geo_json) {
+                    return;
+                  }
+
+                  const blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+
+                  const shortName = activeJob.name.replace(/[(),]/g, "");
+                  const escapedName = encodeURIComponent(shortName);
+                  a.download = `${escapedName}.geojson`;
+                  a.click();
+                }}
+              >
+                Download GeoJSON
+              </MenuItem>
+              <MenuItem
+                sx={{ backgroundColor: "var(--st-gray-80)" }}
+                disableRipple
+                onClick={() => {
+                  const tiffUrl = `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${previewMonth}&year=${previewYear}&variable=${previewVariable}`;
+                  window.open(tiffUrl, "_blank");
+                }}
+              >
+                Download TIFF
+              </MenuItem>
+            </Menu>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 };
 

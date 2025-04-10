@@ -5,8 +5,11 @@ import parseGeoraster from "georaster";
 // @ts-expect-error - No type definitions available
 import GeoRasterLayer from "georaster-layer-for-leaflet";
 import useCurrentJobStore from "../utils/currentJobStore";
-import { ET_COLORMAP, DIFF_COLORMAP } from "../utils/constants";
-import { Layer } from "leaflet";
+import { ET_COLORMAP } from "../utils/constants";
+import { Tooltip, LeafletMouseEvent } from "leaflet";
+import useStore from "../utils/store";
+
+import { OPENET_TRANSITION_DATE } from "../utils/constants";
 
 // Helper function to convert hex to RGB
 const hexToRgb = (hex: string) => {
@@ -50,28 +53,65 @@ const getInterpolatedColor = (value: number, colormap: string[]) => {
   return interpolateColors(colormap[lowerIndex], colormap[upperIndex], factor);
 };
 
+// Helper function to get value at lat/lng from georaster
+const getValueAtLatLng = (georaster: any, lat: number, lng: number) => {
+  // Calculate pixel coordinates
+  const x = Math.floor((lng - georaster.xmin) / georaster.pixelWidth);
+  const y = Math.floor((georaster.ymax - lat) / georaster.pixelHeight);
+
+  // Check if coordinates are within bounds
+  if (x < 0 || x >= georaster.width || y < 0 || y >= georaster.height) {
+    return null;
+  }
+
+  // Get value from the 2D array
+  return georaster.values[0][y][x];
+};
+
 const ActiveMonthlyMapLayer: FC = () => {
   const map = useMap();
-  const [geoTiffLayer, setGeoTiffLayer] = useState<Layer | null>(null);
+  const [previewJobId, setPreviewJobId] = useState<string>("");
+  const [geoTiffLayer, setGeoTiffLayer] = useState<GeoRasterLayer | null>(null);
+  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
 
   // Get preview state from currentJobStore
   const showPreview = useCurrentJobStore((state) => state.showPreview);
+  const setShowPreview = useCurrentJobStore((state) => state.setShowPreview);
   const previewMonth = useCurrentJobStore((state) => state.previewMonth);
+  const setPreviewMonth = useCurrentJobStore((state) => state.setPreviewMonth);
   const previewYear = useCurrentJobStore((state) => state.previewYear);
+  const setPreviewYear = useCurrentJobStore((state) => state.setPreviewYear);
   const previewVariable = useCurrentJobStore((state) => state.previewVariable);
+  const setPreviewVariable = useCurrentJobStore((state) => state.setPreviewVariable);
   const fetchMonthlyGeojson = useCurrentJobStore((state) => state.fetchMonthlyGeojson);
-
-  //   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
+  const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
+  const activeJob = useStore((state) => state.activeJob);
 
   useEffect(() => {
-    // Clean up previous layer when component unmounts or showPreview changes
+    if (activeJob?.id !== previewJobId) {
+      setPreviewJobId(activeJob?.id || "");
+      setPreviewMonth(1);
+      setPreviewYear(activeJob?.start_year || null);
+      setPreviewVariable("ET");
+      setShowPreview(false);
+      setGeoTiffLayer(null);
+      setAvailableDays([]);
+    }
+  }, [activeJob, previewJobId, setPreviewMonth, setPreviewYear, setPreviewVariable, setShowPreview, setAvailableDays]);
+
+  useEffect(() => {
+    // Clean up previous layer and tooltip when component unmounts or showPreview changes
     return () => {
       if (geoTiffLayer) {
         map.removeLayer(geoTiffLayer);
         setGeoTiffLayer(null);
       }
+      if (tooltip) {
+        map.removeLayer(tooltip);
+        setTooltip(null);
+      }
     };
-  }, [map, geoTiffLayer]);
+  }, [map, geoTiffLayer, tooltip]);
 
   useEffect(() => {
     const loadGeoTiff = async () => {
@@ -81,6 +121,12 @@ const ActiveMonthlyMapLayer: FC = () => {
         setGeoTiffLayer(null);
       }
 
+      // Remove existing tooltip if any
+      if (tooltip) {
+        map.removeLayer(tooltip);
+        setTooltip(null);
+      }
+
       // Only proceed if preview is enabled and we have all required data
       if (!showPreview || !previewMonth || !previewYear || !previewVariable) {
         return;
@@ -88,7 +134,7 @@ const ActiveMonthlyMapLayer: FC = () => {
 
       try {
         // Fetch the GeoTIFF data
-        const arrayBuffer = await fetchMonthlyGeojson(previewVariable);
+        const arrayBuffer = await fetchMonthlyGeojson();
 
         if (!arrayBuffer) {
           console.error("Failed to fetch GeoTIFF data");
@@ -118,17 +164,41 @@ const ActiveMonthlyMapLayer: FC = () => {
             const normalizedValue = (value - minValue) / (maxValue - minValue);
             return getInterpolatedColor(normalizedValue, colormap);
           },
-          //   mask: loadedGeoJSON,
-          //   mask_strategy: "outside",
-          debugLevel: 0,
-        }) as unknown as Layer;
+          debugLevel: 1, // Increase debug level
+        }) as unknown as GeoRasterLayer;
 
-        // Add the layer to the map
+        // Create tooltip
+        const newTooltip = new Tooltip({
+          permanent: false,
+          direction: "top",
+          offset: [0, -10],
+          className: "custom-tooltip",
+        });
+
+        // Add the layer to the map first
         layer.addTo(map);
-        setGeoTiffLayer(layer);
+        // Add mouse move handler to update tooltip
+        map.on("mousemove", (e: LeafletMouseEvent) => {
+          const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
+          if (value !== null && value !== undefined) {
+            const units = previewYear && Number(previewYear) < OPENET_TRANSITION_DATE ? "mm/day" : "mm/month";
+            newTooltip
+              .setLatLng(e.latlng)
+              .setContent(`${previewVariable}: ${value.toFixed(2)} ${units}`)
+              .openOn(map);
+          } else {
+            newTooltip.close();
+          }
+        });
 
-        // Fit map bounds to the layer
-        // @ts-expect-error - Ignoring type error for getBounds method
+        // Close tooltip on mouse out
+        map.on("mouseout", () => {
+          newTooltip.close();
+        });
+
+        setGeoTiffLayer(layer);
+        setTooltip(newTooltip);
+
         map.fitBounds(layer.getBounds());
       } catch (error) {
         console.error("Error loading GeoTIFF:", error);
