@@ -4,18 +4,26 @@ import Leaflet from "leaflet";
 import useStore, { MapLayer } from "../utils/store";
 import { area as turfArea } from "@turf/turf";
 import { MAP_LAYER_OPTIONS } from "../utils/constants";
+import type { Feature } from "geojson";
+
+interface ExtendedLayer extends Leaflet.Layer {
+  labelMarker?: Leaflet.Marker;
+  getBounds(): Leaflet.LatLngBounds;
+}
 
 const GeoJSONLayer = ({
   data,
   validateBounds = true,
   fitToBounds = true,
+  showLabels = false,
 }: {
   data: any;
   validateBounds?: boolean;
   fitToBounds?: boolean;
+  showLabels?: boolean;
 }) => {
   const map = useMap();
-  const layerRef = useRef<any>(null);
+  const layerRef = useRef<Leaflet.GeoJSON | null>(null);
 
   const minimumValidArea = useStore((state) => state.minimumValidArea);
   const maximumValidArea = useStore((state) => state.maximumValidArea);
@@ -28,10 +36,30 @@ const GeoJSONLayer = ({
     }
 
     if (data && Object.keys(data).length > 0) {
-      let area = turfArea(data);
+      const area = turfArea(data);
 
-      let isValidArea = !validateBounds || (area >= minimumValidArea && area <= maximumValidArea);
-      const geoJsonLayer = new Leaflet.GeoJSON(data);
+      const isValidArea = !validateBounds || (area >= minimumValidArea && area <= maximumValidArea);
+      const geoJsonLayer = new Leaflet.GeoJSON(data, {
+        onEachFeature: (feature: Feature, layer: ExtendedLayer) => {
+          if (showLabels && feature.properties) {
+            // Prefer NAMELSAD over NAME
+            let nameKey = Object.keys(feature.properties).find((key) => key.toLowerCase() === "namelsad");
+            if (!nameKey) {
+              nameKey = Object.keys(feature.properties).find((key) => key.toLowerCase().includes("name"));
+            }
+
+            if (nameKey && feature.properties[nameKey]) {
+              layer.bindTooltip(feature.properties[nameKey], {
+                direction: "top",
+                offset: [0, -10],
+                className: "geojson-label",
+                permanent: false,
+                sticky: true,
+              });
+            }
+          }
+        },
+      });
 
       // Add metadata to the layer
       if (!isValidArea) {
@@ -57,7 +85,7 @@ const GeoJSONLayer = ({
         map.removeLayer(layerRef.current);
       }
     };
-  }, [data, map, minimumValidArea, mapLayerKey]);
+  }, [data, map, minimumValidArea, mapLayerKey, showLabels]);
 
   return null;
 };

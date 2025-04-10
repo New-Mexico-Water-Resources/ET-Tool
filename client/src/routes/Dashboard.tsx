@@ -310,7 +310,7 @@ const Dashboard = () => {
         )}
         {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
         {visibleReferenceGeoJSONs.map((layer) => (
-          <GeoJSONLayer key={layer.name} data={layer.data} validateBounds={false} fitToBounds={false} />
+          <GeoJSONLayer key={layer.name} data={layer.data} validateBounds={false} fitToBounds={false} showLabels={true} />
         ))}
         <GeoJSONLayer data={loadedGeoJSON} />
         <MultiGeoJSONLayer data={multipolygons} locations={locations} />
