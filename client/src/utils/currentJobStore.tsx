@@ -108,7 +108,7 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
       }
 
       const response = await axiosInstance.get(
-        `${API_URL}/historical/monthly_geojson?key=${activeJob.key}&month=${month}&year=${year}&variable=${previewVariable}`,
+        `${API_URL}/historical/monthly?key=${activeJob.key}&month=${month}&year=${year}&variable=${previewVariable}`,
         { responseType: "arraybuffer" }
       );
 
