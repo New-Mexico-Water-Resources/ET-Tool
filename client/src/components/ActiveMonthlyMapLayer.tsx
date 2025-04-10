@@ -268,6 +268,22 @@ const ActiveMonthlyMapLayer: FC = () => {
       // Set loading state
       setIsLoading(true);
 
+      // Clean up existing tooltips and event listeners before loading new data
+      if (tooltipRef.current) {
+        map.removeLayer(tooltipRef.current);
+        tooltipRef.current = null;
+      }
+
+      if (mousemoveHandlerRef.current) {
+        map.off("mousemove", mousemoveHandlerRef.current);
+        mousemoveHandlerRef.current = null;
+      }
+
+      if (mouseoutHandlerRef.current) {
+        map.off("mouseout", mouseoutHandlerRef.current);
+        mouseoutHandlerRef.current = null;
+      }
+
       // Only proceed if preview is enabled and we have all required data
       if (!showPreview || !previewMonth || !previewYear || !previewVariable) {
         setIsLoading(false);
@@ -311,6 +327,11 @@ const ActiveMonthlyMapLayer: FC = () => {
 
         // Add mouse move handler to update tooltip
         const mousemoveHandler = (e: LeafletMouseEvent) => {
+          // Close any existing tooltips first
+          if (tooltipRef.current) {
+            tooltipRef.current.close();
+          }
+
           const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
 
           let variableName: string = previewVariable;
