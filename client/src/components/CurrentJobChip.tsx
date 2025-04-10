@@ -11,6 +11,8 @@ import {
   Slider,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import PauseIcon from "@mui/icons-material/Pause";
 import useStore, { JobStatus } from "../utils/store";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 
@@ -45,6 +47,7 @@ const CurrentJobChip = () => {
   const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const availableDays = useCurrentJobStore((state) => state.availableDays);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [sliderValue, setSliderValue] = useState<number>(0);
 
   const canPreview = useMemo(() => {
@@ -193,6 +196,29 @@ const CurrentJobChip = () => {
     },
     [activeJob?.start_year]
   );
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    if (isPlaying) {
+      intervalId = setInterval(() => {
+        setSliderValue((prevValue) => {
+          const nextValue = prevValue + 1;
+          if (nextValue >= totalMonths) {
+            setIsPlaying(false);
+            return 0;
+          }
+          return nextValue;
+        });
+      }, 300);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isPlaying, totalMonths]);
 
   return (
     <>
@@ -370,16 +396,21 @@ const CurrentJobChip = () => {
             </div>
             {canPreview && (
               <div style={{ padding: "0 16px" }}>
-                <Slider
-                  value={sliderValue}
-                  min={0}
-                  max={totalMonths - 1}
-                  onChange={handleSliderChange}
-                  valueLabelDisplay="auto"
-                  valueLabelFormat={valueLabelFormat}
-                  marks
-                  sx={{ color: "primary", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <IconButton onClick={() => setIsPlaying(!isPlaying)} size="small" sx={{ color: "primary.main" }}>
+                    {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+                  </IconButton>
+                  <Slider
+                    value={sliderValue}
+                    min={0}
+                    max={totalMonths - 1}
+                    onChange={handleSliderChange}
+                    valueLabelDisplay="auto"
+                    valueLabelFormat={valueLabelFormat}
+                    marks
+                    sx={{ color: "primary", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
+                  />
+                </div>
               </div>
             )}
             <Tooltip title={!canPreview ? `Select a variable and month/year to preview` : ""}>

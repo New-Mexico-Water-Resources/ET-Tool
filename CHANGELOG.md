@@ -2,6 +2,7 @@
 
 ### Features
 - Adds slider to view monthly data on the map for a given job
+  - Play button to animate through the months
 - Adds ability to view monthly data before 2008 on the map
 - Adds ability to download all GeoTIFFs for a given job
 - Tooltips for New Mexico Counties reference layer

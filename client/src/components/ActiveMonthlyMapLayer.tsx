@@ -343,7 +343,14 @@ const ActiveMonthlyMapLayer: FC = () => {
             const units = "mm/month";
             newTooltip
               .setLatLng(e.latlng)
-              .setContent(`${variableName}: ${value.toFixed(2)} ${units}`)
+              .setContent(
+                `<div style="text-align: center">${activeJob?.name} (${new Date(
+                  Number(previewYear),
+                  Number(previewMonth) - 1
+                ).toLocaleString("default", {
+                  month: "short",
+                })} ${previewYear})<br><b>${variableName}: ${value.toFixed(2)} ${units}</b></div>`
+              )
               .openOn(map);
           } else {
             newTooltip.close();
