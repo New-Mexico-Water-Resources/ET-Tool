@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMap } from "react-leaflet";
 import Leaflet from "leaflet";
 import useStore, { MapLayer } from "../utils/store";
 import { area as turfArea } from "@turf/turf";
-import { MAP_LAYER_OPTIONS } from "../utils/constants";
+import { MAP_LAYER_OPTIONS, DROUGHT_MONITOR_METADATA } from "../utils/constants";
 import type { Feature } from "geojson";
-
+import axios from "axios";
 interface ExtendedLayer extends Leaflet.Layer {
   labelMarker?: Leaflet.Marker;
   getBounds(): Leaflet.LatLngBounds;
@@ -16,11 +16,13 @@ const GeoJSONLayer = ({
   validateBounds = true,
   fitToBounds = true,
   showLabels = false,
+  isDroughtMonitor = false,
 }: {
-  data: any;
+  data?: any;
   validateBounds?: boolean;
   fitToBounds?: boolean;
   showLabels?: boolean;
+  isDroughtMonitor?: boolean;
 }) => {
   const map = useMap();
   const layerRef = useRef<Leaflet.GeoJSON | null>(null);
@@ -30,22 +32,50 @@ const GeoJSONLayer = ({
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayer = useMemo(() => (MAP_LAYER_OPTIONS as any)[mapLayerKey] as MapLayer, [mapLayerKey]);
 
+  const layerData = useMemo(() => {
+    if (data) {
+      if (isDroughtMonitor) {
+        return (data?.features || []).map((feature: any, index: number) => {
+          const category = DROUGHT_MONITOR_METADATA[index].category;
+          const color = DROUGHT_MONITOR_METADATA[index].color;
+          const label = DROUGHT_MONITOR_METADATA[index].label;
+          return { ...feature, properties: { ...feature.properties, color, category, label } };
+        });
+      }
+
+      return data;
+    } else {
+      return {};
+    }
+  }, [data, isDroughtMonitor]);
+
   useEffect(() => {
     if (layerRef.current) {
       map.removeLayer(layerRef.current);
     }
 
-    if (data && Object.keys(data).length > 0) {
-      const area = turfArea(data);
+    if (layerData && Object.keys(layerData).length > 0) {
+      const area = isDroughtMonitor ? 0 : turfArea(layerData);
 
       const isValidArea = !validateBounds || (area >= minimumValidArea && area <= maximumValidArea);
-      const geoJsonLayer = new Leaflet.GeoJSON(data, {
+      const geoJsonLayer = new Leaflet.GeoJSON(layerData, {
         onEachFeature: (feature: Feature, layer: ExtendedLayer) => {
+          if (isDroughtMonitor && feature.properties?.color) {
+            (layer as any).setStyle({
+              fillColor: feature.properties.color,
+              color: feature.properties.color,
+              fillOpacity: 0.5,
+              weight: 1,
+            });
+          }
+
           if (showLabels && feature.properties) {
-            // Prefer NAMELSAD over NAME
-            let nameKey = Object.keys(feature.properties).find((key) => key.toLowerCase() === "namelsad");
-            if (!nameKey) {
-              nameKey = Object.keys(feature.properties).find((key) => key.toLowerCase().includes("name"));
+            let nameKey = "label";
+            if (!isDroughtMonitor) {
+              nameKey = Object.keys(feature.properties).find((key) => key.toLowerCase() === "namelsad") || "";
+              if (!nameKey) {
+                nameKey = Object.keys(feature.properties).find((key) => key.toLowerCase().includes("name")) || "";
+              }
             }
 
             if (nameKey && feature.properties[nameKey]) {
@@ -85,7 +115,7 @@ const GeoJSONLayer = ({
         map.removeLayer(layerRef.current);
       }
     };
-  }, [data, map, minimumValidArea, mapLayerKey, showLabels]);
+  }, [data, map, minimumValidArea, mapLayerKey, showLabels, isDroughtMonitor]);
 
   return null;
 };

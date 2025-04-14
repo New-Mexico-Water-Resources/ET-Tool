@@ -14,6 +14,7 @@ import {
   RadioGroup,
   Select,
   Typography,
+  CircularProgress,
 } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -33,7 +34,7 @@ const MapLayersPanel: FC = () => {
   const showARDTiles = useStore((state) => state.showARDTiles);
   const toggleARDTiles = useStore((state) => state.toggleARDTiles);
 
-  const referenceLayerOptions = Object.keys(REFERENCE_GEOJSONS);
+  const referenceLayerOptions = useMemo(() => Object.keys(REFERENCE_GEOJSONS), []);
   const [visibleReferenceLayers, setVisibleReferenceLayers] = useStore((state) => [
     state.visibleReferenceLayers,
     state.setVisibleReferenceLayers,
@@ -59,6 +60,8 @@ const MapLayersPanel: FC = () => {
   const [comparisonMode, setComparisonMode] = useStore((state) => [state.comparisonMode, state.setComparisonMode]);
   const [tempComparisonMode, setTempComparisonMode] = useState<string | undefined>(comparisonMode || "absolute");
 
+  const fetchingDroughtMonitorData = useStore((state) => state.fetchingDroughtMonitorData);
+  const droughtMonitorData = useStore((state) => state.droughtMonitorData);
   const updateSettings = () => {
     if (tempTileDate) {
       setTileDate(tempTileDate);
@@ -178,8 +181,24 @@ const MapLayersPanel: FC = () => {
                 checked={visibleReferenceLayers.includes(layer)}
                 style={{ padding: 0, marginRight: "4px", marginLeft: "4px" }}
               />
-              <Typography variant="body2" style={{ color: "var(--st-gray-30)", fontSize: "12px" }}>
+              <Typography
+                variant="body2"
+                style={{
+                  color: "var(--st-gray-30)",
+                  fontSize: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
                 {layer}
+                {(REFERENCE_GEOJSONS as any)?.[layer]?.droughtMonitor &&
+                  fetchingDroughtMonitorData &&
+                  !Object.keys(droughtMonitorData).length && (
+                    <span style={{ color: "var(--st-gray-30)", fontSize: "12px", display: "flex", alignItems: "center" }}>
+                      <CircularProgress size={12} sx={{ color: "white" }} />
+                    </span>
+                  )}
               </Typography>
             </div>
           ))}

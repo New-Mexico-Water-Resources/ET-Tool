@@ -179,7 +179,7 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   },
 
   downloadGeojson: async (jobId: string, name: string) => {
-    const { activeJob, authAxios } = useStore.getState();
+    const { authAxios } = useStore.getState();
 
     const axiosInstance = authAxios();
 

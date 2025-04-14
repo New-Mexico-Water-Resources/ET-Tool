@@ -204,6 +204,10 @@ interface Store {
   setMaximumBaseMapColorBound: (maximumBaseMapColorBound: number) => void;
   comparisonMode: string;
   setComparisonMode: (comparisonMode: string) => void;
+  droughtMonitorData: any;
+  fetchDroughtMonitorData: () => void;
+  droughtMonitorFetchedDate: string;
+  fetchingDroughtMonitorData: boolean;
 }
 
 const useStore = create<Store>()(
@@ -556,13 +560,13 @@ const useStore = create<Store>()(
         }
       },
       loadJob: (job) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
 
-        let escapedName = encodeURIComponent(job.name);
-        let escapedKey = encodeURIComponent(job.key);
+        const escapedName = encodeURIComponent(job.name);
+        const escapedKey = encodeURIComponent(job.key);
         axiosInstance
           .get(`${API_URL}/geojson?name=${escapedName}&key=${escapedKey}`)
           .then((response) => {
@@ -988,6 +992,42 @@ const useStore = create<Store>()(
       setMaximumBaseMapColorBound: (maximumBaseMapColorBound) => set({ maximumBaseMapColorBound }),
       comparisonMode: "absolute",
       setComparisonMode: (comparisonMode) => set({ comparisonMode }),
+      droughtMonitorData: {},
+      droughtMonitorFetchedDate: "",
+      fetchingDroughtMonitorData: false,
+      fetchDroughtMonitorData: () => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        set({ fetchingDroughtMonitorData: true });
+
+        const existingData = get().droughtMonitorData;
+        // Check if data is already cached
+        if (existingData && Object.keys(existingData).length > 0 && get().droughtMonitorFetchedDate) {
+          const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
+          if (new Date(get().droughtMonitorFetchedDate) > oneHourAgo) {
+            return;
+          }
+        }
+
+        axiosInstance
+          .get(`${API_URL}/auxiliary/drought-monitor`)
+          .then((response) => {
+            set({
+              droughtMonitorData: response.data,
+              droughtMonitorFetchedDate: new Date().toISOString(),
+              fetchingDroughtMonitorData: false,
+            });
+          })
+          .catch((error) => {
+            set({
+              errorMessage: error?.response?.data || error?.message || "Error fetching drought monitor data",
+              fetchingDroughtMonitorData: false,
+            });
+          });
+      },
     })),
     {
       name: "et-visualizer-state",

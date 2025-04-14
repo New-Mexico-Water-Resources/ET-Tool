@@ -36,7 +36,19 @@ export const REFERENCE_GEOJSONS = {
     name: "New Mexico",
     data: nm_counties_geojson,
   },
+  "New Mexico (US Drought Monitor)": {
+    name: "New Mexico US Drought Monitor",
+    droughtMonitor: true,
+  },
 };
+
+export const DROUGHT_MONITOR_METADATA = [
+  { color: "#FFFF00", category: "D0", label: "Abnormally Dry" },
+  { color: "#FCD37F", category: "D1", label: "Moderate Drought" },
+  { color: "#FFAA00", category: "D2", label: "Severe Drought" },
+  { color: "#E60000", category: "D3", label: "Extreme Drought" },
+  { color: "#730000", category: "D4", label: "Exceptional Drought" },
+];
 
 export const MAP_LAYER_OPTIONS = {
   "Google Satellite": {
