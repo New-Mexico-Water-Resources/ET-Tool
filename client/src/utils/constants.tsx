@@ -36,8 +36,8 @@ export const REFERENCE_GEOJSONS = {
     name: "New Mexico",
     data: nm_counties_geojson,
   },
-  "New Mexico (US Drought Monitor)": {
-    name: "New Mexico US Drought Monitor",
+  "US Drought Monitor": {
+    name: "US Drought Monitor",
     droughtMonitor: true,
   },
 };
