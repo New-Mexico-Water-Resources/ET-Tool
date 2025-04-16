@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from "react";
+import { FC, useEffect, useState, useRef, useCallback } from "react";
 import { useMap } from "react-leaflet";
 // @ts-expect-error - No type definitions available
 import parseGeoraster from "georaster";
@@ -10,6 +10,32 @@ import { Tooltip, LeafletMouseEvent } from "leaflet";
 import useStore from "../utils/store";
 
 import { OPENET_TRANSITION_DATE } from "../utils/constants";
+
+// Add CSS to disable transitions on Leaflet layers
+const style = document.createElement("style");
+style.textContent = `
+  .active-monthly-map-layer .leaflet-tile {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transition: none !important;
+  }
+`;
+document.head.appendChild(style);
+
+// Add CSS for crossfade effect
+const styleCrossfade = document.createElement("style");
+styleCrossfade.textContent = `
+  .active-monthly-map-layer {
+    transition: opacity 0.3s ease-in-out !important;
+  }
+  .active-monthly-map-layer.fade-out {
+    opacity: 0 !important;
+  }
+  .active-monthly-map-layer.fade-in {
+    opacity: 1 !important;
+  }
+`;
+document.head.appendChild(styleCrossfade);
 
 // Helper function to convert hex to RGB
 const hexToRgb = (hex: string) => {
@@ -53,8 +79,18 @@ const getInterpolatedColor = (value: number, colormap: string[]) => {
   return interpolateColors(colormap[lowerIndex], colormap[upperIndex], factor);
 };
 
+interface GeoRaster {
+  xmin: number;
+  ymax: number;
+  pixelWidth: number;
+  pixelHeight: number;
+  width: number;
+  height: number;
+  values: number[][][];
+}
+
 // Helper function to get value at lat/lng from georaster
-const getValueAtLatLng = (georaster: any, lat: number, lng: number) => {
+const getValueAtLatLng = (georaster: GeoRaster, lat: number, lng: number) => {
   // Calculate pixel coordinates
   const x = Math.floor((lng - georaster.xmin) / georaster.pixelWidth);
   const y = Math.floor((georaster.ymax - lat) / georaster.pixelHeight);
@@ -71,8 +107,14 @@ const getValueAtLatLng = (georaster: any, lat: number, lng: number) => {
 const ActiveMonthlyMapLayer: FC = () => {
   const map = useMap();
   const [previewJobId, setPreviewJobId] = useState<string>("");
-  const [geoTiffLayer, setGeoTiffLayer] = useState<GeoRasterLayer | null>(null);
-  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const layerRef = useRef<GeoRasterLayer | null>(null);
+  const tooltipRef = useRef<Tooltip | null>(null);
+  const mousemoveHandlerRef = useRef<((e: LeafletMouseEvent) => void) | null>(null);
+  const mouseoutHandlerRef = useRef<(() => void) | null>(null);
+  const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get preview state from currentJobStore
   const showPreview = useCurrentJobStore((state) => state.showPreview);
@@ -87,6 +129,90 @@ const ActiveMonthlyMapLayer: FC = () => {
   const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
   const activeJob = useStore((state) => state.activeJob);
 
+  // Clean up function to remove all layers and event listeners
+  const cleanupLayers = useCallback(() => {
+    // Clear any pending fade timeouts
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+      fadeTimeoutRef.current = null;
+    }
+
+    // Remove existing layer if any
+    if (layerRef.current) {
+      map.removeLayer(layerRef.current);
+      layerRef.current = null;
+    }
+
+    // Remove existing tooltip if any
+    if (tooltipRef.current) {
+      map.removeLayer(tooltipRef.current);
+      tooltipRef.current = null;
+    }
+
+    // Remove event listeners
+    if (mousemoveHandlerRef.current) {
+      map.off("mousemove", mousemoveHandlerRef.current);
+      mousemoveHandlerRef.current = null;
+    }
+
+    if (mouseoutHandlerRef.current) {
+      map.off("mouseout", mouseoutHandlerRef.current);
+      mouseoutHandlerRef.current = null;
+    }
+  }, [map]);
+
+  // Function to create a new layer with crossfade
+  const createLayerWithCrossfade = async (georaster: GeoRaster, minValue: number, maxValue: number, colormap: string[]) => {
+    // Create the new layer
+    const newLayer = new GeoRasterLayer({
+      georaster: georaster,
+      opacity: 0,
+      resolution: 256,
+      pixelValuesToColorFn: (value: number) => {
+        const normalizedValue = (value - minValue) / (maxValue - minValue);
+        return getInterpolatedColor(normalizedValue, colormap);
+      },
+      debugLevel: 1,
+      transition: false,
+      noWrap: true,
+      zIndex: 1,
+      useCanvas: true,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
+      updateWhenMoving: false,
+      className: "active-monthly-map-layer fade-in",
+    }) as unknown as GeoRasterLayer;
+
+    // Add the new layer to the map
+    newLayer.addTo(map);
+
+    // If there's an existing layer, fade it out
+    if (layerRef.current) {
+      const oldLayer = layerRef.current;
+      const oldLayerElement = oldLayer.getContainer();
+
+      if (oldLayerElement) {
+        // Add fade-out class to old layer
+        oldLayerElement.classList.add("fade-out");
+
+        // After fade-out completes, remove the old layer
+        fadeTimeoutRef.current = setTimeout(() => {
+          map.removeLayer(oldLayer);
+        }, 300);
+      } else {
+        // If no element found, just remove the layer
+        map.removeLayer(oldLayer);
+      }
+    }
+
+    // Fade in the new layer
+    setTimeout(() => {
+      newLayer.setOpacity(1);
+    }, 10);
+
+    return newLayer;
+  };
+
   useEffect(() => {
     if (activeJob?.id !== previewJobId) {
       setPreviewJobId(activeJob?.id || "");
@@ -94,41 +220,73 @@ const ActiveMonthlyMapLayer: FC = () => {
       setPreviewYear(activeJob?.start_year || null);
       setPreviewVariable("ET");
       setShowPreview(false);
-      setGeoTiffLayer(null);
+      cleanupLayers();
       setAvailableDays([]);
     }
   }, [activeJob, previewJobId, setPreviewMonth, setPreviewYear, setPreviewVariable, setShowPreview, setAvailableDays]);
 
   useEffect(() => {
-    // Clean up previous layer and tooltip when component unmounts or showPreview changes
+    // Clean up when component unmounts
     return () => {
-      if (geoTiffLayer) {
-        map.removeLayer(geoTiffLayer);
-        setGeoTiffLayer(null);
+      cleanupLayers();
+
+      // Clean up any pending operations
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
-      if (tooltip) {
-        map.removeLayer(tooltip);
-        setTooltip(null);
+
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
       }
     };
-  }, [map, geoTiffLayer, tooltip]);
+  }, [map]);
+
+  // Add a new useEffect to handle tooltip visibility when showPreview changes
+  useEffect(() => {
+    if (!showPreview) {
+      cleanupLayers();
+    }
+  }, [showPreview, cleanupLayers]);
 
   useEffect(() => {
     const loadGeoTiff = async () => {
-      // Remove existing layer if any
-      if (geoTiffLayer) {
-        map.removeLayer(geoTiffLayer);
-        setGeoTiffLayer(null);
+      // If already loading, cancel the previous request
+      if (isLoading) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+        }
       }
 
-      // Remove existing tooltip if any
-      if (tooltip) {
-        map.removeLayer(tooltip);
-        setTooltip(null);
+      // Create a new abort controller for this request
+      abortControllerRef.current = new AbortController();
+
+      // Set loading state
+      setIsLoading(true);
+
+      // Clean up existing tooltips and event listeners before loading new data
+      if (tooltipRef.current) {
+        map.removeLayer(tooltipRef.current);
+        tooltipRef.current = null;
+      }
+
+      if (mousemoveHandlerRef.current) {
+        map.off("mousemove", mousemoveHandlerRef.current);
+        mousemoveHandlerRef.current = null;
+      }
+
+      if (mouseoutHandlerRef.current) {
+        map.off("mouseout", mouseoutHandlerRef.current);
+        mouseoutHandlerRef.current = null;
       }
 
       // Only proceed if preview is enabled and we have all required data
       if (!showPreview || !previewMonth || !previewYear || !previewVariable) {
+        setIsLoading(false);
         return;
       }
 
@@ -138,6 +296,7 @@ const ActiveMonthlyMapLayer: FC = () => {
 
         if (!arrayBuffer) {
           console.error("Failed to fetch GeoTIFF data");
+          setIsLoading(false);
           return;
         }
 
@@ -155,17 +314,8 @@ const ActiveMonthlyMapLayer: FC = () => {
           maxValue = Math.max(maxValue, 300);
         }
 
-        // Create the GeoRasterLayer
-        const layer = new GeoRasterLayer({
-          georaster: georaster,
-          opacity: 1,
-          resolution: 256,
-          pixelValuesToColorFn: (value: number) => {
-            const normalizedValue = (value - minValue) / (maxValue - minValue);
-            return getInterpolatedColor(normalizedValue, colormap);
-          },
-          debugLevel: 1, // Increase debug level
-        }) as unknown as GeoRasterLayer;
+        // Create the new layer with crossfade
+        const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap);
 
         // Create tooltip
         const newTooltip = new Tooltip({
@@ -175,10 +325,13 @@ const ActiveMonthlyMapLayer: FC = () => {
           className: "custom-tooltip",
         });
 
-        // Add the layer to the map first
-        layer.addTo(map);
         // Add mouse move handler to update tooltip
-        map.on("mousemove", (e: LeafletMouseEvent) => {
+        const mousemoveHandler = (e: LeafletMouseEvent) => {
+          // Close any existing tooltips first
+          if (tooltipRef.current) {
+            tooltipRef.current.close();
+          }
+
           const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
 
           let variableName: string = previewVariable;
@@ -187,34 +340,62 @@ const ActiveMonthlyMapLayer: FC = () => {
           }
 
           if (value !== null && value !== undefined) {
-            const units = previewYear && Number(previewYear) < OPENET_TRANSITION_DATE ? "mm/day" : "mm/month";
+            const units = "mm/month";
             newTooltip
               .setLatLng(e.latlng)
-              .setContent(`${variableName}: ${value.toFixed(2)} ${units}`)
+              .setContent(
+                `<div style="text-align: center">${activeJob?.name} (${new Date(
+                  Number(previewYear),
+                  Number(previewMonth) - 1
+                ).toLocaleString("default", {
+                  month: "short",
+                })} ${previewYear})<br><b>${variableName}: ${value.toFixed(2)} ${units}</b></div>`
+              )
               .openOn(map);
           } else {
             newTooltip.close();
           }
-        });
+        };
+
+        // Add mouse move handler
+        map.on("mousemove", mousemoveHandler);
 
         // Close tooltip on mouse out
-        map.on("mouseout", () => {
+        const mouseoutHandler = () => {
           newTooltip.close();
-        });
+        };
 
-        setGeoTiffLayer(layer);
-        setTooltip(newTooltip);
+        map.on("mouseout", mouseoutHandler);
 
-        map.fitBounds(layer.getBounds());
-      } catch (error) {
-        console.error("Error loading GeoTIFF:", error);
+        // Store references to the current layer and handlers
+        layerRef.current = layer;
+        tooltipRef.current = newTooltip;
+        mousemoveHandlerRef.current = mousemoveHandler;
+        mouseoutHandlerRef.current = mouseoutHandler;
+      } catch (error: unknown) {
+        const err = error as Error;
+        if (err.name === "AbortError") {
+          console.log("Fetch aborted");
+        } else {
+          console.error("Error loading GeoTIFF:", err);
+        }
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    loadGeoTiff();
+    // Debounce the loadGeoTiff function to prevent rapid consecutive calls
+    loadTimeoutRef.current = setTimeout(() => {
+      loadGeoTiff();
+    }, 20);
+
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+    };
   }, [showPreview, previewMonth, previewYear, previewVariable, map, fetchMonthlyGeojson]);
 
-  // This component doesn't render anything directly
   return null;
 };
 

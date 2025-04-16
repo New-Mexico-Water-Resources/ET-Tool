@@ -23,6 +23,10 @@ export const OPENET_TRANSITION_DATE = 2008;
 export const ET_COLORMAP = ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"];
 export const DIFF_COLORMAP = ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"];
 
+export const ALL_VARIABLE_OPTIONS = ["ET", "ET_MIN", "ET_MAX", "PET", "PPT"];
+export const PRE_OPENET_VARIABLE_OPTIONS = ["ET", "PET", "PPT"];
+export const POST_OPENET_VARIABLE_OPTIONS = ["ET", "PET", "PPT", "ET_MIN", "ET_MAX"];
+
 export const REFERENCE_GEOJSONS = {
   "New Mexico (State Boundary)": {
     name: "New Mexico",
@@ -32,7 +36,19 @@ export const REFERENCE_GEOJSONS = {
     name: "New Mexico",
     data: nm_counties_geojson,
   },
+  "US Drought Monitor": {
+    name: "US Drought Monitor",
+    droughtMonitor: true,
+  },
 };
+
+export const DROUGHT_MONITOR_METADATA = [
+  { color: "#FFFF00", category: "D0", label: "Abnormally Dry" },
+  { color: "#FCD37F", category: "D1", label: "Moderate Drought" },
+  { color: "#FFAA00", category: "D2", label: "Severe Drought" },
+  { color: "#E60000", category: "D3", label: "Extreme Drought" },
+  { color: "#730000", category: "D4", label: "Exceptional Drought" },
+];
 
 export const MAP_LAYER_OPTIONS = {
   "Google Satellite": {

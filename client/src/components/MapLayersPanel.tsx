@@ -3,7 +3,6 @@ import {
   Button,
   Checkbox,
   Divider,
-  FormControl,
   FormControlLabel,
   FormGroup,
   FormLabel,
@@ -15,8 +14,8 @@ import {
   RadioGroup,
   Select,
   Typography,
+  CircularProgress,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import axios from "axios";
@@ -26,9 +25,8 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import useStore, { MapLayer } from "../utils/store";
 
 import "../scss/MapLayersPanel.scss";
-import { API_URL, MAP_LAYER_OPTIONS, REFERENCE_GEOJSONS } from "../utils/constants";
+import { MAP_LAYER_OPTIONS, REFERENCE_GEOJSONS } from "../utils/constants";
 import dayjs from "dayjs";
-import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
 
 const MapLayersPanel: FC = () => {
   const isMapLayersPanelOpen = useStore((state) => state.isMapLayersPanelOpen);
@@ -36,7 +34,7 @@ const MapLayersPanel: FC = () => {
   const showARDTiles = useStore((state) => state.showARDTiles);
   const toggleARDTiles = useStore((state) => state.toggleARDTiles);
 
-  const referenceLayerOptions = Object.keys(REFERENCE_GEOJSONS);
+  const referenceLayerOptions = useMemo(() => Object.keys(REFERENCE_GEOJSONS), []);
   const [visibleReferenceLayers, setVisibleReferenceLayers] = useStore((state) => [
     state.visibleReferenceLayers,
     state.setVisibleReferenceLayers,
@@ -56,21 +54,14 @@ const MapLayersPanel: FC = () => {
   const maximumBaseMapColorBound = useStore((state) => state.maximumBaseMapColorBound);
 
   const [tempTileDate, setTempTileDate] = useState<string | undefined>(undefined);
-  const [tempMinimumBaseMapColorBound, setTempMinimumBaseMapColorBound] = useState<number | undefined>(-10);
-  const [tempMaximumBaseMapColorBound, setTempMaximumBaseMapColorBound] = useState<number | undefined>(10);
+  const [tempMinimumBaseMapColorBound, setTempMinimumBaseMapColorBound] = useState<number | undefined>(0);
+  const [tempMaximumBaseMapColorBound, setTempMaximumBaseMapColorBound] = useState<number | undefined>(200);
 
   const [comparisonMode, setComparisonMode] = useStore((state) => [state.comparisonMode, state.setComparisonMode]);
   const [tempComparisonMode, setTempComparisonMode] = useState<string | undefined>(comparisonMode || "absolute");
 
-  const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
-  const [showPreview, setShowPreview] = useCurrentJobStore((state) => [state.showPreview, state.setShowPreview]);
-  const [previewVariable, setPreviewVariable] = useCurrentJobStore((state) => [
-    state.previewVariable,
-    state.setPreviewVariable,
-  ]);
-  const [previewMonth, setPreviewMonth] = useCurrentJobStore((state) => [state.previewMonth, state.setPreviewMonth]);
-  const [previewYear, setPreviewYear] = useCurrentJobStore((state) => [state.previewYear, state.setPreviewYear]);
-
+  const fetchingDroughtMonitorData = useStore((state) => state.fetchingDroughtMonitorData);
+  const droughtMonitorData = useStore((state) => state.droughtMonitorData);
   const updateSettings = () => {
     if (tempTileDate) {
       setTileDate(tempTileDate);
@@ -190,8 +181,24 @@ const MapLayersPanel: FC = () => {
                 checked={visibleReferenceLayers.includes(layer)}
                 style={{ padding: 0, marginRight: "4px", marginLeft: "4px" }}
               />
-              <Typography variant="body2" style={{ color: "var(--st-gray-30)", fontSize: "12px" }}>
+              <Typography
+                variant="body2"
+                style={{
+                  color: "var(--st-gray-30)",
+                  fontSize: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
                 {layer}
+                {(REFERENCE_GEOJSONS as any)?.[layer]?.droughtMonitor &&
+                  fetchingDroughtMonitorData &&
+                  !Object.keys(droughtMonitorData).length && (
+                    <span style={{ color: "var(--st-gray-30)", fontSize: "12px", display: "flex", alignItems: "center" }}>
+                      <CircularProgress size={12} sx={{ color: "white" }} />
+                    </span>
+                  )}
               </Typography>
             </div>
           ))}
@@ -385,11 +392,11 @@ const MapLayersPanel: FC = () => {
                               >
                                 Target Date
                               </FormLabel>
-                              {latestAvailableDate && (
+                              {(latestAvailableDate || !option.refresh) && (
                                 <DatePicker
                                   sx={{ marginTop: "0", padding: 0 }}
                                   className="date-picker"
-                                  defaultValue={dayjs(latestAvailableDate)}
+                                  defaultValue={dayjs(!option.refresh ? undefined : latestAvailableDate)}
                                   value={dayjs(tempTileDate)}
                                   disableFuture={true}
                                   minDate={availableDates.length === 0 ? undefined : dayjs(availableDates[0])}

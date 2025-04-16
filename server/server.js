@@ -18,6 +18,7 @@ const user = require("./routes/user");
 const constants = require("./constants");
 const admin = require("./routes/admin/admin");
 const monthly_geojson = require("./routes/historical/monthly_geojson");
+const drought_monitor = require("./routes/auxiliary/drought_monitor");
 
 const { auth } = require("express-oauth2-jwt-bearer");
 
@@ -53,9 +54,6 @@ app.get(`${basePath}/`, (req, res) => {
   });
 });
 
-app.use(`${basePath}/`, download);
-app.use(`${basePath}/historical`, monthly_geojson);
-
 app.use(`${basePath}/`, verifyAuthToken, user);
 app.use(`${basePath}/`, verifyAuthToken, status);
 app.use(`${basePath}/`, verifyAuthToken, logs);
@@ -67,6 +65,9 @@ app.use(`${basePath}/`, verifyAuthToken, result);
 app.use(`${basePath}/`, verifyAuthToken, result_base64);
 app.use(`${basePath}/`, verifyAuthToken, start_run);
 app.use(`${basePath}/`, verifyAuthToken, runs);
+app.use(`${basePath}/`, verifyAuthToken, download);
+app.use(`${basePath}/historical`, verifyAuthToken, monthly_geojson);
+app.use(`${basePath}/auxiliary`, verifyAuthToken, drought_monitor);
 app.use(`${basePath}/queue`, verifyAuthToken, queue);
 app.post(`${basePath}/prepare_geojson`, prepare_geojson.upload.single("file"), prepare_geojson.prepareGeojson);
 

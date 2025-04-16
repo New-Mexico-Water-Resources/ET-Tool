@@ -45,6 +45,8 @@ const Dashboard = () => {
   const fetchARDTiles = useStore((state) => state.fetchARDTiles);
   const showARDTiles = useStore((state) => state.showARDTiles);
   const ardTiles = useStore((state) => state.ardTiles);
+  const fetchDroughtMonitorData = useStore((state) => state.fetchDroughtMonitorData);
+  const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
   const visibleReferenceLayers = useStore((state) => state.visibleReferenceLayers);
 
@@ -53,8 +55,16 @@ const Dashboard = () => {
       return [];
     }
 
-    return visibleReferenceLayers.map((layer) => (REFERENCE_GEOJSONS as any)?.[layer]);
-  }, [visibleReferenceLayers, REFERENCE_GEOJSONS]);
+    return visibleReferenceLayers.map(
+      (layer) => (REFERENCE_GEOJSONS as Record<string, { name: string; data?: any; droughtMonitor?: boolean }>)?.[layer]
+    );
+  }, [visibleReferenceLayers]);
+
+  useEffect(() => {
+    if (visibleReferenceGeoJSONs.some((layer) => layer.droughtMonitor)) {
+      fetchDroughtMonitorData();
+    }
+  }, [fetchDroughtMonitorData, visibleReferenceGeoJSONs]);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const tileDate = useStore((state) => state.tileDate);
@@ -310,7 +320,14 @@ const Dashboard = () => {
         )}
         {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
         {visibleReferenceGeoJSONs.map((layer) => (
-          <GeoJSONLayer key={layer.name} data={layer.data} validateBounds={false} fitToBounds={false} />
+          <GeoJSONLayer
+            key={layer.name}
+            data={layer.droughtMonitor ? droughtMonitorData : layer.data}
+            isDroughtMonitor={layer.droughtMonitor}
+            validateBounds={false}
+            fitToBounds={false}
+            showLabels={true}
+          />
         ))}
         <GeoJSONLayer data={loadedGeoJSON} />
         <MultiGeoJSONLayer data={multipolygons} locations={locations} />

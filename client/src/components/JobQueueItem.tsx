@@ -15,9 +15,9 @@ import MenuItem from "@mui/material/MenuItem";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 
 import { formatElapsedTime } from "../utils/helpers";
-
+import useCurrentJobStore from "../utils/currentJobStore";
 const JobProgressBar = ({ status }: { status: JobStatus }) => {
-  let estimatedPercentComplete = Math.max(Math.min(Math.round(status.estimatedPercentComplete * 1000) / 10, 100), 0);
+  const estimatedPercentComplete = Math.max(Math.min(Math.round(status.estimatedPercentComplete * 1000) / 10, 100), 0);
 
   let tooltipText = `Status: ${status.status || "N/A"}\nYears Processed: ${status.currentYear}/${
     status.totalYears
@@ -51,6 +51,8 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
   const deleteJob = useStore((state) => state.deleteJob);
   const loadJob = useStore((state) => state.loadJob);
   const downloadJob = useStore((state) => state.downloadJob);
+  const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
+  const downloadGeojson = useCurrentJobStore((state) => state.downloadGeojson);
   const restartJob = useStore((state) => state.restartJob);
   const pauseJob = useStore((state) => state.pauseJob);
   const resumeJob = useStore((state) => state.resumeJob);
@@ -59,13 +61,14 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
   const currentUserInfo = useStore((state) => state.userInfo);
   const canApproveJobs = useMemo(() => currentUserInfo?.permissions?.includes("write:jobs"), [currentUserInfo]);
   const canDeleteJobs = useMemo(() => {
-    let hasPermission = currentUserInfo?.permissions?.includes("write:jobs");
-    let isCurrentUserJobOwner = job?.user?.sub === currentUserInfo?.sub;
+    const hasPermission = currentUserInfo?.permissions?.includes("write:jobs");
+    const isCurrentUserJobOwner = job?.user?.sub === currentUserInfo?.sub;
     return hasPermission || isCurrentUserJobOwner;
   }, [currentUserInfo, job]);
   const canRestartJobs = useMemo(() => currentUserInfo?.permissions?.includes("write:jobs"), [currentUserInfo]);
   const canPauseJobs = useMemo(() => currentUserInfo?.permissions?.includes("write:jobs"), [currentUserInfo]);
   const isAdmin = useMemo(() => currentUserInfo?.permissions?.includes("write:admin"), [currentUserInfo]);
+  const setShowUploadDialog = useStore((state) => state.setShowUploadDialog);
 
   const isDownloadDisabled = useMemo(() => {
     return ["Pending", "In Progress", "WaitingApproval"].includes(job.status);
@@ -309,6 +312,8 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
             } else {
               loadJob(job);
             }
+
+            setShowUploadDialog(false);
           }}
         >
           Locate
@@ -362,7 +367,7 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
               color="text.secondary"
               sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
             >
-              Units
+              Report
             </Typography>
             <Divider />
             <MenuItem
@@ -373,7 +378,7 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
               }}
               disableRipple
             >
-              Download (mm/month)
+              Report (mm/month)
             </MenuItem>
             <MenuItem
               sx={{ backgroundColor: "var(--st-gray-80)" }}
@@ -383,7 +388,35 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
               }}
               disableRipple
             >
-              Download (in/month)
+              Report (in/month)
+            </MenuItem>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+            >
+              Map Data
+            </Typography>
+            <Divider />
+            <MenuItem
+              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              onClick={() => {
+                downloadGeojson(job.key, job.name);
+                setDownloadMenuOpen(false);
+              }}
+              disableRipple
+            >
+              GeoJSON
+            </MenuItem>
+            <MenuItem
+              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              onClick={() => {
+                downloadAllGeotiffs(job.key);
+                setDownloadMenuOpen(false);
+              }}
+              disableRipple
+            >
+              All GeoTIFFs
             </MenuItem>
           </Menu>
         </span>

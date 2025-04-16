@@ -1,3 +1,17 @@
+## 1.22.0 (2025-04-17)
+
+### Features
+- Adds slider to view monthly data on the map for a given job
+  - Play button to animate through the months
+- Adds ability to view monthly data before 2008 on the map
+- Adds ability to download all GeoTIFFs for a given job
+- Tooltips for New Mexico Counties reference layer
+
+### Bug Fixes
+- Moves downloading of all resources behind authentication to reduce server load
+- Fixes bug blocking target date from being changed for MODIS Terra True Color imagery
+- Closes New Job menu if "Locate" button is clicked from the queue
+
 ## 1.21.0 (2025-04-10)
 
 ### Features
