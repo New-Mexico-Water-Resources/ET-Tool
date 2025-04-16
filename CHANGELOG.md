@@ -1,4 +1,4 @@
-## 1.22.0 (LATEST)
+## 1.22.0 (2025-04-17)
 
 ### Features
 - Adds slider to view monthly data on the map for a given job
