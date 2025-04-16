@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "react-leaflet";
 import Leaflet from "leaflet";
 import useStore, { MapLayer } from "../utils/store";
 import { area as turfArea } from "@turf/turf";
 import { MAP_LAYER_OPTIONS, DROUGHT_MONITOR_METADATA } from "../utils/constants";
 import type { Feature } from "geojson";
-import axios from "axios";
 interface ExtendedLayer extends Leaflet.Layer {
   labelMarker?: Leaflet.Marker;
   getBounds(): Leaflet.LatLngBounds;
