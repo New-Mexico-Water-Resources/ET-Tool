@@ -21,6 +21,8 @@ import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
 import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
 import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS } from "../utils/constants";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -49,6 +51,9 @@ const CurrentJobChip = () => {
   const availableDays = useCurrentJobStore((state) => state.availableDays);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sliderValue, setSliderValue] = useState<number>(0);
+
+  const [showJobControls, setShowJobControls] = useState(false);
+  const [showProperties, setShowProperties] = useState(false);
 
   const canPreview = useMemo(() => {
     return !!previewYear && Number(previewYear) && !!previewMonth && Number(previewMonth);
@@ -158,7 +163,10 @@ const CurrentJobChip = () => {
   }, [activeJob?.loaded_geo_json]);
 
   const totalMonths = useMemo(() => {
-    if (!activeJob?.start_year || !activeJob?.end_year) return 0;
+    if (!activeJob?.start_year || !activeJob?.end_year) {
+      return 0;
+    }
+
     return (activeJob.end_year - activeJob.start_year + 1) * 12;
   }, [activeJob?.start_year, activeJob?.end_year]);
 
@@ -281,11 +289,24 @@ const CurrentJobChip = () => {
         )}
 
         {activeJob && activeJobProperties.length > 0 && (
-          <Typography variant="body1" style={{ color: "var(--st-gray-40)", marginTop: "8px" }}>
-            Properties:
-          </Typography>
+          <div
+            onClick={() => setShowProperties(!showProperties)}
+            style={{
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              borderBottom: !showProperties ? "1px solid var(--st-gray-70)" : "none",
+            }}
+          >
+            <IconButton sx={{ color: "var(--st-gray-40)" }}>
+              {!showProperties ? <ArrowRightIcon /> : <ArrowDropDownIcon />}
+            </IconButton>
+            <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
+              Properties
+            </Typography>
+          </div>
         )}
-        {activeJob && activeJobProperties.length > 0 && (
+        {showProperties && activeJob && activeJobProperties.length > 0 && (
           <div
             style={{
               maxHeight: "300px",
@@ -320,117 +341,149 @@ const CurrentJobChip = () => {
             Continue Editing
           </Button>
         )}
-        {activeJob && activeJob.status === "Complete" && (
+        <div className="job-controls-container">
           <div
+            className="job-controls-header"
+            onClick={() => setShowJobControls(!showJobControls)}
             style={{
+              cursor: "pointer",
               display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              backgroundColor: "var(--st-gray-90)",
-              zIndex: 1000,
-              borderRadius: "8px",
-              marginBottom: 16,
-              marginTop: 16,
+              alignItems: "center",
             }}
           >
-            <div style={{ display: "flex", gap: "8px" }}>
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel size="small">Variable</InputLabel>
-                <Select
-                  label="Variable"
-                  size="small"
-                  value={previewVariable}
-                  onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
-                >
-                  {displayVariableOptions.map((variable) => (
-                    <MenuItem value={variable}>{variable}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </div>
-            {availableDays &&
-              availableDays.length > 0 &&
-              activeJob?.start_year < OPENET_TRANSITION_DATE &&
-              previewYear &&
-              Number(previewYear) < OPENET_TRANSITION_DATE && (
-                <FormControl sx={{ flex: 1 }}>
-                  <InputLabel size="small">Day</InputLabel>
-                  <Select label="Day" size="small" value={previewDay} onChange={(e) => setPreviewDay(e.target.value)}>
-                    {(availableDays || []).map((day) => (
-                      <MenuItem value={day.day}>{day.day}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            <div style={{ display: "flex", gap: "8px" }}>
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel size="small">Month</InputLabel>
-                <Select label="Month" size="small" value={previewMonth} onChange={(e) => setPreviewMonth(e.target.value)}>
-                  <MenuItem value={1}>January</MenuItem>
-                  <MenuItem value={2}>February</MenuItem>
-                  <MenuItem value={3}>March</MenuItem>
-                  <MenuItem value={4}>April</MenuItem>
-                  <MenuItem value={5}>May</MenuItem>
-                  <MenuItem value={6}>June</MenuItem>
-                  <MenuItem value={7}>July</MenuItem>
-                  <MenuItem value={8}>August</MenuItem>
-                  <MenuItem value={9}>September</MenuItem>
-                  <MenuItem value={10}>October</MenuItem>
-                  <MenuItem value={11}>November</MenuItem>
-                  <MenuItem value={12}>December</MenuItem>
-                </Select>
-              </FormControl>
-              {previewYear && (
-                <FormControl sx={{ flex: 1 }}>
-                  <InputLabel size="small">Year</InputLabel>
-                  <Select label="Year" size="small" value={previewYear} onChange={(e) => setPreviewYear(e.target.value)}>
-                    {Array.from(
-                      { length: activeJob.end_year - activeJob.start_year + 1 },
-                      (_, i) => activeJob.start_year + i
-                    ).map((year) => (
-                      <MenuItem value={year}>{year}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            </div>
-            {canPreview && (
-              <div style={{ padding: "0 16px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <IconButton onClick={() => setIsPlaying(!isPlaying)} size="small" sx={{ color: "primary.main" }}>
-                    {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-                  </IconButton>
-                  <Slider
-                    value={sliderValue}
-                    min={0}
-                    max={totalMonths - 1}
-                    onChange={handleSliderChange}
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={valueLabelFormat}
-                    marks
-                    sx={{ color: "primary", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
-                  />
-                </div>
-              </div>
-            )}
-            <Tooltip title={!canPreview ? `Select a variable and month/year to preview` : ""}>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="small"
-                  sx={{ flex: 1 }}
-                  onClick={() => {
-                    setShowPreview(!showPreview);
-                  }}
-                  disabled={!canPreview}
-                >
-                  {showPreview ? "Hide" : "Show"} Preview
-                </Button>
-              </div>
-            </Tooltip>
+            <IconButton sx={{ color: "var(--st-gray-40)" }}>
+              {!showJobControls ? <ArrowRightIcon /> : <ArrowDropDownIcon />}
+            </IconButton>
+            <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
+              Interactive Preview
+            </Typography>
           </div>
-        )}
+          {showJobControls && (
+            <div className="job-controls">
+              {activeJob && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    backgroundColor: "var(--st-gray-90)",
+                    zIndex: 1000,
+                    borderRadius: "8px",
+                    marginBottom: 16,
+                    marginTop: 16,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <FormControl sx={{ flex: 1 }}>
+                      <InputLabel size="small">Variable</InputLabel>
+                      <Select
+                        label="Variable"
+                        size="small"
+                        value={previewVariable}
+                        onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
+                      >
+                        {displayVariableOptions.map((variable) => (
+                          <MenuItem value={variable}>{variable}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </div>
+                  {availableDays &&
+                    availableDays.length > 0 &&
+                    activeJob?.start_year < OPENET_TRANSITION_DATE &&
+                    previewYear &&
+                    Number(previewYear) < OPENET_TRANSITION_DATE && (
+                      <FormControl sx={{ flex: 1 }}>
+                        <InputLabel size="small">Day</InputLabel>
+                        <Select label="Day" size="small" value={previewDay} onChange={(e) => setPreviewDay(e.target.value)}>
+                          {(availableDays || []).map((day) => (
+                            <MenuItem value={day.day}>{day.day}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    )}
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <FormControl sx={{ flex: 1 }}>
+                      <InputLabel size="small">Month</InputLabel>
+                      <Select
+                        label="Month"
+                        size="small"
+                        value={previewMonth}
+                        onChange={(e) => setPreviewMonth(e.target.value)}
+                      >
+                        <MenuItem value={1}>January</MenuItem>
+                        <MenuItem value={2}>February</MenuItem>
+                        <MenuItem value={3}>March</MenuItem>
+                        <MenuItem value={4}>April</MenuItem>
+                        <MenuItem value={5}>May</MenuItem>
+                        <MenuItem value={6}>June</MenuItem>
+                        <MenuItem value={7}>July</MenuItem>
+                        <MenuItem value={8}>August</MenuItem>
+                        <MenuItem value={9}>September</MenuItem>
+                        <MenuItem value={10}>October</MenuItem>
+                        <MenuItem value={11}>November</MenuItem>
+                        <MenuItem value={12}>December</MenuItem>
+                      </Select>
+                    </FormControl>
+                    {previewYear && (
+                      <FormControl sx={{ flex: 1 }}>
+                        <InputLabel size="small">Year</InputLabel>
+                        <Select
+                          label="Year"
+                          size="small"
+                          value={previewYear}
+                          onChange={(e) => setPreviewYear(e.target.value)}
+                        >
+                          {Array.from(
+                            { length: activeJob.end_year - activeJob.start_year + 1 },
+                            (_, i) => activeJob.start_year + i
+                          ).map((year) => (
+                            <MenuItem value={year}>{year}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    )}
+                  </div>
+                  {canPreview && (
+                    <div style={{ padding: "0 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <IconButton onClick={() => setIsPlaying(!isPlaying)} size="small" sx={{ color: "primary.main" }}>
+                          {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+                        </IconButton>
+                        <Slider
+                          value={sliderValue}
+                          min={0}
+                          max={totalMonths - 1}
+                          onChange={handleSliderChange}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={valueLabelFormat}
+                          marks
+                          sx={{ color: "primary", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <Tooltip title={!canPreview ? `Select a variable and month/year to preview` : ""}>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <Button
+                        variant="contained"
+                        color="secondary"
+                        size="small"
+                        sx={{ flex: 1 }}
+                        onClick={() => {
+                          setShowPreview(!showPreview);
+                        }}
+                        disabled={!canPreview}
+                      >
+                        {showPreview ? "Hide" : "Show"} Preview
+                      </Button>
+                    </div>
+                  </Tooltip>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         {activeJob && (
           <div style={{ display: "flex", gap: "8px", margin: "8px 0" }}>
             <Button
@@ -493,7 +546,7 @@ const CurrentJobChip = () => {
                 GeoJSON
               </MenuItem>
 
-              {canPreview && activeJob?.status === "Complete" && previewMonth && previewYear && (
+              {canPreview && previewMonth && previewYear && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
@@ -509,22 +562,22 @@ const CurrentJobChip = () => {
                   {formattedPreviewDate} {previewVariable} GeoTIFF
                 </MenuItem>
               )}
-              {activeJob?.status === "Complete" && (
-                <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
-                  disableRipple
-                  onClick={() => {
-                    if (!previewVariable || !previewMonth || !previewYear) {
-                      console.error("Missing preview variable, month, or year");
-                      return;
-                    }
 
-                    downloadAllGeotiffs(activeJob.key);
-                  }}
-                >
-                  All GeoTIFFs
-                </MenuItem>
-              )}
+              <MenuItem
+                sx={{ backgroundColor: "var(--st-gray-80)" }}
+                disableRipple
+                onClick={() => {
+                  if (!previewVariable || !previewMonth || !previewYear) {
+                    console.error("Missing preview variable, month, or year");
+                    return;
+                  }
+
+                  downloadAllGeotiffs(activeJob.key);
+                }}
+              >
+                All GeoTIFFs
+              </MenuItem>
+
               <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
               <Typography
                 variant="body2"
@@ -533,7 +586,7 @@ const CurrentJobChip = () => {
               >
                 Report
               </Typography>
-              {activeJob?.status === "Complete" && (
+              {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
@@ -544,7 +597,7 @@ const CurrentJobChip = () => {
                   Report (mm/month)
                 </MenuItem>
               )}
-              {activeJob?.status === "Complete" && (
+              {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple

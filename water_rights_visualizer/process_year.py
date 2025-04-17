@@ -193,6 +193,10 @@ def process_year(
     # Min/max for all years
     for file in Path(monthly_means_directory).glob("*.csv"):
         year_df = pd.read_csv(file)
+        # Make sure "ET" is in the column names
+        if "ET" not in year_df.columns:
+            logger.warning(f"'ET' not in column names for {file}. Excluding from min/max calculation.")
+            continue
         year_mean = np.nanmean(year_df["ET"])
         year_sd = np.nanstd(year_df["ET"])
         vmin = min(vmin, max(year_mean - 2 * year_sd, 0))
