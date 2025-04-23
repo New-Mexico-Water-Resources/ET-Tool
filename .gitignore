@@ -29,3 +29,4 @@ client/CHANGELOG.md
 modis_downloads
 misc
 *.geojson
+~$*.docx
