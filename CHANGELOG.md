@@ -1,3 +1,13 @@
+## 1.23.0 (2025-04-24)
+
+### Features
+- Adds area label on polygon hover
+- Clips MODIS data to state boundary, which greatly reduces the number of tiles that need to be loaded and improves performance
+
+### Bug Fixes
+- Fixes sidebar toggle controls (Cmd/Ctrl + B)
+- Moves map zoom controls, polygon creation controls, and color scale to the left of the sidebar when open
+
 ## 1.22.0 (2025-04-17)
 
 ### Features
