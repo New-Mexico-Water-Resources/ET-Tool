@@ -102,6 +102,7 @@ interface Store {
   setTileDate: (tileDate: string) => void;
   mapLayerKey: string;
   setMapLayerKey: (mapLayerKey: string) => void;
+  isRightPanelOpen: boolean;
   activeTab: ActiveTabType;
   setActiveTab: (tab: ActiveTabType) => void;
   isQueueOpen: boolean;
@@ -219,6 +220,7 @@ const useStore = create<Store>()(
       setTileDate: (tileDate) => set({ tileDate }),
       mapLayerKey: "Google Satellite",
       setMapLayerKey: (mapLayerKey) => set({ mapLayerKey }),
+      isRightPanelOpen: false,
       activeTab: "",
       setActiveTab: (activeTab) => {
         let isQueueOpen = false;
@@ -239,7 +241,9 @@ const useStore = create<Store>()(
           isMapLayersPanelOpen = true;
         }
 
-        set({ activeTab, isQueueOpen, isBacklogOpen, isUsersPanelOpen, isMapLayersPanelOpen });
+        const isRightPanelOpen = isQueueOpen || isBacklogOpen || isUsersPanelOpen || isMapLayersPanelOpen;
+
+        set({ activeTab, isQueueOpen, isBacklogOpen, isUsersPanelOpen, isMapLayersPanelOpen, isRightPanelOpen });
       },
       isQueueOpen: false,
       setIsQueueOpen: (isQueueOpen) => {

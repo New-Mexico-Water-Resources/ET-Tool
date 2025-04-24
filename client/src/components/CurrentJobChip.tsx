@@ -142,7 +142,7 @@ const CurrentJobChip = () => {
     return jobStatus;
   }, [activeJob?.key, activeJob?.status, jobStatuses]);
 
-  const activeJobProperties: { property: string; value: any }[] = useMemo(() => {
+  const activeJobProperties: { property: string; value: unknown }[] = useMemo(() => {
     if (!activeJob?.loaded_geo_json) return [];
 
     let properties = {};
@@ -322,7 +322,7 @@ const CurrentJobChip = () => {
           >
             {activeJobProperties.map((property, index) => (
               <Typography key={index} variant="body2" style={{ color: "var(--st-gray-40)" }}>
-                {property.property}: <b>{property.value}</b>
+                {property.property}: <b>{property.value as string}</b>
               </Typography>
             ))}
           </div>

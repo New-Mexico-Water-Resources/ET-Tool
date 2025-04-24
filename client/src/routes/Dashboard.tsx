@@ -1,5 +1,5 @@
 import { Alert, Button, Snackbar, Typography } from "@mui/material";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { MapContainer, ScaleControl, ZoomControl } from "react-leaflet";
 import useStore, { MapLayer } from "../utils/store";
 
@@ -18,9 +18,9 @@ import MapLayersPanel from "../components/MapLayersPanel";
 import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
 import ActiveMapLayer from "../components/ActiveMapLayer";
 import { CRS } from "leaflet";
-import chroma from "chroma-js";
 import DrawControls from "../components/DrawControls";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
+import ColorScale from "../components/ColorScale";
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -30,9 +30,11 @@ const Dashboard = () => {
   const [successMessage, setSuccessMessage] = useStore((state) => [state.successMessage, state.setSuccessMessage]);
   const [errorMessage, setErrorMessage] = useStore((state) => [state.errorMessage, state.setErrorMessage]);
 
-  const [isQueueOpen, setIsQueueOpen] = useStore((state) => [state.isQueueOpen, state.setIsQueueOpen]);
-  const [isBacklogOpen, setIsBacklogOpen] = useStore((state) => [state.isBacklogOpen, state.setIsBacklogOpen]);
+  const setIsQueueOpen = useStore((state) => state.setIsQueueOpen);
+  const setIsBacklogOpen = useStore((state) => state.setIsBacklogOpen);
   const setIsUsersPanelOpen = useStore((state) => state.setIsUsersPanelOpen);
+  const setIsMapLayersPanelOpen = useStore((state) => state.setIsMapLayersPanelOpen);
+  const isRightPanelOpen = useStore((state) => state.isRightPanelOpen);
 
   const [pollCount, increasePollCount] = useStore((state) => [state.pollCount, state.increasePollCount]);
   const fetchQueue = useStore((state) => state.fetchQueue);
@@ -72,6 +74,7 @@ const Dashboard = () => {
   const [minBaseColor, maxBaseColor] = useStore((state) => [state.minimumBaseMapColorBound, state.maximumBaseMapColorBound]);
   const refreshType = useStore((state) => state.refreshType);
   const comparisonMode = useStore((state) => state.comparisonMode);
+
   const minColor = useMemo(() => {
     if (refreshType === "static") {
       return 0;
@@ -79,6 +82,7 @@ const Dashboard = () => {
       return minBaseColor || 0;
     }
   }, [minBaseColor, refreshType]);
+
   const maxColor = useMemo(() => {
     if (refreshType === "static") {
       return 200;
@@ -87,11 +91,9 @@ const Dashboard = () => {
     }
   }, [maxBaseColor, refreshType]);
 
-  const numberOfSteps = 100;
-  const colors = useMemo(() => {
-    let colormap = comparisonMode === "absolute" ? ET_COLORMAP : DIFF_COLORMAP;
-    return chroma.scale(colormap).colors(numberOfSteps).reverse();
-  }, [ET_COLORMAP, DIFF_COLORMAP, numberOfSteps, comparisonMode]);
+  const colorScale = useMemo(() => {
+    return comparisonMode === "absolute" ? ET_COLORMAP : DIFF_COLORMAP;
+  }, [comparisonMode]);
 
   const activeMapLayer = useMemo(() => {
     let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;
@@ -99,7 +101,7 @@ const Dashboard = () => {
       mapLayer = MAP_LAYER_OPTIONS["Google Satellite"];
     }
 
-    let layer = JSON.parse(JSON.stringify(mapLayer));
+    const layer = JSON.parse(JSON.stringify(mapLayer));
     if (tileDate) {
       layer.url = layer.url.replace("{time}", tileDate);
     } else if (layer.time) {
@@ -109,27 +111,40 @@ const Dashboard = () => {
     return layer;
   }, [mapLayerKey, tileDate]);
 
+  const showColorScale = useMemo(() => {
+    return activeMapLayer?.refresh;
+  }, [activeMapLayer?.refresh]);
+
   useEffect(() => {
     if (showARDTiles && !Object.keys(ardTiles).length) {
       fetchARDTiles();
     }
-  }, [showARDTiles, ardTiles]);
+  }, [showARDTiles, ardTiles, fetchARDTiles]);
 
   const loadVersion = useStore((state) => state.loadVersion);
 
-  const handleKeyPress = (event: any) => {
-    const isMac = navigator.userAgent.includes("Mac");
-    const isCmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
+  const handleKeyPress = useCallback(
+    (event: any) => {
+      const isMac = navigator.userAgent.includes("Mac");
+      const isCmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
 
-    if (isCmdOrCtrl && event.key === "b") {
-      event.preventDefault();
-      if (!isQueueOpen && isBacklogOpen) {
-        setIsBacklogOpen(false);
+      if (isCmdOrCtrl && event.key === "b") {
+        event.preventDefault();
+        if (isRightPanelOpen) {
+          setIsBacklogOpen(false);
+          setIsQueueOpen(false);
+          setIsUsersPanelOpen(false);
+          setIsMapLayersPanelOpen(false);
+        } else {
+          setIsBacklogOpen(false);
+          setIsUsersPanelOpen(false);
+          setIsMapLayersPanelOpen(false);
+          setIsQueueOpen(true);
+        }
       }
-      setIsQueueOpen(!isQueueOpen);
-      setIsUsersPanelOpen(false);
-    }
-  };
+    },
+    [isRightPanelOpen, setIsBacklogOpen, setIsQueueOpen, setIsUsersPanelOpen, setIsMapLayersPanelOpen]
+  );
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyPress);
@@ -137,7 +152,7 @@ const Dashboard = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyPress);
     };
-  }, [isQueueOpen]);
+  }, [handleKeyPress]);
 
   useEffect(() => {
     fetchQueue();
@@ -174,6 +189,38 @@ const Dashboard = () => {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (isRightPanelOpen) {
+      const controls = document.querySelectorAll(".leaflet-right .leaflet-control");
+      controls.forEach((control) => {
+        if (control instanceof HTMLElement && control) {
+          control.style.marginRight = "310px";
+
+          const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
+          drawActions.forEach((action) => {
+            if (action instanceof HTMLElement && action) {
+              action.style.right = showColorScale ? "78px" : "38px";
+            }
+          });
+        }
+      });
+    } else {
+      const controls = document.querySelectorAll(".leaflet-right .leaflet-control");
+      controls.forEach((control) => {
+        if (control instanceof HTMLElement && control) {
+          control.style.marginRight = "10px";
+
+          const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
+          drawActions.forEach((action) => {
+            if (action instanceof HTMLElement && action) {
+              action.style.right = showColorScale ? "78px" : "38px";
+            }
+          });
+        }
+      });
+    }
+  }, [isRightPanelOpen, showColorScale]);
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
@@ -260,63 +307,16 @@ const Dashboard = () => {
         <ActiveMonthlyMapLayer />
         <ActiveMapLayer />
         <ZoomControl position="topright" />
-        <ScaleControl position="bottomleft" />
         <DrawControls />
+        <ScaleControl position="bottomleft" />
 
         {activeMapLayer?.refresh && (
-          <div
-            style={{
-              position: "absolute",
-              // top: "80px",
-              // right: "10px",
-              top: "12px",
-              right: "50px",
-              zIndex: 1000,
-              borderRadius: "8px",
-              overflow: "hidden",
-              border: "4px solid white",
-              background: "white",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                width: "26px",
-                justifyContent: "center",
-                padding: "4px 8px",
-                background: "white",
-                color: "var(--st-gray-80)",
-                fontWeight: "bold",
-              }}
-            >
-              {maxColor}
-            </div>
-            <div style={{ borderRadius: "8px", overflow: "hidden", background: "white" }}>
-              {colors.map((value, index) => (
-                <div
-                  key={index}
-                  style={{
-                    width: "26px",
-                    height: `calc(200px / ${colors.length})`,
-                    backgroundColor: value,
-                  }}
-                ></div>
-              ))}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                width: "26px",
-                justifyContent: "center",
-                padding: "4px 8px",
-                background: "white",
-                color: "var(--st-gray-80)",
-                fontWeight: "bold",
-              }}
-            >
-              {minColor}
-            </div>
-          </div>
+          <ColorScale
+            maxValue={maxColor}
+            minValue={minColor}
+            colorScale={colorScale}
+            style={{ right: isRightPanelOpen ? "350px" : "50px", transition: "right 0.1s ease" }}
+          />
         )}
         {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
         {visibleReferenceGeoJSONs.map((layer) => (

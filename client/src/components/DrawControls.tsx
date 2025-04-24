@@ -7,8 +7,8 @@ import useStore from "../utils/store";
 import { useCallback, useMemo } from "react";
 
 const getNumberOfEdges = (radius: number, segmentLength: number = 30) => {
-  let circumference = 2 * Math.PI * radius;
-  let edges = Math.round(circumference / segmentLength);
+  const circumference = 2 * Math.PI * radius;
+  const edges = Math.round(circumference / segmentLength);
   return Math.max(edges, 6);
 };
 
@@ -30,12 +30,12 @@ const DrawControls = () => {
       let geojson = evt.layer.toGeoJSON();
 
       if (evt.layerType === "circle") {
-        let radius = evt.layer.getRadius();
-        let latlng = evt.layer.getLatLng();
+        const radius = evt.layer.getRadius();
+        const latlng = evt.layer.getLatLng();
 
-        let coordinates = [latlng.lng, latlng.lat];
-        let numberOfEdges = getNumberOfEdges(radius, 30);
-        let polygon = turf.circle(coordinates, radius, { steps: numberOfEdges, units: "meters" });
+        const coordinates = [latlng.lng, latlng.lat];
+        const numberOfEdges = getNumberOfEdges(radius, 30);
+        const polygon = turf.circle(coordinates, radius, { steps: numberOfEdges, units: "meters" });
 
         geojson = {
           type: "Feature",
@@ -50,7 +50,7 @@ const DrawControls = () => {
         }
       });
 
-      let syntheticFile = new File([JSON.stringify(geojson)], "New Region.geojson", {
+      const syntheticFile = new File([JSON.stringify(geojson)], "New Region.geojson", {
         type: "application/json",
       });
       setLoadedFile(syntheticFile);
@@ -60,12 +60,23 @@ const DrawControls = () => {
         setRows([]);
         setActiveJob(null);
         if (!jobName) {
-          let fileName = "New Region";
+          const fileName = "New Region";
           setJobName(fileName);
         }
       });
     },
-    [jobName, map]
+    [
+      jobName,
+      map,
+      setActiveJob,
+      setJobName,
+      setLoadedFile,
+      setLoadedGeoJSON,
+      setMultipolygons,
+      setRows,
+      startNewJob,
+      prepareGeoJSON,
+    ]
   );
 
   const editSettings = useMemo(() => {
