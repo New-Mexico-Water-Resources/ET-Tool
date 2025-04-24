@@ -615,13 +615,13 @@ const LayersControl: FC = () => {
               submitJob();
               closeNewJob();
             } else if (canSubmitBulkJob) {
-              let jobs = prepareMultipolygonJob();
-              let totalNumberOfYears = jobs.reduce((acc, job) => acc + job.end_year - job.start_year + 1, 0);
+              const jobs = prepareMultipolygonJob();
+              const totalNumberOfYears = jobs.reduce((acc, job) => acc + job.end_year - job.start_year + 1, 0);
 
               // Rough estimate of 5 minutes per year
-              let estimatedTimePerYear = 5;
-              let estimatedTimeMS = totalNumberOfYears * estimatedTimePerYear * 60 * 1000;
-              let estimatedTime = formatElapsedTime(estimatedTimeMS).trim();
+              const estimatedTimePerYear = 5;
+              const estimatedTimeMS = totalNumberOfYears * estimatedTimePerYear * 60 * 1000;
+              const estimatedTime = formatElapsedTime(estimatedTimeMS).trim();
 
               confirm({
                 title: "Submit Bulk Job",

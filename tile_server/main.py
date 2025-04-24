@@ -2,12 +2,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from rasterio.io import MemoryFile
+from rasterio.warp import transform_geom
+from rasterio.features import geometry_mask
+from rasterio.transform import from_bounds
 import rasterio
 import os
 import re
 import datetime
 import mercantile
+import shapely
 
+import json
 from rasterio.windows import Window
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
@@ -86,6 +91,27 @@ async def get_modis_dates():
 
 def get_tile(path: str, z: int, x: int, y: int):
     """Get a tile from a GeoTIFF file."""
+    # Load New Mexico boundary
+    try:
+        with open("rois/nm.json", "r") as nm_shape:
+            nm = json.load(nm_shape)
+    except Exception as e:
+        print(f"Failed to load New Mexico boundary: {e}")
+        return None
+
+    nm_geom4326 = nm["features"][0]["geometry"]
+
+    # reproject from 4326 to 3857
+    nm_geom3857 = transform_geom(
+        "EPSG:4326",
+        "EPSG:3857",
+        nm_geom4326,
+        precision=6,
+    )
+
+    # build a Shapely polygon in Web Mercator
+    nm_poly = shapely.geometry.shape(nm_geom3857)
+
     with rasterio.open(path) as src:
         # Convert Leaflet Y to TMS Y
         tms_y = (2**z - 1) - y
@@ -102,6 +128,11 @@ def get_tile(path: str, z: int, x: int, y: int):
             or y_max < raster_bounds.bottom
             or y_min > raster_bounds.top
         ):
+            return None
+
+        tile_poly = shapely.geometry.box(x_min, y_min, x_max, y_max)
+        # Check if tile_bounds intersects with New Mexico boundary
+        if not tile_poly.intersects(nm_poly):
             return None
 
         # Convert bounds to pixel coordinates
@@ -167,6 +198,9 @@ def get_tile(path: str, z: int, x: int, y: int):
         data = src.read(1, window=window, out_shape=(output_height, output_width), resampling=resampling_method)
 
         full_data = np.full((TILE_SIZE, TILE_SIZE), np.nan)
+
+        tile_transform = from_bounds(x_min, y_min, x_max, y_max, width=TILE_SIZE, height=TILE_SIZE)
+
         if at_top_edge:
             if at_right_edge:
                 full_data[y_offset:, :output_width] = data
@@ -185,6 +219,15 @@ def get_tile(path: str, z: int, x: int, y: int):
         # Handle nodata values
         nodata_value = 32700
         full_data = np.where(full_data >= nodata_value, np.nan, full_data)
+
+        mask = geometry_mask(
+            [nm_geom3857],
+            out_shape=(TILE_SIZE, TILE_SIZE),
+            transform=tile_transform,
+            invert=True,
+        )
+
+        full_data[~mask] = np.nan
 
         return full_data
 

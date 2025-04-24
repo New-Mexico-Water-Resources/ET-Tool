@@ -3,12 +3,13 @@ import { EditControl } from "react-leaflet-draw";
 import * as turf from "@turf/turf";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import useStore from "../utils/store";
+import useStore, { MapLayer } from "../utils/store";
 import { useCallback, useMemo } from "react";
+import { MAP_LAYER_OPTIONS } from "../utils/constants";
 
 const getNumberOfEdges = (radius: number, segmentLength: number = 30) => {
-  let circumference = 2 * Math.PI * radius;
-  let edges = Math.round(circumference / segmentLength);
+  const circumference = 2 * Math.PI * radius;
+  const edges = Math.round(circumference / segmentLength);
   return Math.max(edges, 6);
 };
 
@@ -22,6 +23,63 @@ const DrawControls = () => {
   const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
   const startNewJob = useStore((state) => state.startNewJob);
 
+  const isRightPanelOpen = useStore((state) => state.isRightPanelOpen);
+
+  const mapLayerKey = useStore((state) => state.mapLayerKey);
+  const tileDate = useStore((state) => state.tileDate);
+
+  const activeMapLayer = useMemo(() => {
+    let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;
+    if (!mapLayer) {
+      mapLayer = MAP_LAYER_OPTIONS["Google Satellite"];
+    }
+
+    const layer = JSON.parse(JSON.stringify(mapLayer));
+    if (tileDate) {
+      layer.url = layer.url.replace("{time}", tileDate);
+    } else if (layer.time) {
+      layer.url = layer.url.replace("{time}", layer.time);
+    }
+
+    return layer;
+  }, [mapLayerKey, tileDate]);
+
+  const showColorScale = useMemo(() => {
+    return activeMapLayer?.refresh;
+  }, [activeMapLayer?.refresh]);
+
+  const updateDrawControls = useCallback(() => {
+    if (isRightPanelOpen) {
+      const controls = document.querySelectorAll(".leaflet-right .leaflet-control");
+      controls.forEach((control) => {
+        if (control instanceof HTMLElement && control) {
+          control.style.marginRight = "310px";
+
+          const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
+          drawActions.forEach((action) => {
+            if (action instanceof HTMLElement && action) {
+              action.style.right = showColorScale ? "78px" : "38px";
+            }
+          });
+        }
+      });
+    } else {
+      const controls = document.querySelectorAll(".leaflet-right .leaflet-control");
+      controls.forEach((control) => {
+        if (control instanceof HTMLElement && control) {
+          control.style.marginRight = "10px";
+
+          const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
+          drawActions.forEach((action) => {
+            if (action instanceof HTMLElement && action) {
+              action.style.right = showColorScale ? "78px" : "38px";
+            }
+          });
+        }
+      });
+    }
+  }, [isRightPanelOpen, showColorScale]);
+
   const map = useMap();
 
   const handleCreated = useCallback(
@@ -30,12 +88,12 @@ const DrawControls = () => {
       let geojson = evt.layer.toGeoJSON();
 
       if (evt.layerType === "circle") {
-        let radius = evt.layer.getRadius();
-        let latlng = evt.layer.getLatLng();
+        const radius = evt.layer.getRadius();
+        const latlng = evt.layer.getLatLng();
 
-        let coordinates = [latlng.lng, latlng.lat];
-        let numberOfEdges = getNumberOfEdges(radius, 30);
-        let polygon = turf.circle(coordinates, radius, { steps: numberOfEdges, units: "meters" });
+        const coordinates = [latlng.lng, latlng.lat];
+        const numberOfEdges = getNumberOfEdges(radius, 30);
+        const polygon = turf.circle(coordinates, radius, { steps: numberOfEdges, units: "meters" });
 
         geojson = {
           type: "Feature",
@@ -50,7 +108,7 @@ const DrawControls = () => {
         }
       });
 
-      let syntheticFile = new File([JSON.stringify(geojson)], "New Region.geojson", {
+      const syntheticFile = new File([JSON.stringify(geojson)], "New Region.geojson", {
         type: "application/json",
       });
       setLoadedFile(syntheticFile);
@@ -60,12 +118,28 @@ const DrawControls = () => {
         setRows([]);
         setActiveJob(null);
         if (!jobName) {
-          let fileName = "New Region";
+          const fileName = "New Region";
           setJobName(fileName);
         }
       });
+
+      setTimeout(() => {
+        updateDrawControls();
+      }, 100);
     },
-    [jobName, map]
+    [
+      jobName,
+      map,
+      setActiveJob,
+      setJobName,
+      setLoadedFile,
+      setLoadedGeoJSON,
+      setMultipolygons,
+      setRows,
+      startNewJob,
+      prepareGeoJSON,
+      updateDrawControls,
+    ]
   );
 
   const editSettings = useMemo(() => {

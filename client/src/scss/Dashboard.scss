@@ -208,3 +208,11 @@
 path.leaflet-interactive:focus {
   outline: none;
 }
+
+.map-container.sidebar-open .leaflet-right .leaflet-control {
+  transition: margin-right 0.1s ease;
+}
+
+.geojson-label {
+  white-space: pre !important;
+}

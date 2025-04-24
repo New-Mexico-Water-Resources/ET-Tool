@@ -16,12 +16,14 @@ const GeoJSONLayer = ({
   fitToBounds = true,
   showLabels = false,
   isDroughtMonitor = false,
+  showAreaLabel = false,
 }: {
   data?: any;
   validateBounds?: boolean;
   fitToBounds?: boolean;
   showLabels?: boolean;
   isDroughtMonitor?: boolean;
+  showAreaLabel?: boolean;
 }) => {
   const map = useMap();
   const layerRef = useRef<Leaflet.GeoJSON | null>(null);
@@ -68,6 +70,7 @@ const GeoJSONLayer = ({
             });
           }
 
+          let tooltip = "";
           if (showLabels && feature.properties) {
             let nameKey = "label";
             if (!isDroughtMonitor) {
@@ -78,14 +81,24 @@ const GeoJSONLayer = ({
             }
 
             if (nameKey && feature.properties[nameKey]) {
-              layer.bindTooltip(feature.properties[nameKey], {
-                direction: "top",
-                offset: [0, -10],
-                className: "geojson-label",
-                permanent: false,
-                sticky: true,
-              });
+              tooltip = feature.properties[nameKey];
             }
+          }
+
+          if (area && showAreaLabel) {
+            const areaInAcres = area / 4046.86;
+            tooltip += `\nArea: ${areaInAcres.toFixed(2)} acres`;
+            tooltip = tooltip.trim();
+          }
+
+          if (tooltip) {
+            layer.bindTooltip(tooltip, {
+              direction: "top",
+              offset: [0, -10],
+              className: "geojson-label",
+              permanent: false,
+              sticky: true,
+            });
           }
         },
       });

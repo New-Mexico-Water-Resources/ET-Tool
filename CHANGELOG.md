@@ -1,3 +1,13 @@
+## 1.23.0 (2025-04-24)
+
+### Features
+- Adds area label on polygon hover
+- Clips MODIS data to state boundary, which greatly reduces the number of tiles that need to be loaded and improves performance
+
+### Bug Fixes
+- Fixes sidebar toggle controls (Cmd/Ctrl + B)
+- Moves map zoom controls, polygon creation controls, and color scale to the left of the sidebar when open
+
 ## 1.22.0 (2025-04-17)
 
 ### Features
@@ -6,11 +16,13 @@
 - Adds ability to view monthly data before 2008 on the map
 - Adds ability to download all GeoTIFFs for a given job
 - Tooltips for New Mexico Counties reference layer
+- Moves active job properties and preview controls to collapsible sections
 
 ### Bug Fixes
 - Moves downloading of all resources behind authentication to reduce server load
 - Fixes bug blocking target date from being changed for MODIS Terra True Color imagery
 - Closes New Job menu if "Locate" button is clicked from the queue
+- Adds error handling for missing ET column when generating reports if monthly CSVs contain malformed data
 
 ## 1.21.0 (2025-04-10)
 
