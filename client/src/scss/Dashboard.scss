@@ -212,3 +212,7 @@ path.leaflet-interactive:focus {
 .map-container.sidebar-open .leaflet-right .leaflet-control {
   transition: margin-right 0.1s ease;
 }
+
+.geojson-label {
+  white-space: pre !important;
+}

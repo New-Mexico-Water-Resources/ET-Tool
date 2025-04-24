@@ -3,8 +3,9 @@ import { EditControl } from "react-leaflet-draw";
 import * as turf from "@turf/turf";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import useStore from "../utils/store";
-import { useCallback, useMemo } from "react";
+import useStore, { MapLayer } from "../utils/store";
+import { useCallback, useEffect, useMemo } from "react";
+import { MAP_LAYER_OPTIONS } from "../utils/constants";
 
 const getNumberOfEdges = (radius: number, segmentLength: number = 30) => {
   const circumference = 2 * Math.PI * radius;
@@ -21,6 +22,63 @@ const DrawControls = () => {
   const [jobName, setJobName] = useStore((state) => [state.jobName, state.setJobName]);
   const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
   const startNewJob = useStore((state) => state.startNewJob);
+
+  const isRightPanelOpen = useStore((state) => state.isRightPanelOpen);
+
+  const mapLayerKey = useStore((state) => state.mapLayerKey);
+  const tileDate = useStore((state) => state.tileDate);
+
+  const activeMapLayer = useMemo(() => {
+    let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;
+    if (!mapLayer) {
+      mapLayer = MAP_LAYER_OPTIONS["Google Satellite"];
+    }
+
+    const layer = JSON.parse(JSON.stringify(mapLayer));
+    if (tileDate) {
+      layer.url = layer.url.replace("{time}", tileDate);
+    } else if (layer.time) {
+      layer.url = layer.url.replace("{time}", layer.time);
+    }
+
+    return layer;
+  }, [mapLayerKey, tileDate]);
+
+  const showColorScale = useMemo(() => {
+    return activeMapLayer?.refresh;
+  }, [activeMapLayer?.refresh]);
+
+  const updateDrawControls = useCallback(() => {
+    if (isRightPanelOpen) {
+      const controls = document.querySelectorAll(".leaflet-right .leaflet-control");
+      controls.forEach((control) => {
+        if (control instanceof HTMLElement && control) {
+          control.style.marginRight = "310px";
+
+          const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
+          drawActions.forEach((action) => {
+            if (action instanceof HTMLElement && action) {
+              action.style.right = showColorScale ? "78px" : "38px";
+            }
+          });
+        }
+      });
+    } else {
+      const controls = document.querySelectorAll(".leaflet-right .leaflet-control");
+      controls.forEach((control) => {
+        if (control instanceof HTMLElement && control) {
+          control.style.marginRight = "10px";
+
+          const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
+          drawActions.forEach((action) => {
+            if (action instanceof HTMLElement && action) {
+              action.style.right = showColorScale ? "78px" : "38px";
+            }
+          });
+        }
+      });
+    }
+  }, [isRightPanelOpen, showColorScale]);
 
   const map = useMap();
 
@@ -64,6 +122,10 @@ const DrawControls = () => {
           setJobName(fileName);
         }
       });
+
+      setTimeout(() => {
+        updateDrawControls();
+      }, 100);
     },
     [
       jobName,
@@ -76,6 +138,7 @@ const DrawControls = () => {
       setRows,
       startNewJob,
       prepareGeoJSON,
+      updateDrawControls,
     ]
   );
 

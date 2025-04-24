@@ -329,7 +329,7 @@ const Dashboard = () => {
             showLabels={true}
           />
         ))}
-        <GeoJSONLayer data={loadedGeoJSON} />
+        <GeoJSONLayer data={loadedGeoJSON} showLabels={true} showAreaLabel={true} />
         <MultiGeoJSONLayer data={multipolygons} locations={locations} />
       </MapContainer>
       <Snackbar
