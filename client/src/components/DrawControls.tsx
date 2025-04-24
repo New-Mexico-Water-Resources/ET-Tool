@@ -4,7 +4,7 @@ import * as turf from "@turf/turf";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import useStore, { MapLayer } from "../utils/store";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { MAP_LAYER_OPTIONS } from "../utils/constants";
 
 const getNumberOfEdges = (radius: number, segmentLength: number = 30) => {
