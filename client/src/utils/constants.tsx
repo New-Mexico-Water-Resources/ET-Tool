@@ -90,6 +90,7 @@ export const MAP_LAYER_OPTIONS = {
     labelsProvider: "CartoDB DarkMatter Labels",
     tms: true,
     refresh: "dynamic",
+    showColorScale: true,
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
     units: "mm/8-days",
     modes: {

@@ -328,7 +328,7 @@ const CurrentJobChip = () => {
           </div>
         )}
 
-        {previewMode && (
+        {previewMode && activeJob && (
           <Button
             sx={{ margin: "8px 0" }}
             variant="contained"
@@ -342,23 +342,25 @@ const CurrentJobChip = () => {
           </Button>
         )}
         <div className="job-controls-container">
-          <div
-            className="job-controls-header"
-            onClick={() => setShowJobControls(!showJobControls)}
-            style={{
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            <IconButton sx={{ color: "var(--st-gray-40)" }}>
-              {!showJobControls ? <ArrowRightIcon /> : <ArrowDropDownIcon />}
-            </IconButton>
-            <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
-              Interactive Preview
-            </Typography>
-          </div>
-          {showJobControls && (
+          {activeJob && (
+            <div
+              className="job-controls-header"
+              onClick={() => setShowJobControls(!showJobControls)}
+              style={{
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <IconButton sx={{ color: "var(--st-gray-40)" }}>
+                {!showJobControls ? <ArrowRightIcon /> : <ArrowDropDownIcon />}
+              </IconButton>
+              <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
+                Interactive Preview
+              </Typography>
+            </div>
+          )}
+          {activeJob && showJobControls && (
             <div className="job-controls">
               {activeJob && (
                 <div

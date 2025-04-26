@@ -84,7 +84,7 @@ const ActiveMapLayer = () => {
 
   const LabelsLayer = useMemo(() => {
     if (activeMapLayer.backgroundProvider && (MAP_LAYER_OPTIONS as any)[activeMapLayer.labelsProvider]) {
-      let labelsLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.labelsProvider] as MapLayer;
+      const labelsLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.labelsProvider] as MapLayer;
       let layer = injectTimeIntoLayer(labelsLayer, tileDate);
       layer = injectLayer(layer, "refresh", refreshType);
       layer = injectLayer(layer, "minColor", minColor);

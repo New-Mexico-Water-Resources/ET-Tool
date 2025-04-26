@@ -112,8 +112,8 @@ const Dashboard = () => {
   }, [mapLayerKey, tileDate]);
 
   const showColorScale = useMemo(() => {
-    return activeMapLayer?.refresh;
-  }, [activeMapLayer?.refresh]);
+    return !!activeMapLayer?.showColorScale;
+  }, [activeMapLayer?.showColorScale]);
 
   useEffect(() => {
     if (showARDTiles && !Object.keys(ardTiles).length) {
@@ -310,8 +310,21 @@ const Dashboard = () => {
         <DrawControls />
         <ScaleControl position="bottomleft" />
 
-        {activeMapLayer?.refresh && (
+        {showColorScale && (
           <ColorScale
+            label={`${activeMapLayer?.name} (${
+              tileDate
+                ? new Date(tileDate).toLocaleString("default", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                : new Date(activeMapLayer?.time).toLocaleString("default", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+            })`}
             maxValue={maxColor}
             minValue={minColor}
             colorScale={colorScale}

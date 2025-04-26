@@ -1,15 +1,16 @@
-import { FC, useEffect, useState, useRef, useCallback } from "react";
+import { FC, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useMap } from "react-leaflet";
 // @ts-expect-error - No type definitions available
 import parseGeoraster from "georaster";
 // @ts-expect-error - No type definitions available
 import GeoRasterLayer from "georaster-layer-for-leaflet";
 import useCurrentJobStore from "../utils/currentJobStore";
-import { ET_COLORMAP } from "../utils/constants";
+import { ET_COLORMAP, MAP_LAYER_OPTIONS } from "../utils/constants";
 import { Tooltip, LeafletMouseEvent } from "leaflet";
-import useStore from "../utils/store";
+import useStore, { MapLayer } from "../utils/store";
 
 import { OPENET_TRANSITION_DATE } from "../utils/constants";
+import ColorScale from "./ColorScale";
 
 // Add CSS to disable transitions on Leaflet layers
 const style = document.createElement("style");
@@ -127,7 +128,21 @@ const ActiveMonthlyMapLayer: FC = () => {
   const setPreviewVariable = useCurrentJobStore((state) => state.setPreviewVariable);
   const fetchMonthlyGeojson = useCurrentJobStore((state) => state.fetchMonthlyGeojson);
   const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
+
+  const isSidebarOpen = useStore((state) => state.isRightPanelOpen);
+
   const activeJob = useStore((state) => state.activeJob);
+
+  const [activeTooltips, setActiveTooltips] = useState<Tooltip[]>([]);
+
+  const [activePreviewMinValue, setActivePreviewMinValue] = useState<number>(0);
+  const [activePreviewMaxValue, setActivePreviewMaxValue] = useState<number>(0);
+
+  const mapLayerKey = useStore((state) => state.mapLayerKey);
+  const mapLayerHasColorScale = useMemo(() => {
+    const mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;
+    return !!mapLayer?.showColorScale;
+  }, [mapLayerKey]);
 
   // Clean up function to remove all layers and event listeners
   const cleanupLayers = useCallback(() => {
@@ -220,6 +235,8 @@ const ActiveMonthlyMapLayer: FC = () => {
       setPreviewYear(activeJob?.start_year || null);
       setPreviewVariable("ET");
       setShowPreview(false);
+      setActivePreviewMinValue(0);
+      setActivePreviewMaxValue(0);
       cleanupLayers();
       setAvailableDays([]);
     }
@@ -241,12 +258,14 @@ const ActiveMonthlyMapLayer: FC = () => {
         loadTimeoutRef.current = null;
       }
     };
-  }, [map]);
+  }, [map, cleanupLayers]);
 
   // Add a new useEffect to handle tooltip visibility when showPreview changes
   useEffect(() => {
     if (!showPreview) {
       cleanupLayers();
+      setActivePreviewMaxValue(0);
+      setActivePreviewMinValue(0);
     }
   }, [showPreview, cleanupLayers]);
 
@@ -314,8 +333,18 @@ const ActiveMonthlyMapLayer: FC = () => {
           maxValue = Math.max(maxValue, 300);
         }
 
+        setActivePreviewMinValue(minValue);
+        setActivePreviewMaxValue(maxValue);
+
         // Create the new layer with crossfade
         const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap);
+
+        // Remove all active tooltips
+        activeTooltips.forEach((tooltip) => {
+          map.removeLayer(tooltip);
+        });
+
+        setActiveTooltips([]);
 
         // Create tooltip
         const newTooltip = new Tooltip({
@@ -324,6 +353,8 @@ const ActiveMonthlyMapLayer: FC = () => {
           offset: [0, -10],
           className: "custom-tooltip",
         });
+
+        setActiveTooltips((prev) => [...prev, newTooltip]);
 
         // Add mouse move handler to update tooltip
         const mousemoveHandler = (e: LeafletMouseEvent) => {
@@ -354,6 +385,7 @@ const ActiveMonthlyMapLayer: FC = () => {
               .openOn(map);
           } else {
             newTooltip.close();
+            setActiveTooltips((prev) => prev.filter((tooltip) => tooltip !== newTooltip));
           }
         };
 
@@ -363,6 +395,7 @@ const ActiveMonthlyMapLayer: FC = () => {
         // Close tooltip on mouse out
         const mouseoutHandler = () => {
           newTooltip.close();
+          setActiveTooltips((prev) => prev.filter((tooltip) => tooltip !== newTooltip));
         };
 
         map.on("mouseout", mouseoutHandler);
@@ -392,11 +425,31 @@ const ActiveMonthlyMapLayer: FC = () => {
     return () => {
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
+        // Clear any tooltips or old layers
+        if (tooltipRef.current) {
+          tooltipRef.current.close();
+        }
       }
     };
   }, [showPreview, previewMonth, previewYear, previewVariable, map, fetchMonthlyGeojson]);
 
-  return null;
+  return (
+    activePreviewMinValue &&
+    activePreviewMinValue !== activePreviewMaxValue && (
+      <ColorScale
+        label={`${activeJob?.name} (${new Date(Number(previewYear), Number(previewMonth) - 1).toLocaleString("default", {
+          month: "short",
+        })} ${previewYear})`}
+        minValue={activePreviewMinValue}
+        maxValue={activePreviewMaxValue}
+        colorScale={ET_COLORMAP}
+        style={{
+          right: isSidebarOpen ? (mapLayerHasColorScale ? "400px" : "350px") : mapLayerHasColorScale ? "100px" : "50px",
+          transition: "right 0.1s ease",
+        }}
+      />
+    )
+  );
 };
 
 export default ActiveMonthlyMapLayer;

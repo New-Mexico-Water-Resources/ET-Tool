@@ -92,6 +92,7 @@ export type MapLayer = {
   refresh?: "static" | "dynamic";
   units?: string;
   modes?: Record<string, string>;
+  showColorScale?: boolean;
   [key: string]: any;
 };
 
