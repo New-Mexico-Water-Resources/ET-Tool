@@ -29,6 +29,9 @@ interface Store {
   showPreview: boolean;
   previewDay: number | string | null;
   availableDays: AvailableDay[];
+  previewMin: number | string | null;
+  previewMax: number | string | null;
+  dynamicPreviewColorScale: boolean;
 
   monthlyGeojsonCache: Record<string, ArrayBuffer>;
 }
@@ -40,6 +43,9 @@ interface Setters {
   setShowPreview: (show: boolean) => void;
   setPreviewDay: (day: number | string | null) => void;
   setAvailableDays: (days: AvailableDay[]) => void;
+  setPreviewMin: (min: number | string | null) => void;
+  setPreviewMax: (max: number | string | null) => void;
+  setDynamicPreviewColorScale: (scale: boolean) => void;
 }
 
 interface Actions {
@@ -62,6 +68,12 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   setPreviewDay: (day) => set({ previewDay: day }),
   availableDays: [],
   setAvailableDays: (days) => set({ availableDays: days }),
+  previewMin: null,
+  setPreviewMin: (min) => set({ previewMin: min }),
+  previewMax: null,
+  setPreviewMax: (max) => set({ previewMax: max }),
+  dynamicPreviewColorScale: true,
+  setDynamicPreviewColorScale: (scale) => set({ dynamicPreviewColorScale: scale }),
 
   monthlyGeojsonCache: {},
   fetchMonthlyGeojson: async () => {

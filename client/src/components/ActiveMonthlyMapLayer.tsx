@@ -135,8 +135,18 @@ const ActiveMonthlyMapLayer: FC = () => {
 
   const [activeTooltips, setActiveTooltips] = useState<Tooltip[]>([]);
 
-  const [activePreviewMinValue, setActivePreviewMinValue] = useState<number>(0);
-  const [activePreviewMaxValue, setActivePreviewMaxValue] = useState<number>(0);
+  const [dynamicPreviewColorScale, setDynamicPreviewColorScale] = useCurrentJobStore((state) => [
+    state.dynamicPreviewColorScale,
+    state.setDynamicPreviewColorScale,
+  ]);
+  const [activePreviewMinValue, setActivePreviewMinValue] = useCurrentJobStore((state) => [
+    state.previewMin,
+    state.setPreviewMin,
+  ]);
+  const [activePreviewMaxValue, setActivePreviewMaxValue] = useCurrentJobStore((state) => [
+    state.previewMax,
+    state.setPreviewMax,
+  ]);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayerHasColorScale = useMemo(() => {
@@ -237,10 +247,22 @@ const ActiveMonthlyMapLayer: FC = () => {
       setShowPreview(false);
       setActivePreviewMinValue(0);
       setActivePreviewMaxValue(0);
+      setDynamicPreviewColorScale(true);
       cleanupLayers();
       setAvailableDays([]);
     }
-  }, [activeJob, previewJobId, setPreviewMonth, setPreviewYear, setPreviewVariable, setShowPreview, setAvailableDays]);
+  }, [
+    activeJob,
+    previewJobId,
+    setPreviewMonth,
+    setPreviewYear,
+    setPreviewVariable,
+    setShowPreview,
+    setAvailableDays,
+    setDynamicPreviewColorScale,
+    setActivePreviewMinValue,
+    setActivePreviewMaxValue,
+  ]);
 
   useEffect(() => {
     // Clean up when component unmounts
@@ -267,7 +289,7 @@ const ActiveMonthlyMapLayer: FC = () => {
       setActivePreviewMaxValue(0);
       setActivePreviewMinValue(0);
     }
-  }, [showPreview, cleanupLayers]);
+  }, [showPreview, cleanupLayers, setActivePreviewMaxValue, setActivePreviewMinValue]);
 
   useEffect(() => {
     const loadGeoTiff = async () => {
@@ -328,13 +350,23 @@ const ActiveMonthlyMapLayer: FC = () => {
         let minValue = georaster.mins[0];
         let maxValue = georaster.maxs[0];
 
-        if (minValue === maxValue) {
-          minValue = 0;
-          maxValue = Math.max(maxValue, 300);
-        }
+        if (
+          dynamicPreviewColorScale ||
+          activePreviewMinValue === null ||
+          activePreviewMaxValue === null ||
+          activePreviewMinValue === activePreviewMaxValue
+        ) {
+          if (minValue === maxValue) {
+            minValue = 0;
+            maxValue = Math.max(maxValue, 300);
+          }
 
-        setActivePreviewMinValue(minValue);
-        setActivePreviewMaxValue(maxValue);
+          setActivePreviewMinValue(minValue);
+          setActivePreviewMaxValue(maxValue);
+        } else {
+          minValue = Number(activePreviewMinValue);
+          maxValue = Number(activePreviewMaxValue);
+        }
 
         // Create the new layer with crossfade
         const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap);
@@ -431,7 +463,17 @@ const ActiveMonthlyMapLayer: FC = () => {
         }
       }
     };
-  }, [showPreview, previewMonth, previewYear, previewVariable, map, fetchMonthlyGeojson]);
+  }, [
+    showPreview,
+    previewMonth,
+    previewYear,
+    previewVariable,
+    map,
+    fetchMonthlyGeojson,
+    activePreviewMinValue,
+    activePreviewMaxValue,
+    dynamicPreviewColorScale,
+  ]);
 
   return (
     activePreviewMinValue &&
@@ -440,8 +482,8 @@ const ActiveMonthlyMapLayer: FC = () => {
         label={`${activeJob?.name} (${new Date(Number(previewYear), Number(previewMonth) - 1).toLocaleString("default", {
           month: "short",
         })} ${previewYear})`}
-        minValue={activePreviewMinValue}
-        maxValue={activePreviewMaxValue}
+        minValue={Number(activePreviewMinValue)}
+        maxValue={Number(activePreviewMaxValue)}
         colorScale={ET_COLORMAP}
         style={{
           right: isSidebarOpen ? (mapLayerHasColorScale ? "400px" : "350px") : mapLayerHasColorScale ? "100px" : "50px",

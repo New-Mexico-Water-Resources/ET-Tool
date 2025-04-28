@@ -49,7 +49,7 @@ const LayersControl: FC = () => {
     if (loadedGeoJSON) {
       area = turfArea(loadedGeoJSON);
     } else {
-      let visiblePolygons: any[] = [];
+      const visiblePolygons: any[] = [];
       rows.forEach((row) => {
         if (row.visible) {
           visiblePolygons.push(multipolygons[row.id]);
@@ -111,7 +111,7 @@ const LayersControl: FC = () => {
   const isValidArea = useMemo(() => {
     // Landsat resolution is 30m, so we want to make sure the area is at least 900m^2
     if (isBulkJob) {
-      let allRowsValid = rows.every((row) => {
+      const allRowsValid = rows.every((row) => {
         if (!row.visible) {
           return true;
         }
@@ -134,7 +134,7 @@ const LayersControl: FC = () => {
       let defaultName = `${geojson?.properties?.County || ""} Part ${index + 1}`;
       defaultName = defaultName.trim();
 
-      let name = geojson?.features?.[0]?.properties?.name || defaultName;
+      const name = geojson?.features?.[0]?.properties?.name || defaultName;
 
       let lat = geojson?.geometry?.coordinates[0][0][0];
       let long = geojson?.geometry?.coordinates[0][0][1];
@@ -150,7 +150,7 @@ const LayersControl: FC = () => {
         area = turfArea(geojson);
       }
 
-      let isValidArea = area > minimumValidArea && area < maximumValidArea;
+      const isValidArea = area > minimumValidArea && area < maximumValidArea;
 
       return {
         visible: isValidArea,
@@ -185,11 +185,11 @@ const LayersControl: FC = () => {
       reader.onload = () => {
         setLoadedFile(file);
         if (!jobName) {
-          let fileName = (file?.name || "").replace(/\.[^/.]+$/, "").trim();
+          const fileName = (file?.name || "").replace(/\.[^/.]+$/, "").trim();
           setJobName(fileName);
         }
 
-        let prepareRequest = prepareGeoJSON(file);
+        const prepareRequest = prepareGeoJSON(file);
         if (!prepareRequest) {
           // User not authenticated
           console.error("User not authenticated, cannot prepare GeoJSON.");
@@ -225,19 +225,19 @@ const LayersControl: FC = () => {
 
   const LayerRow: FC<{ index: number; style: any }> = useCallback(
     ({ index, style }) => {
-      let row = rows[index];
+      const row = rows[index];
       if (!row) {
         console.error("No row found for index", index);
         return null;
       }
 
-      let roundedLat = row?.lat ? Math.round(row.lat * 1000) / 1000 : "NaN";
-      let roundedLong = row?.long ? Math.round(row.long * 1000) / 1000 : "NaN";
+      const roundedLat = row?.lat ? Math.round(row.lat * 1000) / 1000 : "NaN";
+      const roundedLong = row?.long ? Math.round(row.long * 1000) / 1000 : "NaN";
 
-      let roundedAcres = row?.acres ? Math.round(row.acres * 100) / 100 : "NaN";
+      const roundedAcres = row?.acres ? Math.round(row.acres * 100) / 100 : "NaN";
 
-      let [editRowName, setEditRowName] = useState(false);
-      let [rowName, setRowName] = useState(row.name);
+      const [editRowName, setEditRowName] = useState(false);
+      const [rowName, setRowName] = useState(row.name);
 
       return (
         <div key={row.id} className={`layer-row ${row.id === activeRowId ? "active" : ""}`} style={style}>
@@ -287,7 +287,7 @@ const LayersControl: FC = () => {
                 setActiveRowId(null);
                 setLoadedGeoJSON(null);
               } else {
-                let geojson = multipolygons[row.id];
+                const geojson = multipolygons[row.id];
                 if (geojson) {
                   setLoadedGeoJSON(geojson);
                   setActiveRowId(row.id);
@@ -373,7 +373,7 @@ const LayersControl: FC = () => {
         </div>
       );
     },
-    [rows, activeRowId, multipolygons]
+    [rows, activeRowId, multipolygons, maximumValidArea, setLoadedGeoJSON, setRows]
   );
 
   return (
@@ -593,7 +593,7 @@ const LayersControl: FC = () => {
           color="secondary"
           style={{ marginRight: "auto", marginLeft: "8px" }}
           onClick={() => {
-            let originalGeoJSON = loadedGeoJSON;
+            const originalGeoJSON = loadedGeoJSON;
             setLoadedGeoJSON(null);
             setTimeout(() => {
               setLoadedGeoJSON(originalGeoJSON);

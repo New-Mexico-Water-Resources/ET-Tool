@@ -9,7 +9,9 @@ import {
   Typography,
   Menu,
   Slider,
+  TextField,
 } from "@mui/material";
+import PaletteIcon from "@mui/icons-material/Palette";
 import CloseIcon from "@mui/icons-material/Close";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
@@ -54,6 +56,13 @@ const CurrentJobChip = () => {
 
   const [showJobControls, setShowJobControls] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
+
+  const [dynamicPreviewColorScale, setDynamicPreviewColorScale] = useCurrentJobStore((state) => [
+    state.dynamicPreviewColorScale,
+    state.setDynamicPreviewColorScale,
+  ]);
+  const [previewMinValue, setPreviewMinValue] = useCurrentJobStore((state) => [state.previewMin, state.setPreviewMin]);
+  const [previewMaxValue, setPreviewMaxValue] = useCurrentJobStore((state) => [state.previewMax, state.setPreviewMax]);
 
   const canPreview = useMemo(() => {
     return !!previewYear && Number(previewYear) && !!previewMonth && Number(previewMonth);
@@ -372,10 +381,63 @@ const CurrentJobChip = () => {
                     zIndex: 1000,
                     borderRadius: "8px",
                     marginBottom: 16,
-                    marginTop: 16,
                   }}
                 >
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "8px" }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", gap: "8px", flex: 1, alignItems: "center" }}>
+                        <FormControl disabled={dynamicPreviewColorScale}>
+                          <TextField
+                            disabled={dynamicPreviewColorScale}
+                            label="Min"
+                            type="number"
+                            sx={{ width: "120px", "& .MuiInputLabel-root": { fontSize: "12px" } }}
+                            placeholder="Min"
+                            size="small"
+                            value={previewMinValue}
+                            onChange={(e) => setPreviewMinValue(e.target.value)}
+                          />
+                        </FormControl>
+                        <FormControl
+                          disabled={dynamicPreviewColorScale}
+                          sx={{ display: "flex", flexDirection: "row", alignItems: "flex-end" }}
+                        >
+                          <TextField
+                            disabled={dynamicPreviewColorScale}
+                            label="Max"
+                            type="number"
+                            sx={{ width: "120px", "& .MuiInputLabel-root": { fontSize: "12px" } }}
+                            placeholder="Max"
+                            size="small"
+                            value={previewMaxValue}
+                            onChange={(e) => setPreviewMaxValue(e.target.value)}
+                          />
+                          <Tooltip
+                            title={
+                              dynamicPreviewColorScale
+                                ? "Use custom color scale"
+                                : "Use dynamic color scale relative to visible layer"
+                            }
+                          >
+                            <IconButton onClick={() => setDynamicPreviewColorScale(!dynamicPreviewColorScale)}>
+                              <PaletteIcon sx={{ color: dynamicPreviewColorScale ? "var(--st-gray-30)" : "white" }} />
+                              {dynamicPreviewColorScale && (
+                                <svg
+                                  style={{
+                                    position: "absolute",
+                                    width: "50%",
+                                    height: "50%",
+                                    pointerEvents: "none",
+                                  }}
+                                >
+                                  <line x1="0" y1="100%" x2="100%" y2="0" stroke="var(--st-gray-30)" strokeWidth="2" />
+                                </svg>
+                              )}
+                            </IconButton>
+                          </Tooltip>
+                        </FormControl>
+                      </div>
+                    </div>
                     <FormControl sx={{ flex: 1 }}>
                       <InputLabel size="small">Variable</InputLabel>
                       <Select
