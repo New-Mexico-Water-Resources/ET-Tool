@@ -21,6 +21,7 @@ import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
 import ColorScale from "../components/ColorScale";
+import useCurrentJobStore from "../utils/currentJobStore";
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -74,6 +75,8 @@ const Dashboard = () => {
   const [minBaseColor, maxBaseColor] = useStore((state) => [state.minimumBaseMapColorBound, state.maximumBaseMapColorBound]);
   const refreshType = useStore((state) => state.refreshType);
   const comparisonMode = useStore((state) => state.comparisonMode);
+
+  const showPreview = useCurrentJobStore((state) => state.showPreview);
 
   const minColor = useMemo(() => {
     if (refreshType === "static") {
@@ -342,7 +345,7 @@ const Dashboard = () => {
             showLabels={true}
           />
         ))}
-        <GeoJSONLayer data={loadedGeoJSON} showLabels={true} showAreaLabel={true} />
+        <GeoJSONLayer data={loadedGeoJSON} showLabels={!showPreview} showAreaLabel={!showPreview} outline={showPreview} />
         <MultiGeoJSONLayer data={multipolygons} locations={locations} />
       </MapContainer>
       <Snackbar

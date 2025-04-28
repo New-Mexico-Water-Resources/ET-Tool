@@ -17,6 +17,7 @@ const GeoJSONLayer = ({
   showLabels = false,
   isDroughtMonitor = false,
   showAreaLabel = false,
+  outline = false,
 }: {
   data?: any;
   validateBounds?: boolean;
@@ -24,6 +25,7 @@ const GeoJSONLayer = ({
   showLabels?: boolean;
   isDroughtMonitor?: boolean;
   showAreaLabel?: boolean;
+  outline?: boolean;
 }) => {
   const map = useMap();
   const layerRef = useRef<Leaflet.GeoJSON | null>(null);
@@ -61,6 +63,17 @@ const GeoJSONLayer = ({
       const isValidArea = !validateBounds || (area >= minimumValidArea && area <= maximumValidArea);
       const geoJsonLayer = new Leaflet.GeoJSON(layerData, {
         onEachFeature: (feature: Feature, layer: ExtendedLayer) => {
+          if (!showLabels && layer.getTooltip) {
+            layer.getTooltip()?.remove();
+          }
+
+          if (outline) {
+            (layer as any).setStyle({
+              color: "#3488FF",
+              fillColor: "transparent",
+            });
+          }
+
           if (isDroughtMonitor && feature.properties?.color) {
             (layer as any).setStyle({
               fillColor: feature.properties.color,

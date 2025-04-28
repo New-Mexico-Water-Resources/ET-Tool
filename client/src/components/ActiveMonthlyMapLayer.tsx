@@ -170,6 +170,7 @@ const ActiveMonthlyMapLayer: FC = () => {
 
     // Remove existing tooltip if any
     if (tooltipRef.current) {
+      tooltipRef.current.close();
       map.removeLayer(tooltipRef.current);
       tooltipRef.current = null;
     }
@@ -184,6 +185,12 @@ const ActiveMonthlyMapLayer: FC = () => {
       map.off("mouseout", mouseoutHandlerRef.current);
       mouseoutHandlerRef.current = null;
     }
+
+    activeTooltips.forEach((tooltip) => {
+      map.removeLayer(tooltip);
+    });
+
+    setActiveTooltips([]);
   }, [map]);
 
   // Function to create a new layer with crossfade
@@ -392,7 +399,9 @@ const ActiveMonthlyMapLayer: FC = () => {
         const mousemoveHandler = (e: LeafletMouseEvent) => {
           // Close any existing tooltips first
           if (tooltipRef.current) {
-            tooltipRef.current.close();
+            map.removeLayer(tooltipRef.current);
+            setActiveTooltips((prev) => prev.filter((tooltip) => tooltip !== tooltipRef.current));
+            tooltipRef.current = null;
           }
 
           const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
