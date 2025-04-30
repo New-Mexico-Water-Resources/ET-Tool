@@ -110,10 +110,14 @@ def start_workflow(
     """
     Start the MODIS processing workflow.
     """
+    # Remove duplicates from bands and set default bands if none provided
+    bands = list(set(bands)) if bands else ["ET_500m", "PET_500m"]
+
     while True:
         logging.info(f"Starting MODIS processing workflow ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})...")
         if AWS_PROFILE:
             logging.info(f"AWS profile: {AWS_PROFILE}")
+        logging.info(f"Bands: {bands}")
         logging.info("\nUsing the following directories:")
         logging.info(f"Base data directory: {BASE_DATA_DIR}")
         logging.info(f"Download directory: {DOWNLOAD_FOLDER}")
@@ -176,9 +180,7 @@ def main():
     parser.add_argument("--limit", type=int, help="Limit the number of dates to process", default=None)
     parser.add_argument("--min-zoom", type=int, help="Minimum zoom level", default=1)
     parser.add_argument("--max-zoom", type=int, help="Maximum zoom level", default=11)
-    parser.add_argument(
-        "-b", "--bands", type=list, action="append", help="List of band names", default=["ET_500m", "PET_500m"]
-    )
+    parser.add_argument("-b", "--bands", action="append", help="List of band names", default=[])
 
     # Monitoring
     parser.add_argument("--monitor", action="store_true", help="Monitor the process", default=False)
