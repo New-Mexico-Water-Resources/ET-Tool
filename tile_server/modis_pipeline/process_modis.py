@@ -58,6 +58,11 @@ os.environ["MODIS_DATA_PRODUCT_VERSION"] = DATA_PRODUCT_VERSION
 os.environ["MODIS_S3_ENDPOINT"] = S3_ENDPOINT
 os.environ["MODIS_S3_BUCKET"] = S3_BUCKET
 
+BAND_MAPPING = {
+    "ET_500m": "ET",
+    "PET_500m": "PET",
+}
+
 from fetch_modis import fetch_new_dates
 from workflow import process_hdf_files
 from merge_process import merge_and_process_tiffs
@@ -94,7 +99,13 @@ def upload_to_s3():
 
 
 def start_workflow(
-    limit=None, generate_tiles=False, min_zoom=1, max_zoom=11, band_name="ET_500m", monitor=False, interval=24 * 60 * 60
+    limit=None,
+    generate_tiles=False,
+    min_zoom=1,
+    max_zoom=11,
+    bands=["ET_500m", "PET_500m"],
+    monitor=False,
+    interval=24 * 60 * 60,
 ):
     """
     Start the MODIS processing workflow.
@@ -121,10 +132,18 @@ def start_workflow(
         fetch_new_dates(limit=limit)
 
         logging.info("\nProcessing HDF files...")
-        process_hdf_files(band_name=band_name)
+        process_hdf_files(bands=bands)
 
         logging.info("\nMerging and processing TIFFs...")
-        merge_and_process_tiffs(generate_tiles=generate_tiles, min_zoom=min_zoom, max_zoom=max_zoom)
+        for band_name in bands:
+            output_band_name = BAND_MAPPING.get(band_name, band_name)
+            merge_and_process_tiffs(
+                generate_tiles=generate_tiles,
+                min_zoom=min_zoom,
+                max_zoom=max_zoom,
+                band_name=band_name,
+                output_band_name=output_band_name,
+            )
 
         if S3_INPUT_BUCKET:
             logging.info("\nUploading to S3...")
@@ -157,7 +176,9 @@ def main():
     parser.add_argument("--limit", type=int, help="Limit the number of dates to process", default=None)
     parser.add_argument("--min-zoom", type=int, help="Minimum zoom level", default=1)
     parser.add_argument("--max-zoom", type=int, help="Maximum zoom level", default=11)
-    parser.add_argument("--band-name", type=str, help="Band name", default="ET_500m")
+    parser.add_argument(
+        "-b", "--bands", type=list, action="append", help="List of band names", default=["ET_500m", "PET_500m"]
+    )
 
     # Monitoring
     parser.add_argument("--monitor", action="store_true", help="Monitor the process", default=False)
@@ -174,7 +195,7 @@ def main():
         generate_tiles=args.generate_tiles,
         min_zoom=args.min_zoom,
         max_zoom=args.max_zoom,
-        band_name=args.band_name,
+        bands=args.bands,
         monitor=args.monitor,
         interval=args.monitor_interval,
     )

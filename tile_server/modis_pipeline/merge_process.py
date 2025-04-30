@@ -17,7 +17,7 @@ TEMP_DIR = get_env_path("MODIS_TEMP_DIR", "~/data/modis_net_et_8_day/temp")
 DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2GF")
 
 
-def merge_and_process_tiffs(generate_tiles=False, min_zoom=1, max_zoom=11):
+def merge_and_process_tiffs(generate_tiles=False, min_zoom=1, max_zoom=11, band_name="ET_500m", output_band_name="ET"):
     """Merge TIFFs, reproject to Web Mercator, and optionally generate tiles.
 
     Args:
@@ -35,9 +35,9 @@ def merge_and_process_tiffs(generate_tiles=False, min_zoom=1, max_zoom=11):
 
         date = date_folder
         tile_output = os.path.join(OUTPUT_DIR, date, "tiles")
-        merged_tif = os.path.join(TEMP_DIR, f"{DATA_PRODUCT}_ET_500m_{date}_merged.tif")
-        merc_tif = os.path.join(MERGED_DIR, f"{DATA_PRODUCT}_MERGED_{date}_ET.tif")
-        color_tif = os.path.join(TEMP_DIR, f"{DATA_PRODUCT}_ET_500m_{date}_color.tif")
+        merged_tif = os.path.join(TEMP_DIR, f"{DATA_PRODUCT}_{band_name}_{date}_merged.tif")
+        merc_tif = os.path.join(MERGED_DIR, f"{DATA_PRODUCT}_MERGED_{date}_{output_band_name}.tif")
+        color_tif = os.path.join(TEMP_DIR, f"{DATA_PRODUCT}_{band_name}_{date}_color.tif")
 
         # Skip if already processed
         if os.path.exists(merc_tif) and (not generate_tiles or os.path.exists(color_tif)):

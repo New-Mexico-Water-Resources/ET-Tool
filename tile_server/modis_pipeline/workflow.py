@@ -73,11 +73,11 @@ def extract_band_name(hdf_file, band_name="ET_500m", output_tif=None):
     dst_ds = None
 
 
-def process_hdf_files(band_name="ET_500m"):
+def process_hdf_files(bands=["ET_500m"]):
     """Process downloaded HDF files into TIFFs.
 
     Args:
-        band_name: Name of the band to extract (default: "ET_500m")
+        bands: List of band names to extract (default: ["ET_500m"])
     """
     et_tile_folder = INPUT_DIR
     pattern = (
@@ -99,8 +99,9 @@ def process_hdf_files(band_name="ET_500m"):
             output_dir = os.path.join(et_tile_folder, date_str)
             os.makedirs(output_dir, exist_ok=True)
 
-            output_tif = os.path.join(output_dir, f"{BASE_DATA_PRODUCT}_{band_name}_{date_str}_{tile_id}.tif")
-            hdf_path = os.path.join(DOWNLOAD_FOLDER, hdf_file)
+            for band_name in bands:
+                output_tif = os.path.join(output_dir, f"{BASE_DATA_PRODUCT}_{band_name}_{date_str}_{tile_id}.tif")
+                hdf_path = os.path.join(DOWNLOAD_FOLDER, hdf_file)
 
-            if not os.path.exists(output_tif):
-                extract_band_name(hdf_path, band_name, output_tif)
+                if not os.path.exists(output_tif):
+                    extract_band_name(hdf_path, band_name, output_tif)
