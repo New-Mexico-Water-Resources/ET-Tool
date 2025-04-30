@@ -27,4 +27,4 @@ ENV PROJ_LIB=/opt/conda/share/proj
 
 EXPOSE 5001
 
-CMD ["python", "process_modis.py", "--band-name", "ET_500m", "--monitor"]
+CMD ["python", "process_modis.py", "-b", "ET_500m", "-b", "PET_500m", "--monitor"]
