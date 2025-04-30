@@ -1,3 +1,19 @@
+## 1.24.0 (2025-05-01)
+
+### Features
+- Adds PET data to MODIS pipeline
+  - New "MODIS PET 500" layer is available in the "Map Layers" panel
+- Adds new calculated ESI base map layer
+  - ESI is calculated as ET / PET for all non-NaN values
+  - New "MODIS ESI 500" layer is available in the "Map Layers" panel
+- Adds auto-min/max color scaling button to the MODIS base map layers
+  - This allows users to easily view the full range of data for a given layer
+- Adds dynamic color scale option for interactive monthly data
+### Bug Fixes
+- Fixes tooltip persistance bugs
+- Hides interactive preview collapse menu if no job is selected
+
+
 ## 1.23.0 (2025-04-24)
 
 ### Features
