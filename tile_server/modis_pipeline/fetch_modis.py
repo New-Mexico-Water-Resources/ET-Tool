@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import boto3
 import tqdm
 import re
+from datetime import datetime
 from fetch_modis_earthdata import download_tile_from_s3
 
 # Configuration
@@ -93,16 +94,17 @@ def fetch_new_dates(limit=None):
     # Check existing files in local folder first
     existing_files = os.listdir(EXISTING_MERGED_FOLDER)
     dates_in_existing_files = [format_date(f.split("_")[2]) for f in existing_files if f.endswith(".tif")]
-    existing_dates = [d for d in available_dates if d not in dates_in_existing_files]
+
+    new_dates = [d for d in available_dates if d not in dates_in_existing_files]
 
     # Check S3 for existing dates
     s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
     response = s3.list_objects_v2(Bucket=S3_INPUT_BUCKET, Prefix=BUCKET_PREFIX)
     dates_in_s3 = [get_date_from_s3_key(item["Key"]) for item in response["Contents"]]
-    existing_dates = [d for d in existing_dates if d not in dates_in_s3]
+    new_dates = [d for d in new_dates if d not in dates_in_s3]
 
-    # Check if there are any dates left to download
-    new_dates = [d for d in available_dates if d not in existing_dates]
+    # Sort most recent dates first
+    new_dates.sort(key=lambda x: datetime.strptime(x, "%Y.%m.%d"), reverse=True)
 
     os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
     if len(new_dates) > 0:
