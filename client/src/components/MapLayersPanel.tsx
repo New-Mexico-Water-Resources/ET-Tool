@@ -224,7 +224,7 @@ const MapLayersPanel: FC = () => {
               style={{ padding: 0, marginRight: "4px", marginLeft: "4px" }}
             />
             <Typography variant="body2" style={{ color: "var(--st-gray-30)", fontSize: "12px" }}>
-              Available Data Boundary
+              Landsat ARD Tiles Data Boundary
             </Typography>
           </div>
           {referenceLayerOptions.map((layer) => (
@@ -377,6 +377,9 @@ const MapLayersPanel: FC = () => {
                               </FormLabel>
                               <Input
                                 type="number"
+                                inputProps={{
+                                  step: selectedMapLayer?.step || 1,
+                                }}
                                 value={tempMinimumBaseMapColorBound}
                                 onChange={(evt) => {
                                   const newValue = evt.target.value;
@@ -399,6 +402,9 @@ const MapLayersPanel: FC = () => {
                               </FormLabel>
                               <Input
                                 type="number"
+                                inputProps={{
+                                  step: selectedMapLayer?.step || 1,
+                                }}
                                 value={tempMaximumBaseMapColorBound}
                                 onChange={(evt) => {
                                   const newValue = evt.target.value;

@@ -41,7 +41,7 @@ BUCKET_PREFIX = os.environ.get("MODIS_S3_BUCKET_PREFIX", "modis/")
 AWS_PROFILE = os.environ.get("AWS_PROFILE", None)
 S3_INPUT_BUCKET = os.environ.get("S3_INPUT_BUCKET", "ose-dev-inputs")
 
-BANDS = ["ET", "PET"]
+BANDS = ["ET", "PET", "ESI"]
 TILE_SIZE = 256
 ET_COLORMAP = LinearSegmentedColormap.from_list("ET", ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"])
 DIFF_COLORMAP = LinearSegmentedColormap.from_list("DIFF", ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"])
@@ -241,29 +241,42 @@ async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
         raise HTTPException(status_code=404, detail="Time must be in format: YYYY-MM-DD")
 
     time_str = datetime.datetime.strptime(time, "%Y-%m-%d").strftime("%Y%m%d")
-    path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
+    esi_mode = band == "ESI"
+    bands = [band] if not esi_mode else ["ET", "PET"]
+    band_data = {}
+    for band in bands:
+        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
 
-    if not os.path.exists(path):
-        if S3_INPUT_BUCKET:
-            s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
-            key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+        if not os.path.exists(path):
+            if S3_INPUT_BUCKET:
+                s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
+                key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
 
-            try:
-                await s3.download_file(S3_INPUT_BUCKET, key, path)
-            except Exception as e:
+                try:
+                    await s3.download_file(S3_INPUT_BUCKET, key, path)
+                except Exception as e:
+                    raise HTTPException(status_code=404, detail="Tile not found")
+            else:
                 raise HTTPException(status_code=404, detail="Tile not found")
-        else:
-            raise HTTPException(status_code=404, detail="Tile not found")
+
+        with rasterio.open(path) as src:
+            band_data[band] = src.read(1)
+            # Filter out nodata values
+            band_data[band] = np.where(band_data[band] >= 32700, np.nan, band_data[band])
+
+    # ESI can only be a max of 1
+    current_data = band_data[band] if not esi_mode else np.divide(band_data["ET"], band_data["PET"])
+    if esi_mode:
+        current_data = np.clip(current_data, 0, 1)
 
     # Get min/max values for the TIFF if comparison mode is absolute
     if comparison_mode == "absolute":
-        with rasterio.open(path) as src:
-            # Calculate min/max values for the TIFF
-            data = src.read(1)
-            min_val = int(np.floor(np.nanmin(data)))
-            # Filter out nodata values
-            data = np.where(data >= 32700, np.nan, data)
-            max_val = int(np.ceil(np.nanmax(data)))
+        if esi_mode:
+            min_val = round(float(np.nanmin(current_data)), 2)
+            max_val = round(float(np.nanmax(current_data)), 2)
+        else:
+            min_val = int(np.nanmin(current_data))
+            max_val = int(np.nanmax(current_data))
     else:
         # Get min/max values for the TIFF if comparison mode is prevPass
         prev_date = None
@@ -275,15 +288,29 @@ async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
             else:
                 raise HTTPException(status_code=404, detail="Previous date not found")
         prev_time_str = datetime.datetime.strptime(prev_date, "%Y-%m-%d").strftime("%Y%m%d")
-        prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{band}.tif")
-        # Open both files, subtract, get min/max diff
-        with rasterio.open(path) as src:
-            with rasterio.open(prev_path) as prev_src:
-                data = src.read(1)
-                prev_data = prev_src.read(1)
-                diff = data - prev_data
-                min_val = int(np.floor(np.nanmin(diff)))
-                max_val = int(np.ceil(np.nanmax(diff)))
+        prev_bands = ["ET", "PET"] if esi_mode else [band]
+        prev_bands_data = {}
+        for prev_band in prev_bands:
+            prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{prev_band}.tif")
+            # Open both files, subtract, get min/max diff
+            with rasterio.open(prev_path) as src:
+                prev_bands_data[prev_band] = src.read(1)
+                # Filter out nodata values
+                prev_bands_data[prev_band] = np.where(
+                    prev_bands_data[prev_band] >= 32700, np.nan, prev_bands_data[prev_band]
+                )
+
+        if esi_mode:
+            prev_data = np.divide(prev_bands_data["ET"], prev_bands_data["PET"])
+        else:
+            prev_data = prev_bands_data[band]
+        diff = current_data - prev_data
+        if esi_mode:
+            min_val = round(float(np.nanmin(diff)), 2)
+            max_val = round(float(np.nanmax(diff)), 2)
+        else:
+            min_val = int(np.floor(np.nanmin(diff)))
+            max_val = int(np.ceil(np.nanmax(diff)))
 
     return {"min": min_val, "max": max_val}
 
@@ -306,24 +333,36 @@ async def serve_dynamic_tile(
         raise HTTPException(status_code=404, detail="Time must be in format: YYYY-MM-DD")
 
     time_str = datetime.datetime.strptime(time, "%Y-%m-%d").strftime("%Y%m%d")
-    path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
+    esi_mode = band == "ESI"
 
-    if not os.path.exists(path):
-        if S3_INPUT_BUCKET:
-            s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
-            key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+    bands = [band] if not esi_mode else ["ET", "PET"]
 
-            try:
-                await s3.download_file(S3_INPUT_BUCKET, key, path)
-            except Exception as e:
+    band_data = {}
+    for band in bands:
+        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
+        if not os.path.exists(path):
+            if S3_INPUT_BUCKET:
+                s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
+                key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+
+                try:
+                    await s3.download_file(S3_INPUT_BUCKET, key, path)
+                except Exception as e:
+                    raise HTTPException(status_code=404, detail="Tile not found")
+            else:
                 raise HTTPException(status_code=404, detail="Tile not found")
-        else:
-            raise HTTPException(status_code=404, detail="Tile not found")
 
-    full_data = get_tile(path, z, x, y)
+        full_data = get_tile(path, z, x, y)
 
-    if full_data is None or np.isnan(full_data).all():
-        return Response(content=b"", media_type="image/png", status_code=404)
+        if full_data is None or np.isnan(full_data).all():
+            return Response(content=b"", media_type="image/png", status_code=404)
+
+        band_data[band] = full_data
+
+    # If ESI mode, calculate by dividing ET by PET
+    full_data = band_data[band] if not esi_mode else np.divide(band_data["ET"], band_data["PET"])
+    if esi_mode:
+        full_data = np.clip(full_data, 0, 1)
 
     if comparison_mode == "prevPass":
         # Get date of previous pass from available dates
@@ -336,15 +375,22 @@ async def serve_dynamic_tile(
             else:
                 prev_date = None
         prev_time_str = datetime.datetime.strptime(prev_date, "%Y-%m-%d").strftime("%Y%m%d")
-        prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{band}.tif")
-        prev_data = get_tile(prev_path, z, x, y)
-        if prev_data is None or np.isnan(prev_data).all():
-            return Response(content=b"", media_type="image/png", status_code=404)
+        prev_bands = ["ET", "PET"] if esi_mode else [band]
+        prev_bands_data = {}
+        for prev_band in prev_bands:
+            prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{prev_band}.tif")
+            prev_bands_data[prev_band] = get_tile(prev_path, z, x, y)
+            if prev_bands_data[prev_band] is None or np.isnan(prev_bands_data[prev_band]).all():
+                return Response(content=b"", media_type="image/png", status_code=404)
+
+        prev_data = prev_bands_data[prev_band] if not esi_mode else np.divide(prev_bands_data["ET"], prev_bands_data["PET"])
+        if esi_mode:
+            prev_data = np.clip(prev_data, 0, 1)
         full_data = full_data - prev_data
 
     # Scale data
-    min_val = color_min if color_min is not None else src.meta.get("min", 0)
-    max_val = color_max if color_max is not None else src.meta.get("max", 200)
+    min_val = color_min if color_min is not None else 0
+    max_val = color_max if color_max is not None else (200 if not esi_mode else 1)
 
     # Create alpha channel
     alpha = np.where(np.isnan(full_data), 0, 255).astype(np.uint8)
