@@ -232,6 +232,62 @@ def get_tile(path: str, z: int, x: int, y: int):
         return full_data
 
 
+@app.get("/ts_v1/tiles/stats/{band}/{time}/{comparison_mode}")
+async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
+    if band not in BANDS:
+        raise HTTPException(status_code=404, detail="Band not found")
+
+    if not re.match(r"\d{4}-\d{2}-\d{2}", time):
+        raise HTTPException(status_code=404, detail="Time must be in format: YYYY-MM-DD")
+
+    time_str = datetime.datetime.strptime(time, "%Y-%m-%d").strftime("%Y%m%d")
+    path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
+
+    if not os.path.exists(path):
+        if S3_INPUT_BUCKET:
+            s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
+            key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+
+            try:
+                await s3.download_file(S3_INPUT_BUCKET, key, path)
+            except Exception as e:
+                raise HTTPException(status_code=404, detail="Tile not found")
+        else:
+            raise HTTPException(status_code=404, detail="Tile not found")
+
+    # Get min/max values for the TIFF if comparison mode is absolute
+    if comparison_mode == "absolute":
+        with rasterio.open(path) as src:
+            # Calculate min/max values for the TIFF
+            data = src.read(1)
+            min_val = int(np.floor(np.nanmin(data)))
+            # Filter out nodata values
+            data = np.where(data >= 32700, np.nan, data)
+            max_val = int(np.ceil(np.nanmax(data)))
+    else:
+        # Get min/max values for the TIFF if comparison mode is prevPass
+        prev_date = None
+        available_dates = await get_modis_dates()
+        if available_dates:
+            current_index = available_dates.index(time) if time in available_dates else -1
+            if current_index > 0:
+                prev_date = available_dates[current_index - 1]
+            else:
+                raise HTTPException(status_code=404, detail="Previous date not found")
+        prev_time_str = datetime.datetime.strptime(prev_date, "%Y-%m-%d").strftime("%Y%m%d")
+        prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{band}.tif")
+        # Open both files, subtract, get min/max diff
+        with rasterio.open(path) as src:
+            with rasterio.open(prev_path) as prev_src:
+                data = src.read(1)
+                prev_data = prev_src.read(1)
+                diff = data - prev_data
+                min_val = int(np.floor(np.nanmin(diff)))
+                max_val = int(np.ceil(np.nanmax(diff)))
+
+    return {"min": min_val, "max": max_val}
+
+
 @app.get("/ts_v1/tiles/dynamic/{band}/{time}/{z}/{x}/{y}.png")
 async def serve_dynamic_tile(
     band: str,

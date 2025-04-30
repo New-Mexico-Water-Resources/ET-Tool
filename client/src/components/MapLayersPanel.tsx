@@ -1,4 +1,4 @@
-import { FC, useEffect, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Checkbox,
@@ -15,11 +15,14 @@ import {
   Select,
   Typography,
   CircularProgress,
+  Tooltip,
 } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import axios from "axios";
 import UpdateIcon from "@mui/icons-material/Update";
+import AutoModeIcon from "@mui/icons-material/AutoMode";
+
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 
 import useStore, { MapLayer } from "../utils/store";
@@ -57,48 +60,75 @@ const MapLayersPanel: FC = () => {
   const [tempMinimumBaseMapColorBound, setTempMinimumBaseMapColorBound] = useState<number | undefined>(0);
   const [tempMaximumBaseMapColorBound, setTempMaximumBaseMapColorBound] = useState<number | undefined>(200);
 
+  const [tempMaximumBaseMapColorDifference, setTempMaximumBaseMapColorDifference] = useState<number | undefined>(10);
+
   const [comparisonMode, setComparisonMode] = useStore((state) => [state.comparisonMode, state.setComparisonMode]);
   const [tempComparisonMode, setTempComparisonMode] = useState<string | undefined>(comparisonMode || "absolute");
 
   const fetchingDroughtMonitorData = useStore((state) => state.fetchingDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
-  const updateSettings = () => {
+  const updateSettings = useCallback(() => {
     if (tempTileDate) {
       setTileDate(tempTileDate);
     }
-    if (tempMinimumBaseMapColorBound !== undefined) {
-      setMinimumBaseMapColorBound(tempMinimumBaseMapColorBound);
-    }
-    if (tempMaximumBaseMapColorBound !== undefined) {
-      setMaximumBaseMapColorBound(tempMaximumBaseMapColorBound);
+
+    if (tempComparisonMode === "absolute") {
+      if (tempMinimumBaseMapColorBound !== undefined) {
+        setMinimumBaseMapColorBound(tempMinimumBaseMapColorBound);
+      }
+      if (tempMaximumBaseMapColorBound !== undefined) {
+        setMaximumBaseMapColorBound(tempMaximumBaseMapColorBound);
+      }
+    } else {
+      if (tempMaximumBaseMapColorDifference !== undefined) {
+        setTempMinimumBaseMapColorBound(-tempMaximumBaseMapColorDifference);
+        setMinimumBaseMapColorBound(-tempMaximumBaseMapColorDifference);
+
+        setTempMaximumBaseMapColorBound(tempMaximumBaseMapColorDifference);
+        setMaximumBaseMapColorBound(tempMaximumBaseMapColorDifference);
+      }
     }
     if (tempComparisonMode) {
       setComparisonMode(tempComparisonMode);
     }
-  };
+  }, [
+    tempTileDate,
+    tempMinimumBaseMapColorBound,
+    tempMaximumBaseMapColorBound,
+    tempComparisonMode,
+    tempMaximumBaseMapColorDifference,
+    setTileDate,
+    setMinimumBaseMapColorBound,
+    setMaximumBaseMapColorBound,
+    setComparisonMode,
+  ]);
 
   const [availableDates, setAvailableDates] = useState<string[]>([]);
-  useEffect(() => {
+
+  const selectedMapLayer = useMemo(() => {
     if (mapLayerKey && (MAP_LAYER_OPTIONS as any)[mapLayerKey]) {
       const selectedLayer = (MAP_LAYER_OPTIONS as any)[mapLayerKey] as MapLayer;
-      if (selectedLayer?.availableDatesURL) {
-        axios
-          .get(selectedLayer.availableDatesURL)
-          .then((response) => {
-            const sortedDates = [...response.data].sort((a, b) => dayjs(a).diff(dayjs(b)));
-            setAvailableDates(sortedDates);
-          })
-          .catch((error) => {
-            console.error("Error fetching available dates", error);
-            setAvailableDates([]);
-          });
-      } else {
-        setAvailableDates([]);
-      }
+      return selectedLayer;
+    }
+    return null;
+  }, [mapLayerKey]);
+
+  useEffect(() => {
+    if (selectedMapLayer?.availableDatesURL) {
+      axios
+        .get(selectedMapLayer.availableDatesURL)
+        .then((response) => {
+          const sortedDates = [...response.data].sort((a, b) => dayjs(a).diff(dayjs(b)));
+          setAvailableDates(sortedDates);
+        })
+        .catch((error) => {
+          console.error("Error fetching available dates", error);
+          setAvailableDates([]);
+        });
     } else {
       setAvailableDates([]);
     }
-  }, [mapLayerOptions, mapLayerKey]);
+  }, [selectedMapLayer]);
 
   const latestAvailableDate = useMemo(() => {
     if (availableDates.length > 0) {
@@ -107,6 +137,35 @@ const MapLayersPanel: FC = () => {
 
     return undefined;
   }, [availableDates]);
+
+  const fetchMapStats = useCallback(() => {
+    if (selectedMapLayer?.statsURL) {
+      // Need to inject tileDate and comparisonMode into the URL
+      const url = selectedMapLayer.statsURL.replace("{time}", tileDate).replace("{mode}", comparisonMode);
+      axios.get(url).then((response) => {
+        if (comparisonMode === "absolute") {
+          // Update the minimum and maximum base map color bounds
+          setTempMinimumBaseMapColorBound(response.data.min);
+          setTempMaximumBaseMapColorBound(response.data.max);
+          // Auto update
+          setMinimumBaseMapColorBound(response.data.min);
+          setMaximumBaseMapColorBound(response.data.max);
+        } else {
+          const maxAbsDifference = Math.max(Math.abs(response.data.min), Math.abs(response.data.max));
+          setTempMaximumBaseMapColorDifference(maxAbsDifference);
+          setMinimumBaseMapColorBound(-maxAbsDifference);
+          setMaximumBaseMapColorBound(maxAbsDifference);
+        }
+      });
+    }
+  }, [
+    selectedMapLayer,
+    tileDate,
+    comparisonMode,
+    setMinimumBaseMapColorBound,
+    setMaximumBaseMapColorBound,
+    setTempMaximumBaseMapColorDifference,
+  ]);
 
   useEffect(() => {
     if ((!tileDate || !tempTileDate) && latestAvailableDate) {
@@ -289,29 +348,6 @@ const MapLayersPanel: FC = () => {
                           </Typography>
                         </div>
                       )}
-                      {/* {option?.refresh &&
-                        (!option?.modes || comparisonMode === "absolute") &&
-                        mapLayerKey === option.name && (
-                          <RadioGroup
-                            style={{
-                              padding: 0,
-                              marginRight: "4px",
-                              marginLeft: "8px",
-                              marginTop: "-8px",
-                              marginBottom: "8px",
-                            }}
-                            value={refreshType}
-                            onChange={(evt) => {
-                              if (evt.target.value) {
-                                setRefreshType(evt.target.value as any);
-                              }
-                            }}
-                            row
-                          >
-                            <FormControlLabel value="static" control={<Radio />} label="Static" />
-                            <FormControlLabel value="dynamic" control={<Radio />} label="Dynamic" />
-                          </RadioGroup>
-                        )} */}
                       {option?.refresh && refreshType === "dynamic" && mapLayerKey === option.name && (
                         <div
                           style={{
@@ -327,46 +363,81 @@ const MapLayersPanel: FC = () => {
                             marginBottom: "16px",
                           }}
                         >
-                          <FormGroup>
-                            <FormLabel
-                              style={{
-                                color: "var(--st-gray-30)",
-                                fontSize: "12px",
-                                marginBottom: 0,
-                                padding: 0,
+                          {tempComparisonMode === "absolute" && (
+                            <FormGroup>
+                              <FormLabel
+                                style={{
+                                  color: "var(--st-gray-30)",
+                                  fontSize: "12px",
+                                  marginBottom: 0,
+                                  padding: 0,
+                                }}
+                              >
+                                Minimum
+                              </FormLabel>
+                              <Input
+                                type="number"
+                                value={tempMinimumBaseMapColorBound}
+                                onChange={(evt) => {
+                                  const newValue = evt.target.value;
+                                  setTempMinimumBaseMapColorBound(Number(newValue));
+                                }}
+                              />
+                            </FormGroup>
+                          )}
+                          {tempComparisonMode === "absolute" && (
+                            <FormGroup>
+                              <FormLabel
+                                style={{
+                                  color: "var(--st-gray-30)",
+                                  fontSize: "12px",
+                                  marginBottom: 0,
+                                  padding: 0,
+                                }}
+                              >
+                                Maximum
+                              </FormLabel>
+                              <Input
+                                type="number"
+                                value={tempMaximumBaseMapColorBound}
+                                onChange={(evt) => {
+                                  const newValue = evt.target.value;
+                                  setTempMaximumBaseMapColorBound(Number(newValue));
+                                }}
+                              />
+                            </FormGroup>
+                          )}
+                          {tempComparisonMode !== "absolute" && (
+                            <FormGroup>
+                              <FormLabel
+                                style={{
+                                  color: "var(--st-gray-30)",
+                                  fontSize: "12px",
+                                  marginBottom: 0,
+                                  padding: 0,
+                                }}
+                              >
+                                Difference
+                              </FormLabel>
+                              <Input
+                                type="number"
+                                value={tempMaximumBaseMapColorDifference}
+                                onChange={(evt) => {
+                                  const newValue = evt.target.value;
+                                  setTempMaximumBaseMapColorDifference(Number(newValue));
+                                }}
+                              />
+                            </FormGroup>
+                          )}
+                          <Tooltip title="Set min/max values to the minimum and maximum values of the data">
+                            <IconButton
+                              onClick={() => {
+                                fetchMapStats();
                               }}
                             >
-                              Minimum
-                            </FormLabel>
-                            <Input
-                              type="number"
-                              value={tempMinimumBaseMapColorBound}
-                              onChange={(evt) => {
-                                const newValue = evt.target.value;
-                                setTempMinimumBaseMapColorBound(Number(newValue));
-                              }}
-                            />
-                          </FormGroup>
-                          <FormGroup>
-                            <FormLabel
-                              style={{
-                                color: "var(--st-gray-30)",
-                                fontSize: "12px",
-                                marginBottom: 0,
-                                padding: 0,
-                              }}
-                            >
-                              Maximum
-                            </FormLabel>
-                            <Input
-                              type="number"
-                              value={tempMaximumBaseMapColorBound}
-                              onChange={(evt) => {
-                                const newValue = evt.target.value;
-                                setTempMaximumBaseMapColorBound(Number(newValue));
-                              }}
-                            />
-                          </FormGroup>
+                              <AutoModeIcon sx={{ color: "var(--st-gray-30)", ":hover": { color: "var(--st-gray-10)" } }} />
+                            </IconButton>
+                          </Tooltip>
                         </div>
                       )}
                       {option?.time && mapLayerKey === option.name && (
@@ -485,7 +556,10 @@ const MapLayersPanel: FC = () => {
                                   onClick={() => {
                                     if (latestAvailableDate) {
                                       setTempTileDate(latestAvailableDate);
-                                      updateSettings();
+                                      setTileDate(latestAvailableDate);
+                                      setTimeout(() => {
+                                        updateSettings();
+                                      }, 1);
                                     }
                                   }}
                                 >
@@ -521,7 +595,8 @@ const MapLayersPanel: FC = () => {
                             tempTileDate === tileDate &&
                             tempComparisonMode === comparisonMode &&
                             tempMinimumBaseMapColorBound === minimumBaseMapColorBound &&
-                            tempMaximumBaseMapColorBound === maximumBaseMapColorBound
+                            tempMaximumBaseMapColorBound === maximumBaseMapColorBound &&
+                            (comparisonMode === "absolute" || tempMaximumBaseMapColorDifference === maximumBaseMapColorBound)
                           }
                           onClick={() => {
                             updateSettings();

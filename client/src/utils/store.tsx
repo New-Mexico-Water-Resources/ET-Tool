@@ -92,6 +92,7 @@ export type MapLayer = {
   refresh?: "static" | "dynamic";
   units?: string;
   modes?: Record<string, string>;
+  statsURL?: string;
   showColorScale?: boolean;
   [key: string]: any;
 };
@@ -103,6 +104,7 @@ interface Store {
   setTileDate: (tileDate: string) => void;
   mapLayerKey: string;
   setMapLayerKey: (mapLayerKey: string) => void;
+  // fetchMapStats: (mapLayerKey: string, time: string, comparisonMode: string) => void;
   isRightPanelOpen: boolean;
   activeTab: ActiveTabType;
   setActiveTab: (tab: ActiveTabType) => void;
@@ -328,7 +330,7 @@ const useStore = create<Store>()(
         return instance;
       },
       fetchQueue: async () => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           // No token, don't fetch queue
           return;
@@ -339,7 +341,7 @@ const useStore = create<Store>()(
             return set({ queue: [], backlog: [] });
           }
 
-          let formattedQueue = response.data.map((job: any) => {
+          const formattedQueue = response.data.map((job: any) => {
             job.submitted = job.submitted ? new Date(job.submitted).toLocaleString() : null;
             job.started = job.started ? new Date(job.started).toLocaleString() : null;
             job.ended = job.ended ? new Date(job.ended).toLocaleString() : null;
@@ -350,17 +352,17 @@ const useStore = create<Store>()(
             return job;
           });
 
-          let existingQueue = get().queue;
-          let existingBacklog = get().backlog;
+          const existingQueue = get().queue;
+          const existingBacklog = get().backlog;
 
-          let queue = formattedQueue.filter((job: any) => QUEUE_STATUSES.includes(job.status));
-          let backlog = formattedQueue.filter((job: any) => !QUEUE_STATUSES.includes(job.status));
+          const queue = formattedQueue.filter((job: any) => QUEUE_STATUSES.includes(job.status));
+          const backlog = formattedQueue.filter((job: any) => !QUEUE_STATUSES.includes(job.status));
 
           let jobsChanged = existingQueue.length !== queue.length || existingBacklog.length !== backlog.length;
 
           if (!jobsChanged) {
             queue.some((job) => {
-              let existingJob = existingQueue.find((existingJob) => existingJob.key === job.key);
+              const existingJob = existingQueue.find((existingJob) => existingJob.key === job.key);
 
               jobsChanged =
                 !existingJob ||
@@ -372,7 +374,7 @@ const useStore = create<Store>()(
 
           if (!jobsChanged) {
             jobsChanged = backlog.some((job) => {
-              let existingJob = existingBacklog.find((existingJob) => existingJob.key === job.key);
+              const existingJob = existingBacklog.find((existingJob) => existingJob.key === job.key);
 
               jobsChanged =
                 !existingJob ||
@@ -388,12 +390,12 @@ const useStore = create<Store>()(
         });
       },
       deleteJob: async (jobKey, deleteFiles: boolean = true) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
 
-        let escapedKey = encodeURIComponent(jobKey);
+        const escapedKey = encodeURIComponent(jobKey);
 
         axiosInstance
           .delete(`${API_URL}/queue/delete_job?key=${escapedKey}&deleteFiles=${deleteFiles ? "true" : "false"}`)
@@ -425,7 +427,7 @@ const useStore = create<Store>()(
           });
       },
       bulkDeleteJobs: async (jobKeys, deleteFiles: boolean = true) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -436,8 +438,8 @@ const useStore = create<Store>()(
           })
           .then(() => {
             set((state) => {
-              let deletedJobs = state.queue.filter((item) => jobKeys.includes(item.key));
-              let remainingJobs = state.queue.filter((item) => !jobKeys.includes(item.key));
+              const deletedJobs = state.queue.filter((item) => jobKeys.includes(item.key));
+              const remainingJobs = state.queue.filter((item) => !jobKeys.includes(item.key));
 
               return {
                 ...state,
@@ -463,7 +465,7 @@ const useStore = create<Store>()(
 
         let newJob = formJobForQueue(jobName, get().startYear, get().endYear, get().loadedGeoJSON);
 
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -495,14 +497,14 @@ const useStore = create<Store>()(
       },
       locations: [],
       setLocations: (locations) => {
-        let validLocations = locations.filter((location) => location?.id !== undefined);
+        const validLocations = locations.filter((location) => location?.id !== undefined);
         set({ locations: validLocations });
       },
       prepareMultipolygonJob: () => {
         let baseName = get().jobName.trim() || "Untitled Job";
         baseName = baseName.replace(/[^\w\s-_]/gi, "");
-        let multipolygons = get().multipolygons;
-        let polygonLocations = get().locations;
+        const multipolygons = get().multipolygons;
+        const polygonLocations = get().locations;
 
         if (multipolygons.length === 0 || polygonLocations.length !== multipolygons.length) {
           set({ errorMessage: "No multipolygons to submit" });
@@ -512,25 +514,25 @@ const useStore = create<Store>()(
         return polygonLocations
           .filter((location) => location.visible)
           .map((location) => {
-            let defaultName = `${baseName} Part ${location.id + 1}`;
+            const defaultName = `${baseName} Part ${location.id + 1}`;
             let jobName = location?.name || defaultName;
             jobName = jobName.replace(/[^\w\s-_]/gi, "") || "Untitled Job";
-            let geojson = multipolygons[location.id];
+            const geojson = multipolygons[location.id];
 
             return formJobForQueue(jobName, get().startYear, get().endYear, geojson);
           });
       },
       submitMultipolygonJob: async (jobs: any[]) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
 
         try {
           let activeJob = jobs[0];
-          let responses: any[] = [];
+          const responses: any[] = [];
           await jobs.forEach(async (job, i) => {
-            let jobName = job?.name.replace(/[^\w\s-_]/gi, "") || "Untitled Job";
+            const jobName = job?.name.replace(/[^\w\s-_]/gi, "") || "Untitled Job";
             const response = await axiosInstance.post(`${API_URL}/start_run`, {
               name: jobName,
               startYear: job.start_year,
@@ -645,7 +647,7 @@ const useStore = create<Store>()(
           });
       },
       pauseJob: (jobKey) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -661,7 +663,7 @@ const useStore = create<Store>()(
           });
       },
       resumeJob: (jobKey) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -703,12 +705,12 @@ const useStore = create<Store>()(
         });
       },
       fetchJobLogs: (jobKey) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return null;
         }
 
-        let escapedKey = encodeURIComponent(jobKey);
+        const escapedKey = encodeURIComponent(jobKey);
 
         return axiosInstance
           .get(`${API_URL}/job/logs?key=${escapedKey}`)
@@ -722,19 +724,19 @@ const useStore = create<Store>()(
       },
       jobStatuses: {},
       fetchJobStatus: (jobKey, jobName) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return null;
         }
 
-        let escapedKey = encodeURIComponent(jobKey);
-        let escapedName = encodeURIComponent(jobName);
+        const escapedKey = encodeURIComponent(jobKey);
+        const escapedName = encodeURIComponent(jobName);
 
         return axiosInstance
           .get(`${API_URL}/job/status?key=${escapedKey}&name=${escapedName}`)
           .then((response) => {
             set((state) => {
-              let jobStatuses = { ...state.jobStatuses };
+              const jobStatuses = { ...state.jobStatuses };
               jobStatuses[jobKey] = response.data;
               return { jobStatuses };
             });
@@ -742,7 +744,7 @@ const useStore = create<Store>()(
           })
           .catch((error) => {
             // Only log error message if status !== 404
-            let errorMessage = error?.response?.status === 404 ? "" : error?.message || "Error fetching job status";
+            const errorMessage = error?.response?.status === 404 ? "" : error?.message || "Error fetching job status";
 
             set((state) => ({
               errorMessage: errorMessage,
@@ -775,12 +777,12 @@ const useStore = create<Store>()(
           });
       },
       prepareGeoJSON: (geoFile: File) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return null;
         }
 
-        let formData = new FormData();
+        const formData = new FormData();
         formData.append("file", geoFile);
 
         return axiosInstance
@@ -797,7 +799,7 @@ const useStore = create<Store>()(
           });
       },
       clearPendingJobs: () => {
-        let pendingJobs = get()
+        const pendingJobs = get()
           .queue.filter((job) => job.status === "Pending")
           .map((job) => job.key);
 
@@ -810,7 +812,7 @@ const useStore = create<Store>()(
       users: [],
       totalUsers: 0,
       adminFetchUsers: (page = 0) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -818,7 +820,7 @@ const useStore = create<Store>()(
         axiosInstance
           .get(`${API_URL}/admin/users?page=${page}`)
           .then((response) => {
-            let users: UserListingDetails[] = response.data.users;
+            const users: UserListingDetails[] = response.data.users;
             users.sort((a, b) => {
               if (
                 a.roles.some((role) => role.id === ROLES.NEW_USER) &&
@@ -842,7 +844,7 @@ const useStore = create<Store>()(
           });
       },
       adminDeleteUser: (userId) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -851,7 +853,7 @@ const useStore = create<Store>()(
           .delete(`${API_URL}/admin/delete_user?userId=${userId}`)
           .then(() => {
             set((state) => {
-              let users = state.users.filter((user) => user.user_id !== userId);
+              const users = state.users.filter((user) => user.user_id !== userId);
               state.adminFetchUsers();
               return { users };
             });
@@ -862,7 +864,7 @@ const useStore = create<Store>()(
           });
       },
       adminUpdateUser: (userId, roles) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -871,7 +873,7 @@ const useStore = create<Store>()(
           .post(`${API_URL}/admin/update_user`, { userId, roles })
           .then(() => {
             set((state) => {
-              let users = state.users.map((user) => {
+              const users = state.users.map((user) => {
                 if (user.user_id === userId) {
                   user.roles = roles.map((role) => ({ name: role, id: role }));
                 }
@@ -887,7 +889,7 @@ const useStore = create<Store>()(
           });
       },
       reverifyEmail: (userId) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -904,7 +906,7 @@ const useStore = create<Store>()(
       sortAscending: true,
       setSortAscending: (sortAscending) => set({ sortAscending }),
       approveJob: (jobKey) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -922,7 +924,7 @@ const useStore = create<Store>()(
           });
       },
       bulkApproveJobs: (jobKeys) => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -942,7 +944,7 @@ const useStore = create<Store>()(
       changelog: "",
       version: "0.0.0",
       loadVersion: () => {
-        let version = packageJson.version;
+        const version = packageJson.version;
         set({ version });
       },
       lastSeenVersion: "0.0.0",
@@ -957,7 +959,7 @@ const useStore = create<Store>()(
       setVisibleReferenceLayers: (visibleReferenceLayers) => set({ visibleReferenceLayers }),
       ardTiles: {},
       fetchARDTiles: () => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
@@ -973,7 +975,7 @@ const useStore = create<Store>()(
           });
       },
       searchGeoJSONs: () => {
-        let axiosInstance = get().authAxios();
+        const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }

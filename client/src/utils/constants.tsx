@@ -92,6 +92,28 @@ export const MAP_LAYER_OPTIONS = {
     refresh: "dynamic",
     showColorScale: true,
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
+    statsURL: `${TILE_SERVER_URL}/stats/ET/{time}/{mode}`,
+    units: "mm/8-days",
+    modes: {
+      absolute: "Absolute",
+      prevPass: "Previous Pass Difference",
+    },
+  },
+
+  "MODIS PET 500": {
+    name: "MODIS PET 500",
+    attribution:
+      'Imagery re-formatted and made available from the NASA MODIS MOD16A2 dataset, "Steve Running, Qiaozhen Mu - University of Montana and MODAPS SIPS - NASA. (2015). MOD16A2 MODIS/Terra Evapotranspiration 8-day L4 Global 500m SIN Grid. NASA LP DAAC. http://doi.org/10.5067/MODIS/MOD16A2.006"',
+    url: `${TILE_SERVER_URL}/{refresh}/PET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    maxZoom: 11,
+    time: "2021-01-01",
+    backgroundProvider: "Google Satellite",
+    labelsProvider: "CartoDB DarkMatter Labels",
+    tms: true,
+    refresh: "dynamic",
+    showColorScale: true,
+    availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
+    statsURL: `${TILE_SERVER_URL}/stats/PET/{time}/{mode}`,
     units: "mm/8-days",
     modes: {
       absolute: "Absolute",
