@@ -1,4 +1,5 @@
 import glob
+import logging
 import numpy as np
 from os.path import join, basename, abspath, dirname
 from matplotlib import pyplot as plt
@@ -6,6 +7,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 from PIL import Image
 from .write_status import write_status
 from PyPDF2 import PdfMerger
+
+logger = logging.getLogger(__name__)
 
 
 def load_and_resize_image(filepath, max_size=1650):
@@ -44,6 +47,7 @@ def generate_report(figure_directory, ROI_name, units, status_filename, text_pan
         try:
             img_array = load_and_resize_image(image_path)
         except Exception as e:
+            logger.error(f"Error loading image {image_path} (skipping): {e}")
             continue  # skip if image not found or error
         fig = plt.figure(figsize=(19.2, 14.4), tight_layout=True)
         ax = fig.add_axes([0, 0, 1, 1])

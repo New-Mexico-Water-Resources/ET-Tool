@@ -29,6 +29,7 @@ from glob import glob
 from PyPDF2 import PdfMerger
 
 from .pdf_report_generator import generate_final_reports
+from .figure_generator import generate_all_figures
 
 logger = logging.getLogger(__name__)
 
@@ -158,103 +159,22 @@ def water_rights_visualizer(
     else:
         logger.warning(f"invalid ROI: {ROI}")
 
-    # Now generate figures
-    monthly_nan_directory = Path(f"{output_directory}/monthly_nan/{ROI_base}")
-    monthly_sums_directory = Path(f"{output_directory}/monthly/{ROI_base}")
-    subset_directory = Path(f"{output_directory}/subset/{ROI_base}")
-    monthly_means_directory = Path(f"{output_directory}/monthly_means/{ROI_base}")
-    figure_directory = Path(f"{output_directory}/figures/{ROI_base}")
-
-    if start_year == end_year:
-        years_x = [start_year]
-    else:
-        years_x = [*range(int(start_year), int(end_year) + 1)]
-
-    ROI_latlon = gpd.read_file(ROI).to_crs(WGS84).geometry[0]
-    ROI_for_nan = list((gpd.read_file(ROI).to_crs(WGS84)).geometry)
-    ROI_acres = round(ROI_area(ROI, working_directory), 2)
-    creation_date = datetime.today()
-
-    vmin = None
-    vmax = None
-
-    # Min/max for all years
-    for file in Path(monthly_means_directory).glob("*.csv"):
-        year_df = pd.read_csv(file)
-        year_mean = np.nanmean(year_df["ET"])
-        year_sd = np.nanstd(year_df["ET"])
-
-        year_vmin = max(year_mean - 2 * year_sd, 0)
-        year_vmax = year_mean + 2 * year_sd
-
-        vmin = year_vmin if vmin is None else min(vmin, year_vmin)
-        vmax = year_vmax if vmax is None else max(vmax, year_vmax)
-
-    for i, year in enumerate(years_x):
-        if exists(f"{monthly_nan_directory}/{year}.csv"):
-            nd = pd.read_csv(f"{monthly_nan_directory}/{year}.csv")
-        else:
-            nd = pd.DataFrame(columns=["year", "month", "percent_nan"])
-
-        month_means = []
-        mm = pd.read_csv(f"{monthly_means_directory}/{year}_monthly_means.csv")
-        month_means.append(mm)
-
-        idx = {"Months": range(start_month, end_month + 1)}
-        df1 = pd.DataFrame(idx, columns=["Months"])
-
-        main_dfa = pd.merge(left=df1, right=mm, how="left", left_on="Months", right_on="Month")
-        main_df = pd.merge(left=main_dfa, right=nd, how="left", left_on="Months", right_on="month")
-
-        if "Year" not in main_df.columns and "Year_x" in main_df.columns:
-            main_df = main_df.rename(columns={"Year_x": "Year"})
-
-        main_df = main_df.replace(np.nan, 100)
-
-        affine = None
-        ROI_name = splitext(basename(ROI))[0]
-        subsets = Path(subset_directory).glob(f"*_{ROI_name}_ET_subset.tif")
-        subsets = list(subsets)
-        logger.info(f"Found {len(subsets)} subset files for year {year} and ROI {ROI_name} in {subset_directory}")
-        for file in subsets:
-            filename = str(file)
-            logger.info(f"reading subset file: {filename}")
-            with rasterio.open(filename) as src:
-                affine = src.transform
-                break
-
-        if affine is None:
-            logger.error(f"no subset found for year {year} and ROI {ROI_name}")
-            continue
-
-        figure_filename = join(figure_directory, f"{year}_{ROI_name}.png")
-        if exists(figure_filename):
-            logger.info(f"figure already exists: {cl.file(figure_filename)}. Regenerating.")
-
-        for metric_units in [True, False]:
-            logger.info(f"generating figure for year {cl.time(year)} ROI {cl.place(ROI_name)} metric_units: {metric_units}")
-
-            generate_figure(
-                ROI_name=ROI_name,
-                ROI_latlon=ROI_latlon,
-                ROI_acres=ROI_acres,
-                creation_date=creation_date,
-                year=year,
-                vmin=vmin,
-                vmax=vmax,
-                affine=affine,
-                main_df=main_df,
-                monthly_sums_directory=monthly_sums_directory,
-                figure_filename=figure_filename,
-                start_month=start_month,
-                end_month=end_month,
-                status_filename=status_filename,
-                requestor=requestor,
-                metric_units=metric_units,
-            )
+    # Generate all figures
+    generate_all_figures(
+        ROI_name=ROI_base,
+        ROI=ROI,
+        output_directory=str(output_directory),
+        start_year=start_year,
+        end_year=end_year,
+        start_month=start_month,
+        end_month=end_month,
+        status_filename=status_filename,
+        requestor=requestor,
+    )
 
     # Generate PDFs
-    generate_final_reports(str(figure_directory), ROI_name, status_filename, None, None)
+    figure_directory = Path(f"{output_directory}/figures/{ROI_base}")
+    generate_final_reports(str(figure_directory), ROI_base, status_filename, None, None)
 
 
 def main(argv=sys.argv):
