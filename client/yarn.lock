@@ -4105,6 +4105,11 @@ iter-fun@^0.2.0:
   resolved "https://registry.yarnpkg.com/iter-fun/-/iter-fun-0.2.0.tgz#e0d7d36b1b3df67d3834e2710b53412913611f7b"
   integrity sha512-8dYv+ptyps7LtrfqAYY8qqThAiX2eIDBGKc/kXdSrEMRJQoD8KhTOa+duECGghjsnkHEf9O8X6IS62jO+6xwhw==
 
+jotai@^2.12.4:
+  version "2.12.4"
+  resolved "https://registry.yarnpkg.com/jotai/-/jotai-2.12.4.tgz#f6b38e71ce5a2ddd6c5741ee5a6d3abb79e274f8"
+  integrity sha512-eFXLJol4oOLM8BS1+QV+XwaYQITG8n1tatBCFl4F5HE3zR5j2WIK8QpMt7VJIYmlogNUZfvB7wjwLoVk+umB9Q==
+
 "js-tokens@^3.0.0 || ^4.0.0", js-tokens@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/js-tokens/-/js-tokens-4.0.0.tgz#19203fb59991df98e3a287050d4647cdeaf32499"

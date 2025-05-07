@@ -25,6 +25,8 @@ import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStor
 import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS } from "../utils/constants";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
+import { useAtomValue } from "jotai";
+import { tooltipAtom } from "../routes/Dashboard";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -63,6 +65,8 @@ const CurrentJobChip = () => {
   ]);
   const [previewMinValue, setPreviewMinValue] = useCurrentJobStore((state) => [state.previewMin, state.setPreviewMin]);
   const [previewMaxValue, setPreviewMaxValue] = useCurrentJobStore((state) => [state.previewMax, state.setPreviewMax]);
+
+  const tooltip = useAtomValue(tooltipAtom);
 
   const canPreview = useMemo(() => {
     return !!previewYear && Number(previewYear) && !!previewMonth && Number(previewMonth);
@@ -511,7 +515,20 @@ const CurrentJobChip = () => {
                   {canPreview && (
                     <div style={{ padding: "0 16px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <IconButton onClick={() => setIsPlaying(!isPlaying)} size="small" sx={{ color: "primary.main" }}>
+                        <IconButton
+                          onClick={() => {
+                            if (!isPlaying) {
+                              setShowPreview(true);
+                              setTimeout(() => {
+                                setIsPlaying(true);
+                              }, 100);
+                            } else {
+                              setIsPlaying(false);
+                            }
+                          }}
+                          size="small"
+                          sx={{ color: "primary.main" }}
+                        >
                           {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
                         </IconButton>
                         <Slider
@@ -535,11 +552,16 @@ const CurrentJobChip = () => {
                         size="small"
                         sx={{ flex: 1 }}
                         onClick={() => {
-                          // Stop playing if it's currently playing
+                          tooltip?.close();
                           if (isPlaying) {
                             setIsPlaying(false);
+                            setTimeout(() => {
+                              setShowPreview(false);
+                              tooltip?.close();
+                            }, 500);
+                          } else {
+                            setShowPreview(!showPreview);
                           }
-                          setShowPreview(!showPreview);
                         }}
                         disabled={!canPreview}
                       >

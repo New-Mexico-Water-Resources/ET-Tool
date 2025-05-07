@@ -11,6 +11,8 @@ import useStore, { MapLayer } from "../utils/store";
 
 import { OPENET_TRANSITION_DATE } from "../utils/constants";
 import ColorScale from "./ColorScale";
+import { useAtom } from "jotai";
+import { tooltipAtom } from "../routes/Dashboard";
 
 // Add CSS to disable transitions on Leaflet layers
 const style = document.createElement("style");
@@ -117,6 +119,8 @@ const ActiveMonthlyMapLayer: FC = () => {
   const mouseoutHandlerRef = useRef<(() => void) | null>(null);
   const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [tooltip, setTooltip] = useAtom(tooltipAtom);
+
   // Get preview state from currentJobStore
   const showPreview = useCurrentJobStore((state) => state.showPreview);
   const setShowPreview = useCurrentJobStore((state) => state.setShowPreview);
@@ -132,8 +136,6 @@ const ActiveMonthlyMapLayer: FC = () => {
   const isSidebarOpen = useStore((state) => state.isRightPanelOpen);
 
   const activeJob = useStore((state) => state.activeJob);
-
-  const [activeTooltips, setActiveTooltips] = useState<Tooltip[]>([]);
 
   const [dynamicPreviewColorScale, setDynamicPreviewColorScale] = useCurrentJobStore((state) => [
     state.dynamicPreviewColorScale,
@@ -185,12 +187,6 @@ const ActiveMonthlyMapLayer: FC = () => {
       map.off("mouseout", mouseoutHandlerRef.current);
       mouseoutHandlerRef.current = null;
     }
-
-    activeTooltips.forEach((tooltip) => {
-      map.removeLayer(tooltip);
-    });
-
-    setActiveTooltips([]);
   }, [map]);
 
   // Function to create a new layer with crossfade
@@ -378,29 +374,25 @@ const ActiveMonthlyMapLayer: FC = () => {
         // Create the new layer with crossfade
         const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap);
 
-        // Remove all active tooltips
-        activeTooltips.forEach((tooltip) => {
-          map.removeLayer(tooltip);
-        });
-
-        setActiveTooltips([]);
+        let currentTooltip = tooltip;
 
         // Create tooltip
-        const newTooltip = new Tooltip({
-          permanent: false,
-          direction: "top",
-          offset: [0, -10],
-          className: "custom-tooltip",
-        });
+        if (!currentTooltip) {
+          currentTooltip = new Tooltip({
+            permanent: false,
+            direction: "top",
+            offset: [0, -10],
+            className: "custom-tooltip",
+          });
 
-        setActiveTooltips((prev) => [...prev, newTooltip]);
+          setTooltip(currentTooltip);
+        }
 
         // Add mouse move handler to update tooltip
         const mousemoveHandler = (e: LeafletMouseEvent) => {
           // Close any existing tooltips first
           if (tooltipRef.current) {
             map.removeLayer(tooltipRef.current);
-            setActiveTooltips((prev) => prev.filter((tooltip) => tooltip !== tooltipRef.current));
             tooltipRef.current = null;
           }
 
@@ -413,8 +405,8 @@ const ActiveMonthlyMapLayer: FC = () => {
 
           if (value !== null && value !== undefined) {
             const units = "mm/month";
-            newTooltip
-              .setLatLng(e.latlng)
+            currentTooltip
+              ?.setLatLng(e.latlng)
               .setContent(
                 `<div style="text-align: center">${activeJob?.name} (${new Date(
                   Number(previewYear),
@@ -425,8 +417,7 @@ const ActiveMonthlyMapLayer: FC = () => {
               )
               .openOn(map);
           } else {
-            newTooltip.close();
-            setActiveTooltips((prev) => prev.filter((tooltip) => tooltip !== newTooltip));
+            currentTooltip?.close();
           }
         };
 
@@ -435,15 +426,14 @@ const ActiveMonthlyMapLayer: FC = () => {
 
         // Close tooltip on mouse out
         const mouseoutHandler = () => {
-          newTooltip.close();
-          setActiveTooltips((prev) => prev.filter((tooltip) => tooltip !== newTooltip));
+          currentTooltip?.close();
         };
 
         map.on("mouseout", mouseoutHandler);
 
         // Store references to the current layer and handlers
         layerRef.current = layer;
-        tooltipRef.current = newTooltip;
+        tooltipRef.current = tooltip;
         mousemoveHandlerRef.current = mousemoveHandler;
         mouseoutHandlerRef.current = mouseoutHandler;
       } catch (error: unknown) {
@@ -485,7 +475,8 @@ const ActiveMonthlyMapLayer: FC = () => {
   ]);
 
   return (
-    activePreviewMinValue &&
+    activePreviewMinValue !== null &&
+    activePreviewMinValue !== undefined &&
     activePreviewMinValue !== activePreviewMaxValue && (
       <ColorScale
         label={`${activeJob?.name} (${new Date(Number(previewYear), Number(previewMonth) - 1).toLocaleString("default", {

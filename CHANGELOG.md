@@ -1,6 +1,7 @@
 ## 1.25.0 (2025-05-08)
 
 ### Features
+- Automatically shows preview on play button click
 
 ### Bug Fixes
 - Adds improved backoff and retry logic for Planetary Computer STAC API to fetch Landsat pass count
@@ -9,6 +10,7 @@
 - Refactors and standardizes PNG generation code, ensuring same color scale is used for all PNGs
 - Refactors and standardizes report generation code
 - Reduces max memory used when generating reports by downscaling PNGs to output size on load and separting metric and imperial calculations
+- Interactive preview color scale wasn't showing when color scale started at 0
 
 ## 1.24.0 (2025-05-01)
 

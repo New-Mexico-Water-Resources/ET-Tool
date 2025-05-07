@@ -17,11 +17,14 @@ import UsersList from "../components/UsersList";
 import MapLayersPanel from "../components/MapLayersPanel";
 import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
 import ActiveMapLayer from "../components/ActiveMapLayer";
-import { CRS } from "leaflet";
+import { CRS, Tooltip } from "leaflet";
 import DrawControls from "../components/DrawControls";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
 import ColorScale from "../components/ColorScale";
 import useCurrentJobStore from "../utils/currentJobStore";
+import { atom } from "jotai";
+
+export const tooltipAtom = atom<Tooltip | null>(null);
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -345,7 +348,13 @@ const Dashboard = () => {
             showLabels={true}
           />
         ))}
-        <GeoJSONLayer data={loadedGeoJSON} showLabels={!showPreview} showAreaLabel={!showPreview} outline={showPreview} />
+        <GeoJSONLayer
+          data={loadedGeoJSON}
+          showLabels={!showPreview}
+          showAreaLabel={!showPreview}
+          outline={showPreview}
+          fitToBounds={!showPreview}
+        />
         <MultiGeoJSONLayer data={multipolygons} locations={locations} />
       </MapContainer>
       <Snackbar

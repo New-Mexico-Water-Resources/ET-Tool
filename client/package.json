@@ -25,6 +25,7 @@
     "dayjs": "^1.11.13",
     "georaster": "^1.6.0",
     "georaster-layer-for-leaflet": "^3.10.0",
+    "jotai": "^2.12.4",
     "leaflet": "^1.9.4",
     "leaflet-draw": "^1.0.4",
     "material-ui-confirm": "^3.0.16",

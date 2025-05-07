@@ -159,7 +159,7 @@ def water_rights_visualizer(
     else:
         logger.warning(f"invalid ROI: {ROI}")
 
-    # Generate all figures
+    # Generate PNGs per year with the same color scale
     generate_all_figures(
         ROI_name=ROI_base,
         ROI=ROI,
@@ -172,7 +172,7 @@ def water_rights_visualizer(
         requestor=requestor,
     )
 
-    # Generate PDFs
+    # Generate final PDFs with documentation
     figure_directory = Path(f"{output_directory}/figures/{ROI_base}")
     generate_final_reports(str(figure_directory), ROI_base, status_filename, None, None)
 
