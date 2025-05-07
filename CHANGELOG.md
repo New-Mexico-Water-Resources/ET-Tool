@@ -9,6 +9,7 @@
 - Adds auto-min/max color scaling button to the MODIS base map layers
   - This allows users to easily view the full range of data for a given layer
 - Adds dynamic color scale option for interactive monthly data
+
 ### Bug Fixes
 - Fixes tooltip persistance bugs
 - Hides interactive preview collapse menu if no job is selected

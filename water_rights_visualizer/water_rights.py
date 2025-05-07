@@ -9,6 +9,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from tkinter.scrolledtext import ScrolledText
 
 import time
+from PIL import Image
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ from .generate_stack import generate_stack
 from .process_monthly import process_monthly
 from .process_year import process_year
 from .write_status import write_status
+from .pdf_report_generator import generate_metric_report, generate_imperial_report
 
 logger = logging.getLogger(__name__)
 
@@ -190,60 +192,8 @@ def water_rights(
             root=root,
         )
 
-    metric_report_filename = join(figure_directory, f"{ROI_name}_Report.pdf")
-    metric_report_pdf = PdfPages(metric_report_filename)
-
-    imperial_report_filename = join(figure_directory, f"{ROI_name}_Imperial_Report.pdf")
-    imperial_report_pdf = PdfPages(imperial_report_filename)
-
-    png_glob = glob(join(figure_directory, "*.png"))
-    sorted_years = []
-    for png_path in png_glob:
-        png_filename = basename(png_path)
-        if len(png_filename.split("_")) > 1:
-            year = int(png_filename.split("_")[0])
-            if year:
-                sorted_years.append(year)
-
-    sorted_years = sorted(set(sorted_years))
-    for year in sorted_years:
-        metric_figure_filename = join(figure_directory, f"{year}_{ROI_name}.png")
-        metric_figure_image = plt.imread(metric_figure_filename)
-
-        fig = plt.figure(figsize=(19.2, 14.4), tight_layout=True)
-        ax = fig.add_axes([0, 0, 1, 1])
-        ax.imshow(metric_figure_image)
-        ax.axis("off")
-        metric_report_pdf.savefig(fig, bbox_inches="tight", pad_inches=0)
-        plt.close(fig)
-
-        imperial_figure_filename = join(figure_directory, f"{year}_{ROI_name}_in.png")
-        imperial_figure_image = plt.imread(imperial_figure_filename)
-
-        fig = plt.figure(figsize=(19.2, 14.4), tight_layout=True)
-        ax = fig.add_axes([0, 0, 1, 1])
-        ax.imshow(imperial_figure_image)
-        ax.axis("off")
-        imperial_report_pdf.savefig(fig, bbox_inches="tight", pad_inches=0)
-        plt.close(fig)
-
-    metric_report_pdf.close()
-
-    write_status(
-        message=f"Report saved to {metric_report_pdf}\n",
-        status_filename=status_filename,
-        text_panel=text_panel,
-        root=root,
-    )
-
-    imperial_report_pdf.close()
-
-    write_status(
-        message=f"Report saved to {imperial_report_pdf}\n",
-        status_filename=status_filename,
-        text_panel=text_panel,
-        root=root,
-    )
+    generate_metric_report(figure_directory, ROI_name, status_filename, text_panel, root)
+    generate_imperial_report(figure_directory, ROI_name, status_filename, text_panel, root)
 
     str_time = datetime.now().strftime("%H%M")
 
