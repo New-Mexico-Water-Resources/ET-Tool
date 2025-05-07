@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import datetime
 import pystac_client
@@ -18,13 +19,24 @@ WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 
 
 def search_catalog_with_retries(catalog, bbox, datetime, collections=["landsat-c2-l2"], retries=3):
-    for _ in range(retries):
+    for i in range(retries):
         try:
             return catalog.search(collections=collections, bbox=bbox, datetime=datetime)
         except Exception as e:
             logger.error(f"Error searching for Landsat passes: {e}")
+            time.sleep(i + 1)
             continue
     raise Exception("Failed to search for Landsat passes")
+
+
+def get_items_with_retries(search, retries=3):
+    for i in range(retries):
+        try:
+            return search.items()
+        except Exception as e:
+            logger.error(f"Error getting items: {e}")
+            time.sleep(i + 1)
+            continue
 
 
 def count_landsat_passes_for_month(
@@ -83,14 +95,17 @@ def count_landsat_passes_for_month(
     for area in rois:
         # Want to retry a few times if we get an error
         search = search_catalog_with_retries(catalog, area.bounds, f"{start_date}/{end_date}")
+        items = get_items_with_retries(search, retries=3)
 
-        for item in search.items():
+        for item in items:
             platform = item.properties.get("platform")
             if platform in sat_ids:
                 unique_dates.add(item.datetime.date())
                 pass_list.append({"date": str(item.datetime.date()), "satellite": platform, "id": item.id})
 
     pass_count = len(unique_dates)
+
+    stac_api_io.session.close()
 
     with open(cache_filename, "w") as cache_writer:
         logger.info(f"Writing Landsat pass count to cache: {cache_filename}")
