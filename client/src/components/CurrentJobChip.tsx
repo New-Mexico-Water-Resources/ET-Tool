@@ -535,6 +535,10 @@ const CurrentJobChip = () => {
                         size="small"
                         sx={{ flex: 1 }}
                         onClick={() => {
+                          // Stop playing if it's currently playing
+                          if (isPlaying) {
+                            setIsPlaying(false);
+                          }
                           setShowPreview(!showPreview);
                         }}
                         disabled={!canPreview}

@@ -1,3 +1,15 @@
+## 1.25.0 (2025-05-08)
+
+### Features
+
+### Bug Fixes
+- Adds improved backoff and retry logic for Planetary Computer STAC API to fetch Landsat pass count
+  - While this does add some latency to the report generation process, it greatly reduces the likelihood of a failed pass count fetch due to rate limiting
+  - Closes the STAC API session after fetching pass count to reduce memory usage
+- Refactors and standardizes PNG generation code, ensuring same color scale is used for all PNGs
+- Refactors and standardizes report generation code
+- Reduces max memory used when generating reports by downscaling PNGs to output size on load and separting metric and imperial calculations
+
 ## 1.24.0 (2025-05-01)
 
 ### Features

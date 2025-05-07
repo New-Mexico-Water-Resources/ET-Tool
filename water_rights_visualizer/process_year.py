@@ -156,10 +156,9 @@ def process_year(
 
     write_status(message="Generating figure\n", status_filename=status_filename, text_panel=text_panel, root=root)
 
-    ROI_base = splitext(basename(ROI_name))[0]
     # Generate figures for this year
     generate_all_figures(
-        ROI_name=ROI_base,
+        ROI_name=ROI_name,
         ROI=ROI,
         output_directory=output_directory,
         start_year=year,
