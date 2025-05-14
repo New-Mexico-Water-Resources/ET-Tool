@@ -122,7 +122,18 @@ def main(argv=sys.argv):
 
     for year in years:
         # Check if the job is paused, if so stop the job
-        record = report_queue.find_one({"key": key})
+        try:
+            record = report_queue.find_one({"key": key})
+        except Exception as e:
+            # Retry the connection
+            report_queue = build_mongo_client_and_collection()
+            record = report_queue.find_one({"key": key})
+
+        # If the record is not found, write an error and stop the job
+        if record is None:
+            write_status(status_filename, f"error finding record for {key} in mongo during year {year}")
+            return
+
         if record is not None and record["status"] == "Paused":
             write_status(status_filename, f"job paused for {name} at {year}")
             # Update record to say we paused at this year and clear pid
