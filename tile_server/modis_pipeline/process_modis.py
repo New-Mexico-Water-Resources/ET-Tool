@@ -72,10 +72,7 @@ from merge_process import merge_and_process_tiffs
 def get_client_version():
     """Get the client version from package.json."""
     try:
-        package_json_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "client", "package.json"
-        )
-        with open(package_json_path, "r") as f:
+        with open("./package.json", "r") as f:
             package_data = json.load(f)
             return package_data.get("version")
     except Exception as e:

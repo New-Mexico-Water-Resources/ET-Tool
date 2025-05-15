@@ -20,6 +20,9 @@ COPY .env.secrets .
 # Copy the application code
 COPY ./tile_server/modis_pipeline/ .
 
+# Copy the client package.json so we can check the version
+COPY ./client/package.json .
+
 RUN mkdir -p /root/data/modis
 
 # Set PROJ_LIB environment variable to point to the PROJ data directory
