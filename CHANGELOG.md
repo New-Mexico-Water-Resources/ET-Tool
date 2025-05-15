@@ -1,3 +1,14 @@
+## 1.26.0 (2025-05-15)
+
+### Features
+- Switches auto-bounds to go to 2 standard deviations above and below the mean for MODIS data
+- Adds county level tooltips to the map for ingested MODIS data to show mean and standard deviation values
+
+### Bug Fixes
+- Fixes bug where MODIS PET was showing as the same value as ET for ingested dates after 2025-03-14
+- Adds error handling for case where mongodb doesn't return the running job and requestor user can't be found
+- Refactors and standardizes MODIS pipeline code
+
 ## 1.25.0 (2025-05-08)
 
 ### Features
@@ -9,7 +20,7 @@
   - Closes the STAC API session after fetching pass count to reduce memory usage
 - Refactors and standardizes PNG generation code, ensuring same color scale is used for all PNGs
 - Refactors and standardizes report generation code
-- Reduces max memory used when generating reports by downscaling PNGs to output size on load and separting metric and imperial calculations
+- Reduces max memory used when generating reports by downscaling PNGs to output size on load and separating metric and imperial calculations
 - Interactive preview color scale wasn't showing when color scale started at 0
 
 ## 1.24.0 (2025-05-01)

@@ -30,3 +30,4 @@ modis_downloads
 misc
 *.geojson
 ~$*.docx
+tile_server/modis_pipeline/package.json

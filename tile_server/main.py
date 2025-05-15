@@ -11,15 +11,13 @@ import re
 import datetime
 import mercantile
 import shapely
-
 import json
 from rasterio.windows import Window
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
-
 import boto3
-
 from dotenv import load_dotenv
+from typing import Dict, List, Tuple, Optional, Union
 
 load_dotenv()
 
@@ -45,6 +43,124 @@ BANDS = ["ET", "PET", "ESI"]
 TILE_SIZE = 256
 ET_COLORMAP = LinearSegmentedColormap.from_list("ET", ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"])
 DIFF_COLORMAP = LinearSegmentedColormap.from_list("DIFF", ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"])
+
+
+def validate_band(band: str) -> None:
+    """Validate that the band is supported."""
+    if band not in BANDS:
+        raise HTTPException(status_code=404, detail="Band not found")
+
+
+def validate_date_format(time: str) -> None:
+    """Validate that the date is in the correct format."""
+    if not re.match(r"\d{4}-\d{2}-\d{2}", time):
+        raise HTTPException(status_code=404, detail="Time must be in format: YYYY-MM-DD")
+
+
+def get_time_str(time: str) -> str:
+    """Convert YYYY-MM-DD to YYYYMMDD format."""
+    return datetime.datetime.strptime(time, "%Y-%m-%d").strftime("%Y%m%d")
+
+
+def get_required_bands(band: str) -> List[str]:
+    """Get the list of bands required for the given band type."""
+    return ["ET", "PET"] if band == "ESI" else [band]
+
+
+def load_band_data(time_str: str, bands: List[str]) -> Dict[str, np.ndarray]:
+    """Load band data from local files or S3."""
+    band_data = {}
+    for band in bands:
+        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
+
+        if not os.path.exists(path):
+            if S3_INPUT_BUCKET:
+                s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
+                key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+                try:
+                    s3.download_file(S3_INPUT_BUCKET, key, path)
+                except Exception as e:
+                    raise HTTPException(status_code=404, detail="Tile not found")
+            else:
+                raise HTTPException(status_code=404, detail="Tile not found")
+
+        with rasterio.open(path) as src:
+            data = src.read(1)
+            # Filter out nodata values
+            band_data[band] = np.where(data >= 32700, np.nan, data)
+
+    return band_data
+
+
+def calculate_band_values(band: str, band_data: Dict[str, np.ndarray]) -> np.ndarray:
+    """Calculate the final band values, handling ESI calculation if needed."""
+    if band == "ESI":
+        values = np.divide(band_data["ET"], band_data["PET"])
+        return np.clip(values, 0, 1)
+    return band_data[band]
+
+
+def get_previous_date(time: str, available_dates: List[str]) -> Optional[str]:
+    """Get the previous date from the available dates list."""
+    if not available_dates:
+        return None
+    current_index = available_dates.index(time) if time in available_dates else -1
+    if current_index > 0:
+        return available_dates[current_index - 1]
+    return None
+
+
+def calculate_difference(current_data: np.ndarray, prev_data: np.ndarray, esi_mode: bool) -> np.ndarray:
+    """Calculate the difference between current and previous data."""
+    diff = current_data - prev_data
+    if esi_mode:
+        return np.clip(diff, -1, 1)
+    return diff
+
+
+def get_color_limits(
+    data: np.ndarray, esi_mode: bool, comparison_mode: str, use_std_dev: bool = False
+) -> Tuple[float, float]:
+    """Get the color limits for visualization."""
+    if use_std_dev:
+        mean = np.nanmean(data)
+        std_dev = np.nanstd(data)
+        min_val = np.max([0, mean - 2 * std_dev])
+        max_val = mean + 2 * std_dev
+    else:
+        min_val = np.max([0, np.nanmin(data)])
+        max_val = np.nanmax(data)
+
+    if comparison_mode == "absolute":
+        if esi_mode:
+            # Bound between 0 and 1
+            return round(np.max([0, float(min_val)]), 2), round(np.min([1, float(max_val)]), 2)
+        return int(np.floor(min_val)), int(np.ceil(max_val))
+    else:
+        if esi_mode:
+            # Bound between -1 and 1
+            return round(np.max([-1, float(min_val)]), 2), round(np.min([1, float(max_val)]), 2)
+        return int(np.floor(min_val)), int(np.ceil(max_val))
+
+
+def create_rgba_tile(data: np.ndarray, min_val: float, max_val: float, comparison_mode: str) -> np.ndarray:
+    """Create an RGBA tile from the data."""
+    # Create alpha channel
+    alpha = np.where(np.isnan(data), 0, 255).astype(np.uint8)
+
+    # Scale data to 0-255 range
+    if max_val - min_val > 0:
+        scaled_data = np.clip(((data - min_val) / (max_val - min_val) * 255), 0, 255)
+    else:
+        scaled_data = np.zeros_like(data)
+
+    scaled_data = np.nan_to_num(scaled_data, nan=0).astype(np.uint8)
+    colormap = ET_COLORMAP if comparison_mode == "absolute" else DIFF_COLORMAP
+    colored_data = colormap(scaled_data)
+    rgb_data = (colored_data[:, :, :3] * 255).astype(np.uint8)
+
+    # Create RGBA tile
+    return np.dstack([rgb_data, alpha])
 
 
 @app.get("/ts_v1/tiles/modis-dates")
@@ -232,87 +348,76 @@ def get_tile(path: str, z: int, x: int, y: int):
         return full_data
 
 
+def get_counties() -> List[Dict[str, str]]:
+    """Get the list of counties in New Mexico."""
+    with open("rois/nm_counties.json", "r") as f:
+        counties = json.load(f)
+        return counties["features"]
+
+
 @app.get("/ts_v1/tiles/stats/{band}/{time}/{comparison_mode}")
 async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
-    if band not in BANDS:
-        raise HTTPException(status_code=404, detail="Band not found")
+    """Get statistics for a given band and time."""
+    validate_band(band)
+    validate_date_format(time)
 
-    if not re.match(r"\d{4}-\d{2}-\d{2}", time):
-        raise HTTPException(status_code=404, detail="Time must be in format: YYYY-MM-DD")
-
-    time_str = datetime.datetime.strptime(time, "%Y-%m-%d").strftime("%Y%m%d")
+    time_str = get_time_str(time)
     esi_mode = band == "ESI"
-    bands = [band] if not esi_mode else ["ET", "PET"]
-    band_data = {}
-    for band in bands:
-        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
+    bands = get_required_bands(band)
 
-        if not os.path.exists(path):
-            if S3_INPUT_BUCKET:
-                s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
-                key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+    # Load current data
+    band_data = load_band_data(time_str, bands)
+    current_data = calculate_band_values(band, band_data)
 
-                try:
-                    await s3.download_file(S3_INPUT_BUCKET, key, path)
-                except Exception as e:
-                    raise HTTPException(status_code=404, detail="Tile not found")
-            else:
-                raise HTTPException(status_code=404, detail="Tile not found")
-
-        with rasterio.open(path) as src:
-            band_data[band] = src.read(1)
-            # Filter out nodata values
-            band_data[band] = np.where(band_data[band] >= 32700, np.nan, band_data[band])
-
-    # ESI can only be a max of 1
-    current_data = band_data[band] if not esi_mode else np.divide(band_data["ET"], band_data["PET"])
-    if esi_mode:
-        current_data = np.clip(current_data, 0, 1)
-
-    # Get min/max values for the TIFF if comparison mode is absolute
     if comparison_mode == "absolute":
-        if esi_mode:
-            min_val = round(float(np.nanmin(current_data)), 2)
-            max_val = round(float(np.nanmax(current_data)), 2)
-        else:
-            min_val = int(np.nanmin(current_data))
-            max_val = int(np.nanmax(current_data))
+        min_val, max_val = get_color_limits(current_data, esi_mode, comparison_mode, use_std_dev=True)
     else:
-        # Get min/max values for the TIFF if comparison mode is prevPass
-        prev_date = None
+        # Get previous date data
         available_dates = await get_modis_dates()
-        if available_dates:
-            current_index = available_dates.index(time) if time in available_dates else -1
-            if current_index > 0:
-                prev_date = available_dates[current_index - 1]
-            else:
-                raise HTTPException(status_code=404, detail="Previous date not found")
-        prev_time_str = datetime.datetime.strptime(prev_date, "%Y-%m-%d").strftime("%Y%m%d")
-        prev_bands = ["ET", "PET"] if esi_mode else [band]
-        prev_bands_data = {}
-        for prev_band in prev_bands:
-            prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{prev_band}.tif")
-            # Open both files, subtract, get min/max diff
-            with rasterio.open(prev_path) as src:
-                prev_bands_data[prev_band] = src.read(1)
-                # Filter out nodata values
-                prev_bands_data[prev_band] = np.where(
-                    prev_bands_data[prev_band] >= 32700, np.nan, prev_bands_data[prev_band]
-                )
+        prev_date = get_previous_date(time, available_dates)
+        if not prev_date:
+            raise HTTPException(status_code=404, detail="Previous date not found")
 
-        if esi_mode:
-            prev_data = np.divide(prev_bands_data["ET"], prev_bands_data["PET"])
-        else:
-            prev_data = prev_bands_data[band]
-        diff = current_data - prev_data
-        if esi_mode:
-            min_val = round(float(np.nanmin(diff)), 2)
-            max_val = round(float(np.nanmax(diff)), 2)
-        else:
-            min_val = int(np.floor(np.nanmin(diff)))
-            max_val = int(np.ceil(np.nanmax(diff)))
+        prev_time_str = get_time_str(prev_date)
+        prev_band_data = load_band_data(prev_time_str, bands)
+        prev_data = calculate_band_values(band, prev_band_data)
 
-    return {"min": min_val, "max": max_val}
+        diff = calculate_difference(current_data, prev_data, esi_mode)
+        min_val, max_val = get_color_limits(diff, esi_mode, comparison_mode, use_std_dev=True)
+
+    counties = get_counties()
+    county_stats = []
+
+    with rasterio.open(
+        os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{list(band_data.keys())[0]}.tif")
+    ) as src:
+        transform = src.transform
+
+    for county in counties:
+        county_name = county["properties"]["NAMELSAD"]
+        county_geom = county["geometry"]
+
+        county_geom_3857 = transform_geom(
+            "EPSG:4326",
+            "EPSG:3857",
+            county_geom,
+            precision=6,
+        )
+
+        county_mask = geometry_mask(
+            [county_geom_3857],
+            out_shape=current_data.shape,
+            transform=transform,
+            invert=True,
+        )
+
+        county_data = current_data[county_mask]
+        mean = float(np.nanmean(county_data))
+        std_dev = float(np.nanstd(county_data))
+
+        county_stats.append({"id": county["properties"]["id"], "name": county_name, "mean": mean, "std_dev": std_dev})
+
+    return {"min": min_val, "max": max_val, "county_stats": county_stats}
 
 
 @app.get("/ts_v1/tiles/dynamic/{band}/{time}/{z}/{x}/{y}.png")
@@ -326,87 +431,52 @@ async def serve_dynamic_tile(
     color_max: float = None,
     comparison_mode: str = "absolute",
 ):
-    if band not in BANDS:
-        raise HTTPException(status_code=404, detail="Band not found")
+    """Serve a dynamic tile for the given band, time, and coordinates."""
+    validate_band(band)
+    validate_date_format(time)
 
-    if not re.match(r"\d{4}-\d{2}-\d{2}", time):
-        raise HTTPException(status_code=404, detail="Time must be in format: YYYY-MM-DD")
-
-    time_str = datetime.datetime.strptime(time, "%Y-%m-%d").strftime("%Y%m%d")
+    time_str = get_time_str(time)
     esi_mode = band == "ESI"
+    bands = get_required_bands(band)
 
-    bands = [band] if not esi_mode else ["ET", "PET"]
-
+    # Load current data
     band_data = {}
-    for band in bands:
-        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
-        if not os.path.exists(path):
-            if S3_INPUT_BUCKET:
-                s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
-                key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
-
-                try:
-                    await s3.download_file(S3_INPUT_BUCKET, key, path)
-                except Exception as e:
-                    raise HTTPException(status_code=404, detail="Tile not found")
-            else:
-                raise HTTPException(status_code=404, detail="Tile not found")
-
+    for band_name in bands:
+        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band_name}.tif")
         full_data = get_tile(path, z, x, y)
 
         if full_data is None or np.isnan(full_data).all():
             return Response(content=b"", media_type="image/png", status_code=404)
 
-        band_data[band] = full_data
+        band_data[band_name] = full_data
 
-    # If ESI mode, calculate by dividing ET by PET
-    full_data = band_data[band] if not esi_mode else np.divide(band_data["ET"], band_data["PET"])
-    if esi_mode:
-        full_data = np.clip(full_data, 0, 1)
+    current_data = calculate_band_values(band, band_data)
 
     if comparison_mode == "prevPass":
-        # Get date of previous pass from available dates
-        prev_date = None
+        # Get previous date data
         available_dates = await get_modis_dates()
-        if available_dates:
-            current_index = available_dates.index(time) if time in available_dates else -1
-            if current_index > 0:
-                prev_date = available_dates[current_index - 1]
-            else:
-                prev_date = None
-        prev_time_str = datetime.datetime.strptime(prev_date, "%Y-%m-%d").strftime("%Y%m%d")
-        prev_bands = ["ET", "PET"] if esi_mode else [band]
-        prev_bands_data = {}
-        for prev_band in prev_bands:
-            prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{prev_band}.tif")
-            prev_bands_data[prev_band] = get_tile(prev_path, z, x, y)
-            if prev_bands_data[prev_band] is None or np.isnan(prev_bands_data[prev_band]).all():
+        prev_date = get_previous_date(time, available_dates)
+        if not prev_date:
+            return Response(content=b"", media_type="image/png", status_code=404)
+
+        prev_time_str = get_time_str(prev_date)
+        prev_band_data = {}
+        for band_name in bands:
+            prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{band_name}.tif")
+            prev_data = get_tile(prev_path, z, x, y)
+            if prev_data is None or np.isnan(prev_data).all():
                 return Response(content=b"", media_type="image/png", status_code=404)
+            prev_band_data[band_name] = prev_data
 
-        prev_data = prev_bands_data[prev_band] if not esi_mode else np.divide(prev_bands_data["ET"], prev_bands_data["PET"])
-        if esi_mode:
-            prev_data = np.clip(prev_data, 0, 1)
-        full_data = full_data - prev_data
+        prev_data = calculate_band_values(band, prev_band_data)
+        current_data = calculate_difference(current_data, prev_data, esi_mode)
 
-    # Scale data
-    min_val = color_min if color_min is not None else 0
+    # Set color limits
+    min_val = color_min if color_min is not None else (0 if not esi_mode else 0)
     max_val = color_max if color_max is not None else (200 if not esi_mode else 1)
 
-    # Create alpha channel
-    alpha = np.where(np.isnan(full_data), 0, 255).astype(np.uint8)
-
-    # Scale data to 0-255 range
-    if max_val - min_val > 0:
-        scaled_data = np.clip(((full_data - min_val) / (max_val - min_val) * 255), 0, 255)
-    else:
-        scaled_data = np.zeros_like(full_data)
-
-    scaled_data = np.nan_to_num(scaled_data, nan=0).astype(np.uint8)
-    colored_data = ET_COLORMAP(scaled_data) if comparison_mode == "absolute" else DIFF_COLORMAP(scaled_data)
-    rgb_data = (colored_data[:, :, :3] * 255).astype(np.uint8)
-
     # Create RGBA tile
-    rgba_tile = np.dstack([rgb_data, alpha])
+    rgba_tile = create_rgba_tile(current_data, min_val, max_val, comparison_mode)
 
     # Save to PNG
     with MemoryFile() as memfile:

@@ -30,6 +30,8 @@ import useStore, { MapLayer } from "../utils/store";
 import "../scss/MapLayersPanel.scss";
 import { MAP_LAYER_OPTIONS, REFERENCE_GEOJSONS } from "../utils/constants";
 import dayjs from "dayjs";
+import { useSetAtom } from "jotai";
+import { modisCountyStatsAtom, CountyStat } from "../utils/atoms";
 
 const MapLayersPanel: FC = () => {
   const isMapLayersPanelOpen = useStore((state) => state.isMapLayersPanelOpen);
@@ -67,6 +69,68 @@ const MapLayersPanel: FC = () => {
 
   const fetchingDroughtMonitorData = useStore((state) => state.fetchingDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
+
+  const selectedMapLayer = useMemo(() => {
+    if (mapLayerKey && (MAP_LAYER_OPTIONS as any)[mapLayerKey]) {
+      const selectedLayer = (MAP_LAYER_OPTIONS as any)[mapLayerKey] as MapLayer;
+      return selectedLayer;
+    }
+    return null;
+  }, [mapLayerKey]);
+
+  const setModisCountyStats = useSetAtom(modisCountyStatsAtom);
+
+  const fetchMapStats = useCallback(
+    (mapLayer: MapLayer, date: string, mode: string, updateBounds = true) => {
+      if (mapLayer?.statsURL) {
+        // Need to inject tileDate and comparisonMode into the URL
+        const url = mapLayer.statsURL.replace("{time}", date).replace("{mode}", mode);
+        axios
+          .get(url)
+          .then((response) => {
+            if (updateBounds) {
+              if (mode === "absolute") {
+                // Update the minimum and maximum base map color bounds
+                setTempMinimumBaseMapColorBound(response.data.min);
+                setTempMaximumBaseMapColorBound(response.data.max);
+                // Auto update
+                setMinimumBaseMapColorBound(response.data.min);
+                setMaximumBaseMapColorBound(response.data.max);
+              } else {
+                const maxAbsDifference = Math.max(Math.abs(response.data.min), Math.abs(response.data.max));
+                setTempMaximumBaseMapColorDifference(maxAbsDifference);
+                setMinimumBaseMapColorBound(-maxAbsDifference);
+                setMaximumBaseMapColorBound(maxAbsDifference);
+              }
+            }
+
+            const countyStatList = (response.data?.county_stats || []) as CountyStat[];
+            const countyStats = countyStatList.reduce((acc, curr) => {
+              acc[curr.id] = curr;
+              return acc;
+            }, {} as Record<string, CountyStat>);
+
+            setModisCountyStats({
+              band: mapLayer.name,
+              time: date,
+              mode,
+              countyStats,
+            });
+          })
+          .catch((error) => {
+            setModisCountyStats({
+              band: mapLayer.name,
+              time: date,
+              mode,
+              countyStats: {},
+            });
+            console.error("Error fetching map stats", error);
+          });
+      }
+    },
+    [setModisCountyStats, setMinimumBaseMapColorBound, setMaximumBaseMapColorBound]
+  );
+
   const updateSettings = useCallback(() => {
     if (tempTileDate) {
       setTileDate(tempTileDate);
@@ -91,6 +155,10 @@ const MapLayersPanel: FC = () => {
     if (tempComparisonMode) {
       setComparisonMode(tempComparisonMode);
     }
+
+    if (selectedMapLayer && tempTileDate && tempComparisonMode) {
+      fetchMapStats(selectedMapLayer, tempTileDate, tempComparisonMode, false);
+    }
   }, [
     tempTileDate,
     tempMinimumBaseMapColorBound,
@@ -101,17 +169,11 @@ const MapLayersPanel: FC = () => {
     setMinimumBaseMapColorBound,
     setMaximumBaseMapColorBound,
     setComparisonMode,
+    selectedMapLayer,
+    fetchMapStats,
   ]);
 
   const [availableDates, setAvailableDates] = useState<string[]>([]);
-
-  const selectedMapLayer = useMemo(() => {
-    if (mapLayerKey && (MAP_LAYER_OPTIONS as any)[mapLayerKey]) {
-      const selectedLayer = (MAP_LAYER_OPTIONS as any)[mapLayerKey] as MapLayer;
-      return selectedLayer;
-    }
-    return null;
-  }, [mapLayerKey]);
 
   useEffect(() => {
     if (selectedMapLayer?.availableDatesURL) {
@@ -137,35 +199,6 @@ const MapLayersPanel: FC = () => {
 
     return undefined;
   }, [availableDates]);
-
-  const fetchMapStats = useCallback(() => {
-    if (selectedMapLayer?.statsURL) {
-      // Need to inject tileDate and comparisonMode into the URL
-      const url = selectedMapLayer.statsURL.replace("{time}", tileDate).replace("{mode}", comparisonMode);
-      axios.get(url).then((response) => {
-        if (comparisonMode === "absolute") {
-          // Update the minimum and maximum base map color bounds
-          setTempMinimumBaseMapColorBound(response.data.min);
-          setTempMaximumBaseMapColorBound(response.data.max);
-          // Auto update
-          setMinimumBaseMapColorBound(response.data.min);
-          setMaximumBaseMapColorBound(response.data.max);
-        } else {
-          const maxAbsDifference = Math.max(Math.abs(response.data.min), Math.abs(response.data.max));
-          setTempMaximumBaseMapColorDifference(maxAbsDifference);
-          setMinimumBaseMapColorBound(-maxAbsDifference);
-          setMaximumBaseMapColorBound(maxAbsDifference);
-        }
-      });
-    }
-  }, [
-    selectedMapLayer,
-    tileDate,
-    comparisonMode,
-    setMinimumBaseMapColorBound,
-    setMaximumBaseMapColorBound,
-    setTempMaximumBaseMapColorDifference,
-  ]);
 
   useEffect(() => {
     if ((!tileDate || !tempTileDate) && latestAvailableDate) {
@@ -284,6 +317,11 @@ const MapLayersPanel: FC = () => {
               if (evt.target.value && mapLayerOptions.find((option) => option.name === evt.target.value)) {
                 const selectedLayer = mapLayerOptions.find((option) => option.name === evt.target.value) as MapLayer;
                 setMapLayerKey(selectedLayer.name);
+                if (selectedLayer.statsURL) {
+                  setTimeout(() => {
+                    fetchMapStats(selectedLayer, tileDate, comparisonMode);
+                  }, 100);
+                }
               }
             }}
           >
@@ -435,12 +473,8 @@ const MapLayersPanel: FC = () => {
                               />
                             </FormGroup>
                           )}
-                          <Tooltip title="Set min/max values to the minimum and maximum values of the data">
-                            <IconButton
-                              onClick={() => {
-                                fetchMapStats();
-                              }}
-                            >
+                          <Tooltip title="Set min/max values to 2 standard deviations from the mean">
+                            <IconButton onClick={() => fetchMapStats(option, tileDate, comparisonMode)}>
                               <AutoModeIcon sx={{ color: "var(--st-gray-30)", ":hover": { color: "var(--st-gray-10)" } }} />
                             </IconButton>
                           </Tooltip>
