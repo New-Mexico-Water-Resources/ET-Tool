@@ -5,6 +5,9 @@ import useStore, { MapLayer } from "../utils/store";
 import { area as turfArea } from "@turf/turf";
 import { MAP_LAYER_OPTIONS, DROUGHT_MONITOR_METADATA } from "../utils/constants";
 import type { Feature } from "geojson";
+import { useAtomValue } from "jotai";
+import { modisCountyStatsAtom } from "../utils/atoms";
+
 interface ExtendedLayer extends Leaflet.Layer {
   labelMarker?: Leaflet.Marker;
   getBounds(): Leaflet.LatLngBounds;
@@ -34,6 +37,8 @@ const GeoJSONLayer = ({
   const maximumValidArea = useStore((state) => state.maximumValidArea);
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayer = useMemo(() => (MAP_LAYER_OPTIONS as any)[mapLayerKey] as MapLayer, [mapLayerKey]);
+
+  const modisCountyStats = useAtomValue(modisCountyStatsAtom);
 
   const layerData = useMemo(() => {
     if (data) {
@@ -96,6 +101,16 @@ const GeoJSONLayer = ({
             if (nameKey && feature.properties[nameKey]) {
               tooltip = feature.properties[nameKey];
             }
+
+            if (!isDroughtMonitor && modisCountyStats?.band === mapLayer.name) {
+              const countyStat = modisCountyStats?.countyStats?.[feature?.properties?.id];
+              if (countyStat) {
+                tooltip += `\n\nBand: ${modisCountyStats.band}`;
+                tooltip += `\nTime: ${modisCountyStats.time}`;
+                tooltip += `\nMean: ${countyStat.mean.toFixed(2)} ${mapLayer.units}`;
+                tooltip += `\nStd Dev: ${countyStat.std_dev.toFixed(2)} ${mapLayer.units}`;
+              }
+            }
           }
 
           if (area && showAreaLabel) {
@@ -140,7 +155,7 @@ const GeoJSONLayer = ({
         map.removeLayer(layerRef.current);
       }
     };
-  }, [data, map, minimumValidArea, mapLayerKey, showLabels, isDroughtMonitor]);
+  }, [data, map, minimumValidArea, mapLayerKey, showLabels, isDroughtMonitor, modisCountyStats, mapLayer]);
 
   return null;
 };

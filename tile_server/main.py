@@ -348,6 +348,13 @@ def get_tile(path: str, z: int, x: int, y: int):
         return full_data
 
 
+def get_counties() -> List[Dict[str, str]]:
+    """Get the list of counties in New Mexico."""
+    with open("rois/nm_counties.json", "r") as f:
+        counties = json.load(f)
+        return counties["features"]
+
+
 @app.get("/ts_v1/tiles/stats/{band}/{time}/{comparison_mode}")
 async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
     """Get statistics for a given band and time."""
@@ -378,7 +385,39 @@ async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
         diff = calculate_difference(current_data, prev_data, esi_mode)
         min_val, max_val = get_color_limits(diff, esi_mode, comparison_mode, use_std_dev=True)
 
-    return {"min": min_val, "max": max_val}
+    counties = get_counties()
+    county_stats = []
+
+    with rasterio.open(
+        os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{list(band_data.keys())[0]}.tif")
+    ) as src:
+        transform = src.transform
+
+    for county in counties:
+        county_name = county["properties"]["NAMELSAD"]
+        county_geom = county["geometry"]
+
+        county_geom_3857 = transform_geom(
+            "EPSG:4326",
+            "EPSG:3857",
+            county_geom,
+            precision=6,
+        )
+
+        county_mask = geometry_mask(
+            [county_geom_3857],
+            out_shape=current_data.shape,
+            transform=transform,
+            invert=True,
+        )
+
+        county_data = current_data[county_mask]
+        mean = float(np.nanmean(county_data))
+        std_dev = float(np.nanstd(county_data))
+
+        county_stats.append({"id": county["properties"]["id"], "name": county_name, "mean": mean, "std_dev": std_dev})
+
+    return {"min": min_val, "max": max_val, "county_stats": county_stats}
 
 
 @app.get("/ts_v1/tiles/dynamic/{band}/{time}/{z}/{x}/{y}.png")

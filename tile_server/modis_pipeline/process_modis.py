@@ -140,7 +140,7 @@ def start_workflow(
 
         logging.info("\nMerging and processing TIFFs...")
         for band_name in bands:
-            output_band_name = BAND_MAPPING.get(band_name, band_name)
+            output_band_name = BAND_MAPPING.get(band_name, "")
             merge_and_process_tiffs(
                 generate_tiles=generate_tiles,
                 min_zoom=min_zoom,

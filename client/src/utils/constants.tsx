@@ -135,7 +135,7 @@ export const MAP_LAYER_OPTIONS = {
     showColorScale: true,
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
     statsURL: `${TILE_SERVER_URL}/stats/ESI/{time}/{mode}`,
-    units: "mm/8-days",
+    units: "",
     step: 0.01,
     modes: {
       absolute: "Absolute",

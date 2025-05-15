@@ -44,13 +44,17 @@ def merge_and_process_tiffs(generate_tiles=False, min_zoom=1, max_zoom=11, band_
             pb.set_description(f"Skipping {date} - already processed")
             continue
 
-        # Merge TIFFs
-        tiff_files = [os.path.join(date_folder_path, f) for f in os.listdir(date_folder_path) if f.endswith(".tif")]
+        # Merge TIFFs - only include files for the current band
+        tiff_files = [
+            os.path.join(date_folder_path, f)
+            for f in os.listdir(date_folder_path)
+            if f.endswith(".tif") and f"_{band_name}" in f
+        ]
         if not tiff_files:
-            pb.set_description(f"No TIFF files found for {date}")
+            pb.set_description(f"No TIFF files found for {date} and band {band_name}")
             continue
 
-        print(f"Merging TIFFs for {date}...")
+        print(f"Merging {len(tiff_files)} TIFFs for {date} and band {band_name}...")
         merge_cmd = [
             "gdal_merge.py",
             "-o",
