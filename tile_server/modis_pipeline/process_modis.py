@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import boto3
 from tqdm import tqdm
 from pathlib import Path
+import json
 
 load_dotenv()
 
@@ -66,6 +67,79 @@ BAND_MAPPING = {
 from fetch_modis import fetch_new_dates
 from workflow import process_hdf_files
 from merge_process import merge_and_process_tiffs
+
+
+def get_client_version():
+    """Get the client version from package.json."""
+    try:
+        package_json_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "client", "package.json"
+        )
+        with open(package_json_path, "r") as f:
+            package_data = json.load(f)
+            return package_data.get("version")
+    except Exception as e:
+        logging.error(f"Error reading package.json: {e}")
+        return None
+
+
+def cleanup_affected_files():
+    """Delete files affected by the PET/ET bug from both S3 and local storage."""
+
+    # Need to delete these dates because they have a bug in the MODIS data (PET matches ET)
+    affected_dates = ["20250314", "20250322", "20250330", "20250407", "20250415", "20250423"]
+
+    deleted_s3_count = 0
+    deleted_local_count = 0
+
+    # Delete from S3
+    if S3_INPUT_BUCKET:
+        session = boto3.Session(profile_name=AWS_PROFILE)
+        s3 = session.client("s3")
+
+        for date in affected_dates:
+            # Delete ET file
+            et_key = f"{BUCKET_PREFIX}MOD16A2_MERGED_{date}_ET.tif"
+            try:
+                s3.delete_object(Bucket=S3_INPUT_BUCKET, Key=et_key)
+                logging.info(f"Deleted from S3: {et_key}")
+                deleted_s3_count += 1
+            except Exception as e:
+                logging.error(f"Error deleting from S3 {et_key}: {e}")
+
+            # Delete PET file
+            pet_key = f"{BUCKET_PREFIX}MOD16A2_MERGED_{date}_PET.tif"
+            try:
+                s3.delete_object(Bucket=S3_INPUT_BUCKET, Key=pet_key)
+                logging.info(f"Deleted from S3: {pet_key}")
+                deleted_s3_count += 1
+            except Exception as e:
+                logging.error(f"Error deleting from S3 {pet_key}: {e}")
+
+    # Delete from local storage
+    for date in affected_dates:
+        # Delete ET file
+        et_local_path = os.path.join(MERGED_DIR, f"MOD16A2_MERGED_{date}_ET.tif")
+        try:
+            if os.path.exists(et_local_path):
+                os.remove(et_local_path)
+                logging.info(f"Deleted local file: {et_local_path}")
+                deleted_local_count += 1
+        except Exception as e:
+            logging.error(f"Error deleting local file {et_local_path}: {e}")
+
+        # Delete PET file
+        pet_local_path = os.path.join(MERGED_DIR, f"MOD16A2_MERGED_{date}_PET.tif")
+        try:
+            if os.path.exists(pet_local_path):
+                os.remove(pet_local_path)
+                logging.info(f"Deleted local file: {pet_local_path}")
+                deleted_local_count += 1
+        except Exception as e:
+            logging.error(f"Error deleting local file {pet_local_path}: {e}")
+
+    logging.info(f"Deleted {deleted_s3_count} files from S3")
+    logging.info(f"Deleted {deleted_local_count} files from local directory")
 
 
 def upload_to_s3():
@@ -131,6 +205,12 @@ def start_workflow(
         logging.info(f"S3 endpoint: {S3_ENDPOINT}")
         logging.info(f"S3 bucket: {S3_BUCKET}")
         logging.info(f"Generate tiles: {generate_tiles}\n")
+
+        # Clean up affected files from previous versions before starting the workflow
+        version = get_client_version()
+        if version == "1.26.0" or version == "1.25.0":
+            logging.info("Cleaning up affected files...")
+            cleanup_affected_files()
 
         logging.info("\nChecking for new MODIS data...")
         fetch_new_dates(limit=limit)
