@@ -194,6 +194,9 @@ interface Store {
   markVersionSeen: () => void;
   showARDTiles: boolean;
   toggleARDTiles: () => void;
+  showAllCompletedJobs: boolean;
+  toggleAllCompletedJobs: () => void;
+  allCompletedJobs: any[];
   ardTiles: Record<string, any>;
   visibleReferenceLayers: string[];
   setVisibleReferenceLayers: (visibleReferenceLayers: string[]) => void;
@@ -955,6 +958,11 @@ const useStore = create<Store>()(
       toggleARDTiles: () => {
         set({ showARDTiles: !get().showARDTiles });
       },
+      showAllCompletedJobs: false,
+      toggleAllCompletedJobs: () => {
+        set({ showAllCompletedJobs: !get().showAllCompletedJobs });
+      },
+      allCompletedJobs: [],
       visibleReferenceLayers: [],
       setVisibleReferenceLayers: (visibleReferenceLayers) => set({ visibleReferenceLayers }),
       ardTiles: {},
@@ -981,7 +989,7 @@ const useStore = create<Store>()(
         }
 
         axiosInstance
-          .get(`${API_URL}/search_geojsons`)
+          .get(`${API_URL}/queue/search_geojsons`)
           .then((response) => {
             set({ allGeoJSONs: response.data });
           })

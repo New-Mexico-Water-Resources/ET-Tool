@@ -39,6 +39,12 @@ const MapLayersPanel: FC = () => {
   const showARDTiles = useStore((state) => state.showARDTiles);
   const toggleARDTiles = useStore((state) => state.toggleARDTiles);
 
+  const showAllCompletedJobs = useStore((state) => state.showAllCompletedJobs);
+  const toggleAllCompletedJobs = useStore((state) => state.toggleAllCompletedJobs);
+
+  const allGeoJSONs = useStore((state) => state.allGeoJSONs);
+  const searchGeoJSONs = useStore((state) => state.searchGeoJSONs);
+
   const referenceLayerOptions = useMemo(() => Object.keys(REFERENCE_GEOJSONS), []);
   const [visibleReferenceLayers, setVisibleReferenceLayers] = useStore((state) => [
     state.visibleReferenceLayers,
@@ -294,6 +300,19 @@ const MapLayersPanel: FC = () => {
               </Typography>
             </div>
           ))}
+          <div style={{ display: "flex", alignItems: "center", marginRight: "auto" }}>
+            <Checkbox
+              onClick={() => {
+                toggleAllCompletedJobs();
+                searchGeoJSONs();
+              }}
+              checked={showAllCompletedJobs}
+              style={{ padding: 0, marginRight: "4px", marginLeft: "4px" }}
+            />
+            <Typography variant="body2" style={{ color: "var(--st-gray-30)", fontSize: "12px" }}>
+              All Jobs {allGeoJSONs.length ? `(${allGeoJSONs.length})` : ""}
+            </Typography>
+          </div>
         </div>
         <Typography
           variant="h6"

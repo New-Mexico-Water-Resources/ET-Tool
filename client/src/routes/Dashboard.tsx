@@ -17,14 +17,12 @@ import UsersList from "../components/UsersList";
 import MapLayersPanel from "../components/MapLayersPanel";
 import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
 import ActiveMapLayer from "../components/ActiveMapLayer";
-import { CRS, Tooltip } from "leaflet";
+import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
 import ColorScale from "../components/ColorScale";
 import useCurrentJobStore from "../utils/currentJobStore";
-import { atom } from "jotai";
-
-export const tooltipAtom = atom<Tooltip | null>(null);
+import dayjs from "dayjs";
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -54,7 +52,14 @@ const Dashboard = () => {
   const fetchDroughtMonitorData = useStore((state) => state.fetchDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
+  const setActiveJob = useStore((state) => state.setActiveJob);
+  const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
   const visibleReferenceLayers = useStore((state) => state.visibleReferenceLayers);
+
+  const closeNewJob = useStore((state) => state.closeNewJob);
+
+  const showAllCompletedJobs = useStore((state) => state.showAllCompletedJobs);
+  const allGeoJSONs = useStore((state) => state.allGeoJSONs);
 
   const visibleReferenceGeoJSONs = useMemo(() => {
     if (!visibleReferenceLayers || !REFERENCE_GEOJSONS) {
@@ -338,6 +343,40 @@ const Dashboard = () => {
           />
         )}
         {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
+        {showAllCompletedJobs &&
+          allGeoJSONs &&
+          allGeoJSONs.length > 0 &&
+          allGeoJSONs.map((geojson) => {
+            let dateTooltip = "";
+            if (geojson.status === "Complete") {
+              dateTooltip = `Completed: ${dayjs(geojson.ended).format("MM/DD/YYYY")}`;
+            } else if (geojson.started) {
+              dateTooltip = `Started: ${dayjs(geojson.started).format("MM/DD/YYYY")}`;
+            } else {
+              dateTooltip = `Submitted: ${dayjs(geojson.submitted).format("MM/DD/YYYY")}`;
+            }
+
+            const tooltipText = `Name: ${geojson.name}\n${dateTooltip}\nStatus: ${geojson.status}\nRequested by: ${geojson.user.name}`;
+
+            return (
+              <GeoJSONLayer
+                key={geojson.key}
+                data={geojson.geojson}
+                validateBounds={false}
+                fitToBounds={false}
+                showLabels={true}
+                showAreaLabel={true}
+                tooltipText={tooltipText}
+                onSelect={() => {
+                  const activeJob = { ...geojson };
+                  activeJob.loaded_geo_json = geojson.geojson;
+                  setActiveJob(activeJob);
+                  setLoadedGeoJSON(activeJob.loaded_geo_json);
+                  closeNewJob();
+                }}
+              />
+            );
+          })}
         {visibleReferenceGeoJSONs.map((layer) => (
           <GeoJSONLayer
             key={layer.name}
