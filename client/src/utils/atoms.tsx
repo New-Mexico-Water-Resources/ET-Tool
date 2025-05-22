@@ -1,4 +1,5 @@
 import { atom } from "jotai";
+import { Tooltip } from "leaflet";
 
 export type CountyStat = {
   id: string;
@@ -14,3 +15,5 @@ export const modisCountyStatsAtom = atom<{
   mode: string;
   countyStats: Record<string, CountyStat>;
 }>({ band: "", time: "", mode: "", countyStats: {} });
+
+export const tooltipAtom = atom<Tooltip | null>(null);

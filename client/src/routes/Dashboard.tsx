@@ -17,14 +17,12 @@ import UsersList from "../components/UsersList";
 import MapLayersPanel from "../components/MapLayersPanel";
 import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
 import ActiveMapLayer from "../components/ActiveMapLayer";
-import { CRS, Tooltip } from "leaflet";
+import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
 import ColorScale from "../components/ColorScale";
 import useCurrentJobStore from "../utils/currentJobStore";
-import { atom } from "jotai";
-
-export const tooltipAtom = atom<Tooltip | null>(null);
+import dayjs from "dayjs";
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -54,7 +52,16 @@ const Dashboard = () => {
   const fetchDroughtMonitorData = useStore((state) => state.fetchDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
+  const activeJob = useStore((state) => state.activeJob);
+  const setActiveJob = useStore((state) => state.setActiveJob);
+
+  const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
   const visibleReferenceLayers = useStore((state) => state.visibleReferenceLayers);
+
+  const closeNewJob = useStore((state) => state.closeNewJob);
+
+  const showAllCompletedJobs = useStore((state) => state.showAllCompletedJobs);
+  const allGeoJSONs = useStore((state) => state.allGeoJSONs);
 
   const visibleReferenceGeoJSONs = useMemo(() => {
     if (!visibleReferenceLayers || !REFERENCE_GEOJSONS) {
@@ -228,6 +235,23 @@ const Dashboard = () => {
     }
   }, [isRightPanelOpen, showColorScale]);
 
+  const loadedGeoJSONTooltipText = useMemo(() => {
+    if (!activeJob) {
+      return "";
+    }
+
+    let dateTooltip = "";
+    if (activeJob.status === "Complete") {
+      dateTooltip = `Completed: ${dayjs(activeJob.ended).format("MM/DD/YYYY")}`;
+    } else if (activeJob.started) {
+      dateTooltip = `Started: ${dayjs(activeJob.started).format("MM/DD/YYYY")}`;
+    } else {
+      dateTooltip = `Submitted: ${dayjs(activeJob.submitted).format("MM/DD/YYYY")}`;
+    }
+
+    return `Name: ${activeJob.name}\n${dateTooltip}\nStatus: ${activeJob.status}\nRequested by: ${activeJob.user.name}`;
+  }, [activeJob]);
+
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <NavToolbar />
@@ -338,6 +362,40 @@ const Dashboard = () => {
           />
         )}
         {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
+        {showAllCompletedJobs &&
+          allGeoJSONs &&
+          allGeoJSONs.length > 0 &&
+          allGeoJSONs.map((geojson) => {
+            let dateTooltip = "";
+            if (geojson.status === "Complete") {
+              dateTooltip = `Completed: ${dayjs(geojson.ended).format("MM/DD/YYYY")}`;
+            } else if (geojson.started) {
+              dateTooltip = `Started: ${dayjs(geojson.started).format("MM/DD/YYYY")}`;
+            } else {
+              dateTooltip = `Submitted: ${dayjs(geojson.submitted).format("MM/DD/YYYY")}`;
+            }
+
+            const tooltipText = `Name: ${geojson.name}\n${dateTooltip}\nStatus: ${geojson.status}\nRequested by: ${geojson.user.name}`;
+
+            return (
+              <GeoJSONLayer
+                key={geojson.key}
+                data={geojson.geojson}
+                validateBounds={false}
+                fitToBounds={false}
+                showLabels={true}
+                showAreaLabel={true}
+                tooltipText={tooltipText}
+                onSelect={() => {
+                  const newJob = { ...geojson };
+                  newJob.loaded_geo_json = geojson.geojson;
+                  setActiveJob(newJob);
+                  setLoadedGeoJSON(newJob.loaded_geo_json);
+                  closeNewJob();
+                }}
+              />
+            );
+          })}
         {visibleReferenceGeoJSONs.map((layer) => (
           <GeoJSONLayer
             key={layer.name}
@@ -350,6 +408,7 @@ const Dashboard = () => {
         ))}
         <GeoJSONLayer
           data={loadedGeoJSON}
+          tooltipText={loadedGeoJSONTooltipText}
           showLabels={!showPreview}
           showAreaLabel={!showPreview}
           outline={showPreview}
