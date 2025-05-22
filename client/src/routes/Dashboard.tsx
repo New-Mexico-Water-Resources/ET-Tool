@@ -379,7 +379,9 @@ const Dashboard = () => {
               dateTooltip = `Submitted: ${dayjs(geojson.submitted).format("MM/DD/YYYY")}`;
             }
 
-            const tooltipText = `Name: ${geojson.name}\n${dateTooltip}\nStatus: ${geojson.status}\nRequested by: ${geojson.user.name}`;
+            const tooltipText = `Name: ${geojson?.name || "N/A"}\n${dateTooltip}\nStatus: ${
+              geojson?.status || "N/A"
+            }\nRequested by: ${geojson?.user?.name || "Unknown"}`;
 
             return (
               <GeoJSONLayer
