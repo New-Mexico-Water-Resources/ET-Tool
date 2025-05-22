@@ -28,8 +28,17 @@ router.get("/search_geojsons", async (req, res) => {
   let collection = db.collection(constants.report_queue_collection);
   let result = await collection.find({}).toArray();
   result.forEach((job, i) => {
-    let geojson = fs.readFileSync(job.geo_json, "utf8");
-    result[i].geojson = JSON.parse(geojson);
+    if (job.geo_json) {
+      try {
+        let geojson = fs.readFileSync(job.geo_json, "utf8");
+        result[i].geojson = JSON.parse(geojson);
+      } catch (e) {
+        console.error(`Error parsing geojson for job ${job.key}`, e);
+        result[i].geojson = {};
+      }
+    } else {
+      result[i].geojson = {};
+    }
   });
 
   res.status(200).send(result);
