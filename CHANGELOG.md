@@ -9,6 +9,7 @@
 ### Bug Fixes
 - Removes MODIS PET upgrade step from the pipeline
 - Fixes bug where draw controls disappear behind the right side modal if the modal is open, a polygon is drawn, and then the new job modal is closed
+- Adds error handling for old jobs with malformed geojson files
 
 
 ## 1.26.0 (2025-05-15)
