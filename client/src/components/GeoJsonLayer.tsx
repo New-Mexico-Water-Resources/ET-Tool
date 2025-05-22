@@ -7,7 +7,7 @@ import { MAP_LAYER_OPTIONS, DROUGHT_MONITOR_METADATA } from "../utils/constants"
 import type { Feature } from "geojson";
 import { useAtomValue } from "jotai";
 import { modisCountyStatsAtom } from "../utils/atoms";
-
+import useCurrentJobStore from "../utils/currentJobStore";
 interface ExtendedLayer extends Leaflet.Layer {
   labelMarker?: Leaflet.Marker;
   getBounds(): Leaflet.LatLngBounds;
@@ -41,6 +41,8 @@ const GeoJSONLayer = ({
   const maximumValidArea = useStore((state) => state.maximumValidArea);
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayer = useMemo(() => (MAP_LAYER_OPTIONS as any)[mapLayerKey] as MapLayer, [mapLayerKey]);
+
+  const showPreview = useCurrentJobStore((state) => state.showPreview);
 
   const modisCountyStats = useAtomValue(modisCountyStatsAtom);
 
@@ -136,6 +138,7 @@ const GeoJSONLayer = ({
               className: "geojson-label",
               permanent: false,
               sticky: true,
+              opacity: showPreview ? 0 : 1,
             });
           }
         },
