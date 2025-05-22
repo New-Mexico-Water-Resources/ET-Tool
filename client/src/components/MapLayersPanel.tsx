@@ -22,6 +22,8 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import axios from "axios";
 import UpdateIcon from "@mui/icons-material/Update";
 import AutoModeIcon from "@mui/icons-material/AutoMode";
+import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
+import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 
@@ -75,6 +77,8 @@ const MapLayersPanel: FC = () => {
 
   const fetchingDroughtMonitorData = useStore((state) => state.fetchingDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
+
+  const setShowUploadDialog = useStore((state) => state.setShowUploadDialog);
 
   const selectedMapLayer = useMemo(() => {
     if (mapLayerKey && (MAP_LAYER_OPTIONS as any)[mapLayerKey]) {
@@ -213,6 +217,18 @@ const MapLayersPanel: FC = () => {
     }
   }, [latestAvailableDate, setTileDate, tileDate, setTempTileDate, tempTileDate]);
 
+  const [focusedJobIndex, setFocusedJobIndex] = useState<number>(0);
+
+  const activeJob = useStore((state) => state.activeJob);
+  const setActiveJob = useStore((state) => state.setActiveJob);
+  const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
+
+  useEffect(() => {
+    if (allGeoJSONs.length > 0 && activeJob) {
+      setFocusedJobIndex(allGeoJSONs.findIndex((job) => job.key === activeJob?.key));
+    }
+  }, [allGeoJSONs, activeJob, setFocusedJobIndex]);
+
   return (
     <div className={`map-layers-container ${isMapLayersPanelOpen ? "open" : "closed"}`}>
       <Typography
@@ -300,7 +316,7 @@ const MapLayersPanel: FC = () => {
               </Typography>
             </div>
           ))}
-          <div style={{ display: "flex", alignItems: "center", marginRight: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", marginRight: "auto", width: "100%" }}>
             <Checkbox
               onClick={() => {
                 toggleAllCompletedJobs();
@@ -312,6 +328,78 @@ const MapLayersPanel: FC = () => {
             <Typography variant="body2" style={{ color: "var(--st-gray-30)", fontSize: "12px" }}>
               All Jobs {allGeoJSONs.length ? `(${allGeoJSONs.length})` : ""}
             </Typography>
+            {showAllCompletedJobs && allGeoJSONs.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "auto" }}>
+                <Tooltip
+                  title={`Previous job: ${
+                    allGeoJSONs[focusedJobIndex > 0 ? focusedJobIndex - 1 : allGeoJSONs.length - 1]?.name
+                  }`}
+                >
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      const currentIndex = focusedJobIndex;
+                      const prevIndex = currentIndex > 0 ? currentIndex - 1 : allGeoJSONs.length - 1;
+                      const prevJob = allGeoJSONs[prevIndex];
+                      if (prevJob) {
+                        setFocusedJobIndex(prevIndex);
+                        setActiveJob(prevJob);
+                        setLoadedGeoJSON(prevJob.geojson);
+                        setShowUploadDialog(false);
+                      }
+                    }}
+                    sx={{ color: "var(--st-gray-30)", padding: "2px" }}
+                  >
+                    <ArrowBackIosNewIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Typography
+                  variant="body2"
+                  style={{
+                    color: "var(--st-gray-30)",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    width: "100px",
+                    textAlign: "center",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                  onClick={() => {
+                    if (focusedJobIndex < allGeoJSONs.length) {
+                      setActiveJob(allGeoJSONs[focusedJobIndex]);
+                      setLoadedGeoJSON(allGeoJSONs[focusedJobIndex].geojson);
+                      setShowUploadDialog(false);
+                    }
+                  }}
+                >
+                  {(focusedJobIndex < allGeoJSONs.length && allGeoJSONs[focusedJobIndex]?.name) || "No job selected"}
+                </Typography>
+                <Tooltip
+                  title={`Next job: ${
+                    allGeoJSONs[focusedJobIndex < allGeoJSONs.length - 1 ? focusedJobIndex + 1 : 0]?.name
+                  }`}
+                >
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      const currentIndex = focusedJobIndex;
+                      const nextIndex = currentIndex < allGeoJSONs.length - 1 ? currentIndex + 1 : 0;
+                      const nextJob = allGeoJSONs[nextIndex];
+                      if (nextJob) {
+                        setFocusedJobIndex(nextIndex);
+                        setActiveJob(nextJob);
+                        setLoadedGeoJSON(nextJob.geojson);
+                        setShowUploadDialog(false);
+                      }
+                    }}
+                    sx={{ color: "var(--st-gray-30)", padding: "2px" }}
+                  >
+                    <ArrowForwardIosIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </div>
+            )}
           </div>
         </div>
         <Typography

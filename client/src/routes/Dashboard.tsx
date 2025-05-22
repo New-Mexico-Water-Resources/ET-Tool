@@ -52,7 +52,9 @@ const Dashboard = () => {
   const fetchDroughtMonitorData = useStore((state) => state.fetchDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
+  const activeJob = useStore((state) => state.activeJob);
   const setActiveJob = useStore((state) => state.setActiveJob);
+
   const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
   const visibleReferenceLayers = useStore((state) => state.visibleReferenceLayers);
 
@@ -233,6 +235,23 @@ const Dashboard = () => {
     }
   }, [isRightPanelOpen, showColorScale]);
 
+  const loadedGeoJSONTooltipText = useMemo(() => {
+    if (!activeJob) {
+      return "";
+    }
+
+    let dateTooltip = "";
+    if (activeJob.status === "Complete") {
+      dateTooltip = `Completed: ${dayjs(activeJob.ended).format("MM/DD/YYYY")}`;
+    } else if (activeJob.started) {
+      dateTooltip = `Started: ${dayjs(activeJob.started).format("MM/DD/YYYY")}`;
+    } else {
+      dateTooltip = `Submitted: ${dayjs(activeJob.submitted).format("MM/DD/YYYY")}`;
+    }
+
+    return `Name: ${activeJob.name}\n${dateTooltip}\nStatus: ${activeJob.status}\nRequested by: ${activeJob.user.name}`;
+  }, [activeJob]);
+
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <NavToolbar />
@@ -368,10 +387,10 @@ const Dashboard = () => {
                 showAreaLabel={true}
                 tooltipText={tooltipText}
                 onSelect={() => {
-                  const activeJob = { ...geojson };
-                  activeJob.loaded_geo_json = geojson.geojson;
-                  setActiveJob(activeJob);
-                  setLoadedGeoJSON(activeJob.loaded_geo_json);
+                  const newJob = { ...geojson };
+                  newJob.loaded_geo_json = geojson.geojson;
+                  setActiveJob(newJob);
+                  setLoadedGeoJSON(newJob.loaded_geo_json);
                   closeNewJob();
                 }}
               />
@@ -389,6 +408,7 @@ const Dashboard = () => {
         ))}
         <GeoJSONLayer
           data={loadedGeoJSON}
+          tooltipText={loadedGeoJSONTooltipText}
           showLabels={!showPreview}
           showAreaLabel={!showPreview}
           outline={showPreview}

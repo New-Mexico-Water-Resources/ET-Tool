@@ -310,6 +310,29 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
           </Tooltip>
         )}
 
+        {/* Branding */}
+        {/* <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            height: "calc(100% - 8px)",
+            borderLeft: "1px solid var(--st-gray-70)",
+            paddingLeft: "8px",
+            marginTop: "auto",
+            marginBottom: "auto",
+          }}
+        >
+          <img
+            src="/src/assets/logos/jpl-white.png"
+            alt="NASA Jet Propulsion Laboratory/California Institute of Technology"
+            style={{ height: "100%" }}
+          />
+          <img
+            src="/src/assets/logos/chapman-white-on-black-transparent.png"
+            alt="Chapman University"
+            style={{ height: "calc(100% - 8px)" }}
+          />
+        </div> */}
         {!publicMode && (
           <Box sx={{ ml: "auto", display: "flex", height: "100%", alignItems: "center" }}>
             <Tooltip title={canReadJobs ? "View in progress jobs" : "You don't have permission to view the job queue"}>

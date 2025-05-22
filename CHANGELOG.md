@@ -1,3 +1,16 @@
+## 1.27.0 (2025-05-21)
+
+### Features
+- Adds new Reference layer showing all jobs on the map
+  - Clicking on a job will open the active job modal
+  - Adds ability to navigate through all jobs and auto-zoom to each job
+- Adds more detail to geojson tooltip
+
+### Bug Fixes
+- Removes MODIS PET upgrade step from the pipeline
+- Fixes bug where draw controls disappear behind the right side modal if the modal is open, a polygon is drawn, and then the new job modal is closed
+
+
 ## 1.26.0 (2025-05-15)
 
 ### Features
