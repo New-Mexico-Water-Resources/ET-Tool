@@ -26,7 +26,7 @@ import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIAB
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 import { useAtomValue } from "jotai";
-import { tooltipAtom } from "../routes/Dashboard";
+import { tooltipAtom } from "../utils/atoms";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -134,9 +134,6 @@ const CurrentJobChip = () => {
   const jobStatuses = useStore((state) => state.jobStatuses);
   const jobStatus = useMemo(() => {
     let jobStatus: JobStatus = jobStatuses[activeJob?.key];
-    if (activeJob?.status === "Complete") {
-      jobStatus.status = "Complete";
-    }
 
     if (!jobStatus) {
       jobStatus = {
@@ -150,6 +147,10 @@ const CurrentJobChip = () => {
         estimatedPercentComplete: 0,
         timeRemaining: 0,
       };
+    }
+
+    if (activeJob?.status === "Complete") {
+      jobStatus.status = "Complete";
     }
 
     return jobStatus;
@@ -451,7 +452,9 @@ const CurrentJobChip = () => {
                         onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
                       >
                         {displayVariableOptions.map((variable) => (
-                          <MenuItem value={variable}>{variable}</MenuItem>
+                          <MenuItem key={variable} value={variable}>
+                            {variable}
+                          </MenuItem>
                         ))}
                       </Select>
                     </FormControl>

@@ -12,7 +12,7 @@ import useStore, { MapLayer } from "../utils/store";
 import { OPENET_TRANSITION_DATE } from "../utils/constants";
 import ColorScale from "./ColorScale";
 import { useAtom } from "jotai";
-import { tooltipAtom } from "../routes/Dashboard";
+import { tooltipAtom } from "../utils/atoms";
 
 // Add CSS to disable transitions on Leaflet layers
 const style = document.createElement("style");

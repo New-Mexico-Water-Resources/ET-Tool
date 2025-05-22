@@ -4,7 +4,7 @@ import * as turf from "@turf/turf";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import useStore, { MapLayer } from "../utils/store";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { MAP_LAYER_OPTIONS } from "../utils/constants";
 
 const getNumberOfEdges = (radius: number, segmentLength: number = 30) => {
@@ -22,7 +22,7 @@ const DrawControls = () => {
   const [jobName, setJobName] = useStore((state) => [state.jobName, state.setJobName]);
   const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
   const startNewJob = useStore((state) => state.startNewJob);
-
+  const showUploadDialog = useStore((state) => state.showUploadDialog);
   const isRightPanelOpen = useStore((state) => state.isRightPanelOpen);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
@@ -159,6 +159,10 @@ const DrawControls = () => {
       polyline: false,
     };
   }, []);
+
+  useEffect(() => {
+    updateDrawControls();
+  }, [updateDrawControls, showUploadDialog]);
 
   return (
     <FeatureGroup>

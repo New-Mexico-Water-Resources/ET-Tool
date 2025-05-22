@@ -21,6 +21,8 @@ const GeoJSONLayer = ({
   isDroughtMonitor = false,
   showAreaLabel = false,
   outline = false,
+  tooltipText = "",
+  onSelect = () => {},
 }: {
   data?: any;
   validateBounds?: boolean;
@@ -29,6 +31,8 @@ const GeoJSONLayer = ({
   isDroughtMonitor?: boolean;
   showAreaLabel?: boolean;
   outline?: boolean;
+  tooltipText?: string;
+  onSelect?: (feature: Feature) => void;
 }) => {
   const map = useMap();
   const layerRef = useRef<Leaflet.GeoJSON | null>(null);
@@ -72,6 +76,12 @@ const GeoJSONLayer = ({
             layer.getTooltip()?.remove();
           }
 
+          if (onSelect) {
+            layer.on("click", () => {
+              onSelect(feature);
+            });
+          }
+
           if (outline) {
             (layer as any).setStyle({
               color: "#3488FF",
@@ -88,8 +98,8 @@ const GeoJSONLayer = ({
             });
           }
 
-          let tooltip = "";
-          if (showLabels && feature.properties) {
+          let tooltip = tooltipText;
+          if (showLabels && feature.properties && tooltipText.length === 0) {
             let nameKey = "label";
             if (!isDroughtMonitor) {
               nameKey = Object.keys(feature.properties).find((key) => key.toLowerCase() === "namelsad") || "";
