@@ -27,11 +27,14 @@ router.get("/search_geojsons", async (req, res) => {
   let db = await constants.connectToDatabase();
   let collection = db.collection(constants.report_queue_collection);
   let result = await collection.find({}).toArray();
+
+  let matchedJobs = [];
   result.forEach((job, i) => {
     if (job.geo_json) {
       try {
         let geojson = fs.readFileSync(job.geo_json, "utf8");
         result[i].geojson = JSON.parse(geojson);
+        matchedJobs.push(job);
       } catch (e) {
         console.error(`Error parsing geojson for job ${job.key}`, e);
         result[i].geojson = {};
@@ -41,7 +44,7 @@ router.get("/search_geojsons", async (req, res) => {
     }
   });
 
-  res.status(200).send(result);
+  res.status(200).send(matchedJobs);
 });
 
 router.delete("/delete_job", async (req, res) => {

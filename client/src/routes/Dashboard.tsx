@@ -366,6 +366,10 @@ const Dashboard = () => {
           allGeoJSONs &&
           allGeoJSONs.length > 0 &&
           allGeoJSONs.map((geojson) => {
+            if (!geojson?.geojson) {
+              return null;
+            }
+
             let dateTooltip = "";
             if (geojson.status === "Complete") {
               dateTooltip = `Completed: ${dayjs(geojson.ended).format("MM/DD/YYYY")}`;
