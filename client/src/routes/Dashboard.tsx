@@ -241,15 +241,15 @@ const Dashboard = () => {
     }
 
     let dateTooltip = "";
-    if (activeJob.status === "Complete") {
-      dateTooltip = `Completed: ${dayjs(activeJob.ended).format("MM/DD/YYYY")}`;
-    } else if (activeJob.started) {
-      dateTooltip = `Started: ${dayjs(activeJob.started).format("MM/DD/YYYY")}`;
+    if (activeJob?.status === "Complete") {
+      dateTooltip = `Completed: ${dayjs(activeJob?.ended).format("MM/DD/YYYY")}`;
+    } else if (activeJob?.started) {
+      dateTooltip = `Started: ${dayjs(activeJob?.started).format("MM/DD/YYYY")}`;
     } else {
       dateTooltip = `Submitted: ${dayjs(activeJob.submitted).format("MM/DD/YYYY")}`;
     }
 
-    return `Name: ${activeJob.name}\n${dateTooltip}\nStatus: ${activeJob.status}\nRequested by: ${activeJob.user.name}`;
+    return `Name: ${activeJob?.name}\n${dateTooltip}\nStatus: ${activeJob?.status}\nRequested by: ${activeJob?.user?.name}`;
   }, [activeJob]);
 
   return (
