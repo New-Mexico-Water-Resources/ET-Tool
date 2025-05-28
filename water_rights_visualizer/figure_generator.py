@@ -15,6 +15,24 @@ from .constants import WGS84
 logger = logging.getLogger(__name__)
 
 
+def calculate_year_bounds(year_df: pd.DataFrame, file: str, variable: str, abs: bool = False) -> tuple[float, float]:
+    if variable not in year_df.columns:
+        logger.warning(f"'{variable}' not in column names for {file}. Excluding from min/max calculation.")
+        return None, None
+    if abs:
+        # Just get absolute min and max
+        year_vmin = np.nanmin(year_df[variable])
+        year_vmax = np.nanmax(year_df[variable])
+    else:
+        # Get mean and 2 standard deviations
+        year_mean = np.nanmean(year_df[variable])
+        year_sd = np.nanstd(year_df[variable])
+        year_vmin = max(year_mean - 2 * year_sd, 0)
+        year_vmax = year_mean + 2 * year_sd
+
+    return year_vmin, year_vmax
+
+
 def generate_all_figures(
     ROI_name: str,
     ROI: str,
@@ -53,19 +71,56 @@ def generate_all_figures(
     creation_date = datetime.today()
 
     # Calculate vmin and vmax across all years
-    vmin = None
-    vmax = None
+    et_vmin = None
+    et_vmax = None
+
+    # Everything showing on first plot ("ET", "PET", "ET_MIN", "ET_MAX")
+    combined_abs_min = None
+    combined_abs_max = None
+
+    ppt_min = None
+    ppt_max = None
+
+    cloud_cover_min = None
+    cloud_cover_max = None
+
+    # Monthly means files contain: Year, Month, ET, PET
     for file in Path(monthly_means_directory).glob("*.csv"):
         year_df = pd.read_csv(file)
-        if "ET" not in year_df.columns:
-            logger.warning(f"'ET' not in column names for {file}. Excluding from min/max calculation.")
+
+        # Get absolute min and max for all variables
+        for variable in ["ET", "PET"]:
+            year_vmin, year_vmax = calculate_year_bounds(year_df, file, variable, abs=True)
+            if year_vmin is None:
+                continue
+            combined_abs_min = year_vmin if combined_abs_min is None else min(combined_abs_min, year_vmin)
+            combined_abs_max = year_vmax if combined_abs_max is None else max(combined_abs_max, year_vmax)
+
+        year_vmin, year_vmax = calculate_year_bounds(year_df, file, "ET")
+        # Skip if no ET data
+        if year_vmin is None:
             continue
-        year_mean = np.nanmean(year_df["ET"])
-        year_sd = np.nanstd(year_df["ET"])
-        year_vmin = max(year_mean - 2 * year_sd, 0)
-        year_vmax = year_mean + 2 * year_sd
-        vmin = year_vmin if vmin is None else min(vmin, year_vmin)
-        vmax = year_vmax if vmax is None else max(vmax, year_vmax)
+        et_vmin = year_vmin if et_vmin is None else min(et_vmin, year_vmin)
+        et_vmax = year_vmax if et_vmax is None else max(et_vmax, year_vmax)
+
+    # Monthly nan files contain: year, month, percent_nan, avg_min (ET_MIN), avg_max (ET_MAX), ppt_avg
+    for file in Path(monthly_nan_directory).glob("*.csv"):
+        year_df = pd.read_csv(file)
+
+        for variable in ["avg_min", "avg_max"]:
+            year_vmin, year_vmax = calculate_year_bounds(year_df, file, variable, abs=True)
+            if year_vmin is None:
+                continue
+            combined_abs_min = year_vmin if combined_abs_min is None else min(combined_abs_min, year_vmin)
+            combined_abs_max = year_vmax if combined_abs_max is None else max(combined_abs_max, year_vmax)
+
+        year_ppt_min, year_ppt_max = calculate_year_bounds(year_df, file, "ppt_avg", abs=True)
+        ppt_min = year_ppt_min if ppt_min is None else min(ppt_min, year_ppt_min)
+        ppt_max = year_ppt_max if ppt_max is None else max(ppt_max, year_ppt_max)
+
+        year_cloud_cover_min, year_cloud_cover_max = calculate_year_bounds(year_df, file, "percent_nan", abs=True)
+        cloud_cover_min = year_cloud_cover_min if cloud_cover_min is None else min(cloud_cover_min, year_cloud_cover_min)
+        cloud_cover_max = year_cloud_cover_max if cloud_cover_max is None else max(cloud_cover_max, year_cloud_cover_max)
 
     # Generate figures for each year
     years = range(start_year, end_year + 1)
@@ -109,8 +164,14 @@ def generate_all_figures(
                 ROI_acres=ROI_acres,
                 creation_date=creation_date,
                 year=year,
-                vmin=vmin,
-                vmax=vmax,
+                et_vmin=et_vmin,
+                et_vmax=et_vmax,
+                combined_abs_min=combined_abs_min,
+                combined_abs_max=combined_abs_max,
+                ppt_min=ppt_min,
+                ppt_max=ppt_max,
+                cloud_cover_min=cloud_cover_min,
+                cloud_cover_max=cloud_cover_max,
                 affine=affine,
                 main_df=main_df,
                 monthly_sums_directory=monthly_sums_directory,

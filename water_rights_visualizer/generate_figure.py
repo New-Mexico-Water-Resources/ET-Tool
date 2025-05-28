@@ -4,7 +4,7 @@ from os.path import join, exists, dirname
 from os import makedirs
 from tkinter import Text, Tk
 from tkinter.scrolledtext import ScrolledText
-
+import math
 import matplotlib.pyplot as plt
 import calendar
 import pandas as pd
@@ -33,14 +33,63 @@ def mm_to_in(mm: float | pd.DataFrame) -> float:
     return mm / 25.4
 
 
+def convert_to_nice_number_range(start: float, end: float, metric_units: bool, subdivisions: int = 5) -> list[float]:
+    """
+    Convert a range of values to "nice" numbers in the given units (assumes input is in mm). The nice numbers are readable multiples of the subdivision.
+
+    Args:
+        start (float): The start value to convert (in mm).
+        end (float): The end value to convert (in mm).
+        metric_units (bool): Whether the units are metric.
+        subdivisions (int): The target number of subdivisions to use for the nice number range.
+
+    Returns:
+        list[float]: A list of nice numbers that encompass the input range
+    """
+    start = mm_to_in(start) if not metric_units else start
+    end = mm_to_in(end) if not metric_units else end
+
+    # Set minimum increment based on units
+    min_increment = 0.5 if metric_units else 0.1
+
+    # Calculate the range and ideal increment size
+    data_range = end - start
+    increment = max(min_increment, data_range / subdivisions)
+    # Round increment up to a nice number (0.5, 1, 2, 5, 10, etc for metric)
+    # or (0.1, 0.2, 0.5, 1, 2, 5, 10, etc for inches)
+    magnitude = 10 ** math.floor(math.log10(increment))
+    normalized = increment / magnitude
+
+    # Define nice number increments based on units
+    increments = [0.1, 0.2, 0.5, 1, 2, 5, 10] if not metric_units else [0.5, 1, 2, 5, 10]
+
+    # Find first increment larger than normalized value
+    nice_increment = magnitude * next(x for x in increments if x >= normalized)
+
+    # Calculate nice start and end values
+    nice_start = math.floor(start / nice_increment) * nice_increment
+    nice_end = math.ceil(end / nice_increment) * nice_increment
+
+    # Calculate all nice numbers in the range
+    nice_numbers = np.arange(nice_start, nice_end + nice_increment, nice_increment)
+
+    return nice_numbers
+
+
 def generate_figure(
     ROI_name: str,
     ROI_latlon: Polygon,
     ROI_acres: float,
     creation_date: date,
     year: int,
-    vmin: float,
-    vmax: float,
+    et_vmin: float,
+    et_vmax: float,
+    combined_abs_min: float,
+    combined_abs_max: float,
+    ppt_min: float,
+    ppt_max: float,
+    cloud_cover_min: float,
+    cloud_cover_max: float,
     affine: Affine,
     main_df: pd.DataFrame,
     monthly_sums_directory: str,
@@ -63,8 +112,14 @@ def generate_figure(
         ROI_acres (float): Area of the region of interest in acres.
         creation_date (date): Date of figure creation.
         year (int): Year for which the evapotranspiration data is generated.
-        vmin (float): Minimum value for the color scale of the evapotranspiration data.
-        vmax (float): Maximum value for the color scale of the evapotranspiration data.
+        et_vmin (float): Minimum value for the color scale of the evapotranspiration data.
+        et_vmax (float): Maximum value for the color scale of the evapotranspiration data.
+        combined_abs_min (float): Minimum value for the color scale of the combined data.
+        combined_abs_max (float): Maximum value for the color scale of the combined data.
+        ppt_min (float): Minimum value for the color scale of the precipitation data.
+        ppt_max (float): Maximum value for the color scale of the precipitation data.
+        cloud_cover_min (float): Minimum value for the color scale of the cloud coverage data.
+        cloud_cover_max (float): Maximum value for the color scale of the cloud coverage data.
         affine (Affine): Affine transformation for mapping coordinates to pixels.
         main_df (pd.DataFrame): DataFrame containing the main data for generating the figure.
         monthly_sums_directory (str): Directory path for the monthly sums data.
@@ -124,6 +179,11 @@ def generate_figure(
 
     grid = plt.GridSpec(grid_rows + 3, grid_cols, wspace=0.4, hspace=0.3)
 
+    # Initially use metric units for the colorbar (geotiff data is in mm, not inches)
+    range_values = convert_to_nice_number_range(et_vmin, et_vmax, True)
+    et_vmin = range_values[0]
+    et_vmax = range_values[-1]
+
     # Generate sub-figures for each month
     for i, month in enumerate(range(start_month, end_month + 1)):
         logger.info(f"rendering month: {month} sub-figure: {i}")
@@ -150,13 +210,19 @@ def generate_figure(
 
         # Create a colormap for the evapotranspiration data
         cmap = LinearSegmentedColormap.from_list("ET", ET_COLORS)
-        im = ax.imshow(monthly, vmin=vmin, vmax=vmax, cmap=cmap)
+        im = ax.imshow(monthly, vmin=et_vmin, vmax=et_vmax, cmap=cmap)
         ax.add_patch(generate_patch(ROI_latlon, affine))
         ax.set_title(subfigure_title, loc="left", fontsize=axis_label_fontsize / 2, pad=4)
 
         # Set the thickness of the border around the subplot
         for spine in ax.spines.values():
             spine.set_linewidth(0.5)
+
+    # Now convert to inches if necessary
+    if not metric_units:
+        range_values = convert_to_nice_number_range(et_vmin, et_vmax, metric_units)
+        et_vmin = range_values[0]
+        et_vmax = range_values[-1]
 
     # Adjust the layout of the figure
     fig.subplots_adjust(right=0.78)
@@ -172,12 +238,8 @@ def generate_figure(
         ticks=[],
     )
 
-    # Convert the min and max values to inches if necessary afte
-    vmin = vmin if metric_units else mm_to_in(vmin)
-    vmax = vmax if metric_units else mm_to_in(vmax)
-
-    bottom_label = f"{round(vmin)} {et_unit}"
-    top_label = f"{round(vmax)} {et_unit}"
+    bottom_label = f"{et_vmin} {et_unit}"
+    top_label = f"{et_vmax} {et_unit}"
 
     # Add the min and max labels without rotation
     cbar.ax.text(
@@ -334,20 +396,15 @@ def generate_figure(
     ax.set(xlabel="", ylabel="")
     ax_precip.set(xlabel="", ylabel="")
 
-    et_df = y2
-    pet_df = y
-
-    et_ci_ymin = df["et_ci_ymin"]
-    et_ci_ymax = df["et_ci_ymax"]
-    pet_ci_ymin = df["pet_ci_ymin"]
-    pet_ci_ymax = df["pet_ci_ymax"]
-
-    ymin = min(min(et_df), min(pet_df), min(pet_ci_ymin), min(et_ci_ymin))
-    ymax = max(max(et_df), max(pet_df), max(pet_ci_ymax), max(et_ci_ymax))
+    combined_range_values = convert_to_nice_number_range(combined_abs_min, combined_abs_max, metric_units)
+    combined_abs_min = combined_range_values[0]
+    combined_abs_max = combined_range_values[-1]
 
     normalized_min = 0
     normalized_max = 100
-    df["normalized_nan"] = (df["percent_nan"] - normalized_min) / (normalized_max - normalized_min) * (ymax - ymin) + ymin
+    df["normalized_nan"] = (df["percent_nan"] - normalized_min) / (normalized_max - normalized_min) * (
+        combined_abs_max - combined_abs_min
+    ) + combined_abs_min
 
     is_confidence_data_null = (
         df["percent_nan"].isnull().all() or df["percent_nan"].eq(0).all() or df["percent_nan"].eq(100).all()
@@ -375,11 +432,14 @@ def generate_figure(
         ax_cloud.set(xlabel="", ylabel="")
         # Only consider non-NaN values when calculating limits
         valid_data = df["percent_nan"].dropna()
+
+        # Global min and max for cloud coverage across all years
+        nice_cloud_cover_range = convert_to_nice_number_range(cloud_cover_min, cloud_cover_max, True, subdivisions=3)
+        min_cloud_coverage = nice_cloud_cover_range[0]
+        max_cloud_coverage = nice_cloud_cover_range[-1]
+
         if not valid_data.empty:
-            max_cloud_coverage = valid_data.max()
             top_gap = min(max_cloud_coverage / 2, 10)
-            min_non_nan = valid_data.min()
-            min_cloud_coverage = max(min_non_nan - 5, 0)
             ax_cloud.set_ylim(min_cloud_coverage, min(max_cloud_coverage + top_gap, 100))
             normalized_ticks = np.linspace(min_cloud_coverage, max_cloud_coverage, 3)
             ax_cloud.set_yticks(normalized_ticks)
@@ -395,20 +455,20 @@ def generate_figure(
     ax_cloud.legend(custom_lines, legend_labels, loc="upper left", fontsize=axis_label_fontsize / 2, frameon=False)
 
     et_padding = 10 if metric_units else mm_to_in(10)
-    adjusted_max = ymax + et_padding
+    adjusted_max = combined_abs_max + et_padding
     ax.set_ylim(0, adjusted_max)
 
-    if metric_units:
-        et_ticks = np.linspace(int(ymin), int(ymax), 6)
-    else:
-        et_ticks = np.linspace(ymin, ymax, 6)
-    ax.set_yticks(et_ticks)
-    ax.set_yticklabels([f"{round(tick * 10) / 10} {et_unit}" for tick in et_ticks])
+    ax.set_yticks(combined_range_values)
+    ax.set_yticklabels([f"{tick} {et_unit}" for tick in combined_range_values])
 
     if "ppt_avg" in df.columns and not df["ppt_avg"].empty and not df["ppt_avg"].isnull().all():
         ppt_padding = 15 if metric_units else mm_to_in(15)
-        ax_precip.set_ylim(0, max(df["ppt_avg"]) + ppt_padding)
-        precip_ticks = np.linspace(0, max(df["ppt_avg"]), 3)
+        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, metric_units, subdivisions=3)
+        ppt_min = ppt_range_values[0]
+        ppt_max = ppt_range_values[-1]
+
+        ax_precip.set_ylim(ppt_min, ppt_max + ppt_padding)
+        precip_ticks = np.linspace(ppt_min, ppt_max, 3)
         if precip_ticks[0] == precip_ticks[1] or precip_ticks[1] == precip_ticks[2]:
             precip_ticks = [0, precip_ticks[1]]
     else:
@@ -460,9 +520,6 @@ def generate_figure(
         caption = f"ET and ETo calculated from Landsat with the OpenET Ensemble (Melton et al. 2021) and the Idaho EPSCOR GRIDMET (Abatzoglou 2012) models"
     else:
         caption = f"ET and PET calculated from Landsat with PT-JPL (Fisher et al. 2008)"
-    # caption += (
-    #     f"\nCloud coverage and missing data shown as a percentage of the total number of pixels in the area of interest"
-    # )
     caption += f"\nPrecipitation data from PRISM Climate Group, Oregon State University, https://prism.oregonstate.edu"
     plt.figtext(
         0.48,
