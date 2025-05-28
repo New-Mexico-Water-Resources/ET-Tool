@@ -461,6 +461,9 @@ def generate_figure(
     ax.set_yticks(combined_range_values)
     ax.set_yticklabels([f"{tick} {et_unit}" for tick in combined_range_values])
 
+    # Add grid lines to main plot
+    ax.grid(True, linestyle="--", alpha=0.3, color="gray", axis="y")
+
     if "ppt_avg" in df.columns and not df["ppt_avg"].empty and not df["ppt_avg"].isnull().all():
         ppt_padding = 15 if metric_units else mm_to_in(15)
         ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, metric_units, subdivisions=3)
@@ -477,6 +480,9 @@ def generate_figure(
     ax_precip.set_yticks(precip_ticks)
     ax_precip.set_yticklabels([f"{round(tick * 10) / 10} {et_unit}" for tick in precip_ticks])
 
+    # Add grid lines to precipitation plot
+    ax_precip.grid(True, linestyle="--", alpha=0.3, color="gray", axis="y")
+
     ax.tick_params(axis="y", labelsize=6)
     ax_precip.tick_params(axis="y", labelsize=6)
 
@@ -490,6 +496,9 @@ def generate_figure(
 
     ax_cloud.set_xticks(range(1, 13))  # Set ticks for each month (1–12)
     ax_cloud.set_xticklabels([calendar.month_abbr[i] for i in range(1, 13)], fontsize=axis_label_fontsize / 2)
+
+    # Add grid lines to cloud coverage plot
+    ax_cloud.grid(True, linestyle="--", alpha=0.3, color="gray", axis="y")
 
     # Remove top and right spines
     ax.spines["top"].set_visible(False)
