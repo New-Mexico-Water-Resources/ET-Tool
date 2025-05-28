@@ -480,10 +480,12 @@ def generate_figure(
     ax.tick_params(axis="y", labelsize=6)
     ax_precip.tick_params(axis="y", labelsize=6)
 
-    ax.set_xticks([])
+    ax.set_xticks(range(1, 13))
+    # Show empty labels for the months
     ax.set_xticklabels([])
 
-    ax_precip.set_xticks([])
+    ax_precip.set_xticks(range(1, 13))
+    # Show empty labels for the months
     ax_precip.set_xticklabels([])
 
     ax_cloud.set_xticks(range(1, 13))  # Set ticks for each month (1–12)
