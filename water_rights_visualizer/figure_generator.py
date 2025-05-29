@@ -8,6 +8,7 @@ import pandas as pd
 import rasterio
 
 from .generate_figure import generate_figure
+from .summary_figure_generator import generate_summary_figure
 from .ROI_area import ROI_area
 import geopandas as gpd
 from .constants import WGS84
@@ -182,3 +183,29 @@ def generate_all_figures(
                 requestor=requestor,
                 metric_units=metric_units,
             )
+
+    # Generate summary figure
+    summary_figure_filename = join(figure_directory, f"summary_{ROI_name}.png")
+    for metric_units in [True, False]:
+        logger.info(f"generating summary figure for ROI {ROI_name} metric_units: {metric_units}")
+        generate_summary_figure(
+            ROI_name=ROI_name,
+            ROI_acres=ROI_acres,
+            creation_date=creation_date,
+            start_year=start_year,
+            end_year=end_year,
+            et_vmin=et_vmin,
+            et_vmax=et_vmax,
+            combined_abs_min=combined_abs_min,
+            combined_abs_max=combined_abs_max,
+            ppt_min=ppt_min,
+            ppt_max=ppt_max,
+            cloud_cover_min=cloud_cover_min,
+            cloud_cover_max=cloud_cover_max,
+            monthly_means_directory=str(monthly_means_directory),
+            monthly_nan_directory=str(monthly_nan_directory),
+            figure_filename=summary_figure_filename,
+            status_filename=status_filename,
+            requestor=requestor,
+            metric_units=metric_units,
+        )

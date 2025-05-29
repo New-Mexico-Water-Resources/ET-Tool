@@ -1,7 +1,7 @@
 import glob
 import logging
 import numpy as np
-from os.path import join, basename, abspath, dirname
+from os.path import join, basename, abspath, dirname, exists
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from PIL import Image
@@ -41,6 +41,8 @@ def generate_report(figure_directory, ROI_name, units, status_filename, text_pan
 
     report_filename = join(figure_directory, f"{ROI_name}{report_filename_extension}.pdf")
     pdf = PdfPages(report_filename)
+
+    # Include individual year figures
     years = get_sorted_years(figure_directory)
     for year in years:
         image_path = join(figure_directory, f"{year}_{ROI_name}{input_filename_extension}.png")
@@ -55,6 +57,24 @@ def generate_report(figure_directory, ROI_name, units, status_filename, text_pan
         ax.axis("off")
         pdf.savefig(fig, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
+
+    # Check for and include summary figure if it exists
+    summary_image_path = join(figure_directory, f"summary_{ROI_name}{input_filename_extension}.png")
+    if exists(summary_image_path):
+        try:
+            img_array = load_and_resize_image(summary_image_path)
+            # Swap width and height for landscape orientation
+            fig = plt.figure(figsize=(19.2, 14.4), tight_layout=True)
+            ax = fig.add_axes([0, 0, 1, 1])
+            # Rotate image 90 degrees counterclockwise for landscape
+            img_array = np.rot90(img_array)
+            ax.imshow(img_array)
+            ax.axis("off")
+            pdf.savefig(fig, bbox_inches="tight", pad_inches=0)
+            plt.close(fig)
+        except Exception as e:
+            logger.error(f"Error loading summary image {summary_image_path} (skipping): {e}")
+
     pdf.close()
     write_status(
         message=f"{units} report saved to {report_filename}\n",
