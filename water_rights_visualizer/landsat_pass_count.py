@@ -56,6 +56,7 @@ def count_landsat_passes_for_month(
         subset_directory (str): The directory to cache month layers to reduce repeat calls to the planetary computer.
         sat_ids (list): List of satellite IDs to include in the count. Default is ["landsat-5", "landsat-7", "landsat-8"].
     """
+    start_time = time.time()
     if not subset_directory:
         subset_directory = "landsat_pass_count_cache"
     else:
@@ -79,6 +80,7 @@ def count_landsat_passes_for_month(
     stac_api_io = StacApiIO()
     retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
     stac_api_io.session.mount("http://", HTTPAdapter(max_retries=retries))
+    stac_api_io.session.mount("https://", HTTPAdapter(max_retries=retries))
 
     catalog = pystac_client.Client.open(
         "https://planetarycomputer.microsoft.com/api/stac/v1",
@@ -95,7 +97,16 @@ def count_landsat_passes_for_month(
     for area in rois:
         # Want to retry a few times if we get an error
         search = search_catalog_with_retries(catalog, area.bounds, f"{start_date}/{end_date}")
-        items = get_items_with_retries(search, retries=3)
+        for i in range(3):
+            try:
+                items = get_items_with_retries(search, retries=3)
+                # Convert to list to force evaluation
+                items = list(items)
+                break
+            except Exception as e:
+                logger.error(f"Error getting items: {e}")
+                time.sleep(i + 1)
+                continue
 
         for item in items:
             platform = item.properties.get("platform")
@@ -118,6 +129,8 @@ def count_landsat_passes_for_month(
             "date_fetched": str(datetime.datetime.now()),
         }
         cache_writer.write(json.dumps(metadata))
+
+    logger.info(f"Year: {year}, Month: {month:02d}, Pass Count: {pass_count}, Time: {time.time() - start_time:.2f} seconds")
 
     return pass_count
 

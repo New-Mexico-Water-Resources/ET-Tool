@@ -388,7 +388,11 @@ def generate_figure(
         valid_data = df["percent_nan"].dropna()
 
         # Global min and max for cloud coverage across all years
-        nice_cloud_cover_range = convert_to_nice_number_range(cloud_cover_min, cloud_cover_max, True, subdivisions=3)
+        normalized_cloud_cover_min = cloud_cover_min if not pd.isna(cloud_cover_min) and cloud_cover_min > 0 else 0
+        normalized_cloud_cover_max = cloud_cover_max if not pd.isna(cloud_cover_max) and cloud_cover_max < 100 else 100
+        nice_cloud_cover_range = convert_to_nice_number_range(
+            normalized_cloud_cover_min, normalized_cloud_cover_max, True, subdivisions=3
+        )
         min_cloud_coverage = nice_cloud_cover_range[0]
         max_cloud_coverage = nice_cloud_cover_range[-1]
 

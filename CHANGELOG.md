@@ -13,6 +13,7 @@
 ### Bug Fixes
 - Ensures y-axis labels are displayed as whole numbers when possible
 - Adds error handling for nice number conversion
+- Increased logging for Landsat pass count
 
 ## 1.27.0 (2025-05-21)
 
