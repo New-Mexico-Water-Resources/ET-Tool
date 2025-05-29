@@ -1,3 +1,15 @@
+## 1.28.0 (2025-05-28)
+
+### Features
+- Report axis scaling and layout changes
+  - Standardizes the y-axis for the ET, PPT, and Cloud Coverage charts so the scale for each respectively is the same across all years
+  - Shows x-axis ticks at the bottom of each chart for better readability
+  - Shows horizontal grid lines for better readability
+  - Rounds y-axis numbers to the nearest "nice" number for better interpretability
+    - The number of subdivisions will now additionally change dynamically based on the range of the data
+- New full-page report summary figure
+  - The ET, PPT, and Cloud Coverage charts are now additionally displayed on a single page in landscape orientation at the end of the report that spans all years
+
 ## 1.27.0 (2025-05-21)
 
 ### Features
