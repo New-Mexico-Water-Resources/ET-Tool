@@ -235,9 +235,20 @@ def generate_summary_figure(
     if not is_ensemble_range_data_null:
         is_ensemble_range_data_null = main_df["et_ci_ymin"].eq(0).all() or main_df["et_ci_ymax"].eq(0).all()
 
+    # Adjust PET/ETo values for years after transition date
+    if end_year >= OPENET_TRANSITION_DATE:
+        logger.info(f"Correcting ETo based on ET for years after {OPENET_TRANSITION_DATE}")
+        # Make sure PET/ETo is never below ET_MAX or ET
+        main_df["PET"] = np.maximum(main_df["PET"], main_df["et_ci_ymax"])
+        main_df["PET"] = np.maximum(main_df["PET"], main_df["ET"])
+        # Adjust confidence intervals
+        main_df["et_ci_ymin"] = np.where(main_df["et_ci_ymin"] < main_df["ET"], main_df["et_ci_ymin"], main_df["ET"])
+        main_df["et_ci_ymax"] = np.where(main_df["et_ci_ymax"] > main_df["ET"], main_df["et_ci_ymax"], main_df["ET"])
+
     # Plot ET/ETo data
+    pet_label = "PET" if end_year < OPENET_TRANSITION_DATE else "ETo"
     sns.lineplot(
-        x=main_df.index, y=main_df["PET"], ax=ax, color=pet_color, label="ETo", marker=marker, markersize=marker_size
+        x=main_df.index, y=main_df["PET"], ax=ax, color=pet_color, label=pet_label, marker=marker, markersize=marker_size
     )
     sns.lineplot(x=main_df.index, y=main_df["ET"], ax=ax, color=et_color, label="ET", marker=marker, markersize=marker_size)
 
@@ -280,7 +291,7 @@ def generate_summary_figure(
 
     # Set up legends
     legend_items = {
-        "ETo": {"color": pet_color, "alpha": 0.8, "lw": 2},
+        pet_label: {"color": pet_color, "alpha": 0.8, "lw": 2},
         "ET": {"color": et_color, "alpha": 0.8, "lw": 2},
     }
 

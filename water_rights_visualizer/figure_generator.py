@@ -89,6 +89,16 @@ def generate_all_figures(
     for file in Path(monthly_means_directory).glob("*.csv"):
         year_df = pd.read_csv(file)
 
+        try:
+            current_year = int(file.stem.split("_")[0])
+            # Expand the year range if more data is available
+            if current_year < start_year:
+                start_year = current_year
+            elif current_year > end_year:
+                end_year = current_year
+        except (ValueError, IndexError):
+            logger.warning(f"Could not parse year from filename: {file.stem}")
+
         # Get absolute min and max for all variables
         for variable in ["ET", "PET"]:
             year_vmin, year_vmax = calculate_year_bounds(year_df, file, variable, abs=True)
