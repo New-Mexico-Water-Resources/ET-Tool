@@ -10,56 +10,9 @@ import numpy as np
 import seaborn as sns
 from .write_status import write_status
 from .variable_types import get_available_variable_source_for_date, OPENET_TRANSITION_DATE
+from .plotting_helpers import mm_to_in, convert_to_nice_number_range
 
 logger = getLogger(__name__)
-
-
-def mm_to_in(mm: float | pd.DataFrame) -> float:
-    return mm / 25.4
-
-
-def convert_to_nice_number_range(start: float, end: float, metric_units: bool, subdivisions: int = 5) -> list[float]:
-    """
-    Convert a range of values to "nice" numbers in the given units (assumes input is in mm).
-    The nice numbers are readable multiples of the subdivision.
-
-    Args:
-        start (float): The start value to convert (in mm).
-        end (float): The end value to convert (in mm).
-        metric_units (bool): Whether the units are metric.
-        subdivisions (int): The target number of subdivisions to use for the nice number range.
-
-    Returns:
-        list[float]: A list of nice numbers that encompass the input range
-    """
-    start = mm_to_in(start) if not metric_units else start
-    end = mm_to_in(end) if not metric_units else end
-
-    # Set minimum increment based on units
-    min_increment = 0.5 if metric_units else 0.1
-
-    # Calculate the range and ideal increment size
-    data_range = end - start
-    increment = max(min_increment, data_range / subdivisions)
-    # Round increment up to a nice number (0.5, 1, 2, 5, 10, etc for metric)
-    # or (0.1, 0.2, 0.5, 1, 2, 5, 10, etc for inches)
-    magnitude = 10 ** math.floor(math.log10(increment))
-    normalized = increment / magnitude
-
-    # Define nice number increments based on units
-    increments = [0.1, 0.2, 0.5, 1, 2, 5, 10] if not metric_units else [0.5, 1, 2, 5, 10]
-
-    # Find first increment larger than normalized value
-    nice_increment = magnitude * next(x for x in increments if x >= normalized)
-
-    # Calculate nice start and end values
-    nice_start = math.floor(start / nice_increment) * nice_increment
-    nice_end = math.ceil(end / nice_increment) * nice_increment
-
-    # Calculate all nice numbers in the range
-    nice_numbers = np.arange(nice_start, nice_end + nice_increment, nice_increment)
-
-    return nice_numbers
 
 
 def generate_summary_figure(
@@ -344,7 +297,7 @@ def generate_summary_figure(
         ppt_max = ppt_range_values[-1]
 
         ax_precip.set_ylim(ppt_min, ppt_max + ppt_padding)
-        precip_ticks = np.linspace(ppt_min, ppt_max, 3)
+        precip_ticks = ppt_range_values
         if precip_ticks[0] == precip_ticks[1] or precip_ticks[1] == precip_ticks[2]:
             precip_ticks = [0, precip_ticks[1]]
     else:
@@ -352,7 +305,7 @@ def generate_summary_figure(
         precip_ticks = [0]
 
     ax_precip.set_yticks(precip_ticks)
-    ax_precip.set_yticklabels([f"{round(tick * 10) / 10} {et_unit}" for tick in precip_ticks])
+    ax_precip.set_yticklabels([f"{tick} {et_unit}" for tick in precip_ticks])
 
     if not is_confidence_data_null:
         nice_cloud_cover_range = convert_to_nice_number_range(cloud_cover_min, cloud_cover_max, True, subdivisions=3)
@@ -361,9 +314,9 @@ def generate_summary_figure(
 
         top_gap = min(max_cloud_coverage / 2, 10)
         ax_cloud.set_ylim(min_cloud_coverage, min(max_cloud_coverage + top_gap, 100))
-        normalized_ticks = np.linspace(min_cloud_coverage, max_cloud_coverage, 3)
+        normalized_ticks = nice_cloud_cover_range
         ax_cloud.set_yticks(normalized_ticks)
-        ax_cloud.set_yticklabels([f"{int(tick)}%" for tick in normalized_ticks])
+        ax_cloud.set_yticklabels([f"{tick}%" for tick in normalized_ticks])
 
     # Add grid lines
     ax.grid(True, linestyle="--", alpha=0.3, color="gray", axis="y")

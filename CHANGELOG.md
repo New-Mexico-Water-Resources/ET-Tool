@@ -10,6 +10,10 @@
 - New full-page report summary figure
   - The ET, PPT, and Cloud Coverage charts are now additionally displayed on a single page in landscape orientation at the end of the report that spans all years
 
+### Bug Fixes
+- Ensures y-axis labels are displayed as whole numbers when possible
+- Adds error handling for nice number conversion
+
 ## 1.27.0 (2025-05-21)
 
 ### Features
