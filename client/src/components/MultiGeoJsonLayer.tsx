@@ -6,7 +6,7 @@ import { area as turfArea } from "@turf/turf";
 
 const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locations }) => {
   const map = useMap();
-  const [destructors, setDestructors] = useState<Function[]>([]);
+  const [destructors, setDestructors] = useState<(() => void)[]>([]);
 
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
   const setLocations = useStore((state) => state.setLocations);
@@ -49,7 +49,7 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
 
     if (data && data.length > 0 && data.length === locations.length && !loadedGeoJSON) {
       let bounds: Leaflet.LatLngBounds | null = null;
-      let destructors: Function[] = [];
+      const destructors: (() => void)[] = [];
 
       let fitToBounds = true;
 
@@ -63,10 +63,10 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
           fitToBounds = false;
         }
 
-        let area = turfArea(layer);
-        let isValidArea = area >= minimumValidArea && area <= maximumValidArea;
+        const area = turfArea(layer);
+        const isValidArea = area >= minimumValidArea && area <= maximumValidArea;
 
-        let style: Record<string, any> = {};
+        const style: Record<string, any> = {};
         if (!location.visible) {
           style.fillOpacity = 0.5;
           style.color = "black";
@@ -90,9 +90,9 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
           },
         });
 
-        let roundedAcres = Math.round(location.acres * 100) / 100;
-        let roundedLat = location?.lat ? Math.round(location.lat * 1000000) / 1000000 : "NaN";
-        let roundedLong = location?.long ? Math.round(location.long * 1000000) / 1000000 : "NaN";
+        const roundedAcres = Math.round(location.acres * 100) / 100;
+        const roundedLat = location?.lat ? Math.round(location.lat * 1000000) / 1000000 : "NaN";
+        const roundedLong = location?.long ? Math.round(location.long * 1000000) / 1000000 : "NaN";
 
         geoJsonLayer.bindTooltip(
           `<div style='padding:1px 3px 1px 3px;display:flex;flex-direction:column;'>

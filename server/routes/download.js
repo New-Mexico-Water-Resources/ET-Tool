@@ -4,6 +4,7 @@ const glob = require("glob");
 const path = require("path");
 const fs = require("fs");
 const constants = require("../constants");
+const { area: turfArea } = require("@turf/turf");
 
 const router = express.Router();
 const { run_directory_base, report_queue_collection, connectToDatabase } = constants;
@@ -14,35 +15,91 @@ const mmToIn = (mm) => {
   return isNaN(mmValue) ? "" : mmValue / 25.4;
 };
 
+const mmToAF = (value, acres) => {
+  return value * acres * 0.003259;
+};
+
+class UnitConverter {
+  static convert(value, units, acres = 1) {
+    const unitConversionMap = {
+      metric: (value) => value,
+      imperial: (value) => mmToIn(value),
+      "acre-feet": (value, acres) => mmToAF(value, acres),
+    };
+
+    if (!unitConversionMap[units]) {
+      throw new Error(`Invalid units: ${units}`);
+    }
+
+    return unitConversionMap[units](value, acres);
+  }
+}
+
 const getJob = async (key) => {
   const db = await connectToDatabase();
   const collection = db.collection(report_queue_collection);
   return collection.findOne({ key });
 };
 
-const processFigureFiles = (archive, figureDirectory, metricUnits) => {
+const unitsToFileSuffix = (units) => {
+  if (units === "metric") return "";
+  if (units === "imperial") return "in";
+  if (units === "acre-feet") return "AF";
+  return units;
+};
+
+const unitsToAbbreviation = (units) => {
+  if (units === "metric") return "mm";
+  if (units === "imperial") return "in";
+  if (units === "acre-feet") return "AF";
+  return units;
+};
+
+const unitsToPdfId = (units) => {
+  if (units === "metric") return "";
+  if (units === "imperial") return "Imperial";
+  if (units === "acre-feet") return "AF";
+  return units;
+};
+
+const processFigureFiles = (archive, figureDirectory, units) => {
   const pattern = path.join(figureDirectory, "*.png");
   const figureFiles = glob.sync(pattern);
   figureFiles.forEach((file) => {
-    if (metricUnits && file.endsWith("_in.png")) return;
-    if (!metricUnits && !file.endsWith("_in.png")) return;
-
-    const newName = path.basename(file).replace("_in.png", ".png");
-    console.log(`Adding figure file: ${file} as ${newName}`);
-    archive.file(file, { name: newName });
+    const suffix = unitsToFileSuffix(units);
+    if (suffix !== "" && units !== "metric" && file.endsWith(`_${suffix}.png`)) {
+      const newName = path.basename(file).replace(`_${suffix}.png`, ".png");
+      console.log(`Adding figure file: ${file} as ${newName}`);
+      archive.file(file, { name: newName });
+    } else if (suffix === "" && units === "metric" && !file.endsWith(`_in.png`) && !file.endsWith(`_AF.png`)) {
+      const name = path.basename(file);
+      console.log(`Adding figure file: ${file} as ${name}`);
+      archive.file(file, { name });
+    }
   });
 };
 
-const processReportFiles = (archive, figureDirectory, metricUnits) => {
+const processReportFiles = (archive, figureDirectory, units) => {
   const pattern = path.join(figureDirectory, "*.pdf");
   const reportFiles = glob.sync(pattern);
+  const id = unitsToPdfId(units);
   reportFiles.forEach((file) => {
-    if (metricUnits && file.endsWith("_Imperial_Report.pdf")) return;
-    if (!metricUnits && !file.endsWith("_Imperial_Report.pdf")) return;
-
-    const newName = path.basename(file).replace("_Imperial_Report.pdf", "_Report.pdf");
-    console.log(`Adding report file: ${file} as ${newName}`);
-    archive.file(file, { name: newName });
+    // Find the PDF file with the correct units, rename this to be the report downloaded
+    if (id && file.endsWith(`_${id}_Report.pdf`)) {
+      const newName = path.basename(file).replace(`_${id}_Report.pdf`, "_Report.pdf");
+      console.log(`Adding report file: ${file} as ${newName}`);
+      archive.file(file, { name: newName });
+    } else if (
+      !id &&
+      file.endsWith(`_Report.pdf`) &&
+      !file.endsWith(`_AF_Report.pdf`) &&
+      !file.endsWith(`_Imperial_Report.pdf`)
+    ) {
+      // Default metric report case
+      const newName = path.basename(file);
+      console.log(`Adding report file: ${file} as ${newName}`);
+      archive.file(file, { name: newName });
+    }
   });
 };
 
@@ -101,9 +158,10 @@ const processLandsatPassCounts = (runDir, key, jobName) => {
   return landsatPassCounts;
 };
 
-const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsatPassCounts, units, metricUnits) => {
+const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsatPassCounts, units, area) => {
   const csvDir = path.join(runDir, key, "output", "monthly_means", jobName);
   let csvFiles = glob.sync(path.join(csvDir, "*.csv")).filter((file) => path.basename(file).endsWith("_monthly_means.csv"));
+  const unitsAbbreviation = unitsToAbbreviation(units);
 
   const hasPostTransitionData = csvFiles.some((fileName) => {
     const year = path.basename(fileName).split("_")[0];
@@ -117,10 +175,10 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
   const header = [
     "Year",
     "Month",
-    `ET (${units}/month)`,
-    hasPostTransitionData ? `Uncorrected PET (${units}/month)` : `PET (${units}/month)`,
-    ...(hasPostTransitionData ? [`Adjusted PET (${units}/month)`] : []),
-    `Precipitation (${units}/month)`,
+    `ET (${unitsAbbreviation}/month)`,
+    hasPostTransitionData ? `Uncorrected PET (${unitsAbbreviation}/month)` : `PET (${unitsAbbreviation}/month)`,
+    ...(hasPostTransitionData ? [`Adjusted PET (${unitsAbbreviation}/month)`] : []),
+    `Precipitation (${unitsAbbreviation}/month)`,
     "Cloud Coverage + Missing Data (%)",
     ...(hasPostTransitionData ? ["Days with Landsat Passes"] : []),
   ].join(",");
@@ -151,9 +209,9 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
       year = Number(year);
       month = Number(month);
 
-      let et = metricUnits ? etRaw : mmToIn(etRaw);
+      let et = UnitConverter.convert(etRaw, units, area);
       et = isNaN(et) ? "" : Math.round(et * 100) / 100;
-      let pet = metricUnits ? petRaw : mmToIn(petRaw);
+      let pet = UnitConverter.convert(petRaw, units, area);
       pet = isNaN(pet) ? "" : Math.round(pet * 100) / 100;
 
       let convertedRow = [year, month, et, pet];
@@ -162,7 +220,7 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
 
       if (hasPostTransitionData) {
         if (year >= OPENET_TRANSITION_DATE && nanRow) {
-          let etMax = metricUnits ? nanRow["avg_max"] : mmToIn(nanRow["avg_max"]);
+          let etMax = UnitConverter.convert(nanRow["avg_max"], units, area);
           etMax = isNaN(etMax) ? "" : Math.round(etMax * 100) / 100;
           let adjustedPET = pet < etMax ? etMax : pet;
           adjustedPET = isNaN(adjustedPET) ? "" : Math.round(adjustedPET * 100) / 100;
@@ -174,7 +232,7 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
 
       // Add precipitation and cloud coverage (for all years)
       if (nanRow) {
-        let ppt = metricUnits ? nanRow["ppt_avg"] : mmToIn(nanRow["ppt_avg"]);
+        let ppt = UnitConverter.convert(nanRow["ppt_avg"], units, area);
         ppt = isNaN(ppt) ? "" : Math.round(ppt * 100) / 100;
         convertedRow.push(ppt, nanRow["percent_nan"]);
       } else {
@@ -194,7 +252,7 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
     });
 
     const newData = [header, ...lines].join("\n");
-    const tempPath = file.replace(".csv", `_temp_${metricUnits ? "mm" : "in"}.csv`);
+    const tempPath = file.replace(".csv", `_temp_${unitsAbbreviation}.csv`);
     fs.writeFileSync(tempPath, newData);
     archive.file(tempPath, { name: path.basename(file) });
     combinedDataRows = combinedDataRows.concat(lines);
@@ -218,8 +276,7 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
 router.get("/download", async (req, res) => {
   try {
     const key = req.query.key;
-    const metricUnits = req.query.units !== "in";
-    const units = metricUnits ? "mm" : "in";
+    const units = req.query.units;
 
     const job = await getJob(key);
     if (!job) {
@@ -244,19 +301,23 @@ router.get("/download", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename=${jobName}.zip`);
     archive.pipe(res);
 
+    const geojsonPath = path.join(run_directory_base, key, `${jobName}.geojson`);
+    archive.file(geojsonPath, { name: `${jobName}.geojson` });
+
+    // Open the geojson file and calculate the acres
+    const geojson = JSON.parse(fs.readFileSync(geojsonPath, "utf8"));
+    const area = turfArea(geojson) / 4046.86;
+
     const figureDirectory = path.join(run_directory_base, key, "output", "figures", jobName);
     if (!fs.existsSync(figureDirectory)) {
       return res.status(404).send(`Figure directory ${figureDirectory} does not exist`);
     }
-    processFigureFiles(archive, figureDirectory, metricUnits);
-    processReportFiles(archive, figureDirectory, metricUnits);
+    processFigureFiles(archive, figureDirectory, units);
+    processReportFiles(archive, figureDirectory, units);
 
     const nanValues = processMonthlyNanFiles(run_directory_base, key, jobName);
     const landsatPassCounts = processLandsatPassCounts(run_directory_base, key, jobName);
-    await processCSVFiles(archive, run_directory_base, key, jobName, nanValues, landsatPassCounts, units, metricUnits);
-
-    const geojsonPath = path.join(run_directory_base, key, `${jobName}.geojson`);
-    archive.file(geojsonPath, { name: `${jobName}.geojson` });
+    await processCSVFiles(archive, run_directory_base, key, jobName, nanValues, landsatPassCounts, units, area);
 
     await archive.finalize();
   } catch (error) {

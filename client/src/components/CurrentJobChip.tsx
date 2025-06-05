@@ -692,7 +692,7 @@ const CurrentJobChip = () => {
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
                   onClick={() => {
-                    downloadJob(activeJob.key, false);
+                    downloadJob(activeJob.key, "metric");
                   }}
                 >
                   Report (mm/month)
@@ -703,10 +703,21 @@ const CurrentJobChip = () => {
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
                   onClick={() => {
-                    downloadJob(activeJob.key, true);
+                    downloadJob(activeJob.key, "imperial");
                   }}
                 >
                   Report (in/month)
+                </MenuItem>
+              )}
+              {totalMonths > 0 && (
+                <MenuItem
+                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  disableRipple
+                  onClick={() => {
+                    downloadJob(activeJob.key, "acre-feet");
+                  }}
+                >
+                  Report (acre-feet/month)
                 </MenuItem>
               )}
             </Menu>

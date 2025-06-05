@@ -36,8 +36,19 @@ def get_sorted_years(figure_directory):
 
 def generate_report(figure_directory, ROI_name, units, status_filename, text_panel, root):
     """Base function to generate a PDF report with the given units."""
-    report_filename_extension = "_Report" if units == "metric" else "_Imperial_Report"
-    input_filename_extension = "" if units == "metric" else "_in"
+    filename_unit_ids = {
+        "metric": "_Report",
+        "imperial": "_Imperial_Report",
+        "acre-feet": "_AF_Report",
+    }
+    input_filename_unit_ids = {
+        "metric": "",
+        "imperial": "_in",
+        "acre-feet": "_AF",
+    }
+
+    report_filename_extension = filename_unit_ids[units]
+    input_filename_extension = input_filename_unit_ids[units]
 
     report_filename = join(figure_directory, f"{ROI_name}{report_filename_extension}.pdf")
     pdf = PdfPages(report_filename)
@@ -95,6 +106,11 @@ def generate_imperial_report(figure_directory, ROI_name, status_filename, text_p
     return generate_report(figure_directory, ROI_name, "imperial", status_filename, text_panel, root)
 
 
+def generate_acre_feet_report(figure_directory, ROI_name, status_filename, text_panel, root):
+    """Generates the acre-feet PDF report."""
+    return generate_report(figure_directory, ROI_name, "acre-feet", status_filename, text_panel, root)
+
+
 def append_data_documentation(report_filename):
     """Appends the data documentation to the report."""
     # Merge data documentation into each report
@@ -114,3 +130,6 @@ def generate_final_reports(figure_directory, ROI_name, status_filename, text_pan
 
     imperial_report_filename = generate_imperial_report(figure_directory, ROI_name, status_filename, text_panel, root)
     append_data_documentation(imperial_report_filename)
+
+    acre_feet_report_filename = generate_acre_feet_report(figure_directory, ROI_name, status_filename, text_panel, root)
+    append_data_documentation(acre_feet_report_filename)

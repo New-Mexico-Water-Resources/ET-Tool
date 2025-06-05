@@ -146,13 +146,14 @@ const LayersControl: FC = () => {
       }
 
       const area = turfArea(geojson);
+      const areaInAcres = area / 4046.86;
 
       const isValidArea = area > minimumValidArea && area < maximumValidArea;
 
       return {
         visible: isValidArea,
         name: name,
-        acres: geojson?.properties?.Acres,
+        acres: areaInAcres,
         comments: geojson?.properties?.Comments,
         county: geojson?.properties?.County,
         polygon_So: geojson?.properties?.Polygon_So,

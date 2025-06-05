@@ -373,7 +373,7 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
             <MenuItem
               sx={{ backgroundColor: "var(--st-gray-80)" }}
               onClick={() => {
-                downloadJob(job.key, false);
+                downloadJob(job.key, "metric");
                 setDownloadMenuOpen(false);
               }}
               disableRipple
@@ -383,12 +383,22 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
             <MenuItem
               sx={{ backgroundColor: "var(--st-gray-80)" }}
               onClick={() => {
-                downloadJob(job.key, true);
+                downloadJob(job.key, "imperial");
                 setDownloadMenuOpen(false);
               }}
               disableRipple
             >
               Report (in/month)
+            </MenuItem>
+            <MenuItem
+              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              onClick={() => {
+                downloadJob(job.key, "acre-feet");
+                setDownloadMenuOpen(false);
+              }}
+              disableRipple
+            >
+              Report (acre-feet/month)
             </MenuItem>
             <Typography
               variant="body2"

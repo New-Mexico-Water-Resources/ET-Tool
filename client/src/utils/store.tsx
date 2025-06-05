@@ -161,7 +161,7 @@ interface Store {
   prepareMultipolygonJob: () => any[];
   submitMultipolygonJob: (jobs: any[]) => void;
   loadJob: (job: any) => void;
-  downloadJob: (jobKey: string, imperial?: boolean) => void;
+  downloadJob: (jobKey: string, units?: "metric" | "imperial" | "acre-feet") => void;
   restartJob: (jobKey: string) => void;
   pauseJob: (jobKey: string) => void;
   resumeJob: (jobKey: string) => void;
@@ -596,7 +596,7 @@ const useStore = create<Store>()(
           });
         set({ activeJob: job });
       },
-      downloadJob: (jobKey, imperial = false) => {
+      downloadJob: (jobKey, units = "metric") => {
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
@@ -617,7 +617,7 @@ const useStore = create<Store>()(
         const escapedKey = encodeURIComponent(job.key);
 
         axiosInstance
-          .get(`${API_URL}/download?name=${escapedName}&key=${escapedKey}&units=${imperial ? "in" : "mm"}`, {
+          .get(`${API_URL}/download?name=${escapedName}&key=${escapedKey}&units=${units}`, {
             responseType: "arraybuffer",
           })
           .then((response) => {
