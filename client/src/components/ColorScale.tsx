@@ -16,6 +16,35 @@ const ColorScale: FC<ColorScaleProps> = ({ maxValue, minValue, colorScale, label
     return chroma.scale(colorScale).colors(numberOfSteps).reverse();
   }, [numberOfSteps, colorScale]);
 
+  const formattedMaxValue = useMemo(() => {
+    if (maxValue > 9999) {
+      return maxValue.toExponential(2).toLocaleString();
+    } else if (maxValue > 1) {
+      return Math.round(maxValue).toLocaleString();
+    } else if (Math.abs(maxValue) < 1) {
+      return maxValue.toFixed(2).toLocaleString();
+    } else {
+      return maxValue.toLocaleString();
+    }
+  }, [maxValue]);
+  const formattedMinValue = useMemo(() => {
+    if (minValue > 9999) {
+      return minValue.toExponential(2).toLocaleString();
+    } else if (minValue > 1) {
+      return Math.round(minValue).toLocaleString();
+    } else if (Math.abs(minValue) < 1) {
+      return minValue.toFixed(2).toLocaleString();
+    } else {
+      return minValue.toLocaleString();
+    }
+  }, [minValue]);
+
+  const minScaleWidth = useMemo(() => {
+    const maxCharacterLength = Math.max(Math.max(formattedMaxValue.length, formattedMinValue.length), 3);
+
+    return `${maxCharacterLength}ch`;
+  }, [formattedMaxValue, formattedMinValue]);
+
   return (
     <Tooltip title={label}>
       <div
@@ -35,7 +64,7 @@ const ColorScale: FC<ColorScaleProps> = ({ maxValue, minValue, colorScale, label
         <div
           style={{
             display: "flex",
-            width: "26px",
+            width: minScaleWidth,
             justifyContent: "center",
             padding: "4px 8px",
             background: "white",
@@ -43,14 +72,14 @@ const ColorScale: FC<ColorScaleProps> = ({ maxValue, minValue, colorScale, label
             fontWeight: "bold",
           }}
         >
-          {maxValue}
+          {formattedMaxValue}
         </div>
         <div style={{ borderRadius: "8px", overflow: "hidden", background: "white" }}>
           {colors.map((value, index) => (
             <div
               key={index}
               style={{
-                width: "26px",
+                width: minScaleWidth,
                 height: `calc(200px / ${colors.length})`,
                 backgroundColor: value,
               }}
@@ -60,7 +89,7 @@ const ColorScale: FC<ColorScaleProps> = ({ maxValue, minValue, colorScale, label
         <div
           style={{
             display: "flex",
-            width: "26px",
+            width: minScaleWidth,
             justifyContent: "center",
             padding: "4px 8px",
             background: "white",
@@ -68,7 +97,7 @@ const ColorScale: FC<ColorScaleProps> = ({ maxValue, minValue, colorScale, label
             fontWeight: "bold",
           }}
         >
-          {minValue}
+          {formattedMinValue}
         </div>
       </div>
     </Tooltip>
