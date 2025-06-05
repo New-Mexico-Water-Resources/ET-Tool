@@ -12,6 +12,7 @@ from .summary_figure_generator import generate_summary_figure
 from .ROI_area import ROI_area
 import geopandas as gpd
 from .constants import WGS84
+from .plotting_helpers import MetricETUnit, ImperialETUnit, AcreFeetETUnit
 
 logger = logging.getLogger(__name__)
 
@@ -171,10 +172,10 @@ def generate_all_figures(
             logger.error(f"no subset found for year {year} and ROI {ROI_name}")
             continue
 
-        # Generate both metric and imperial figures
+        # Generate figures for all units
         figure_filename = join(figure_directory, f"{year}_{ROI_name}.png")
-        for metric_units in [True, False]:
-            logger.info(f"generating figure for year {year} ROI {ROI_name} metric_units: {metric_units}")
+        for units in [MetricETUnit(), ImperialETUnit(), AcreFeetETUnit(acres=ROI_acres)]:
+            logger.info(f"generating figure for year {year} ROI {ROI_name} units: {units}")
             generate_figure(
                 ROI_name=ROI_name,
                 ROI_latlon=ROI_latlon,
@@ -197,13 +198,13 @@ def generate_all_figures(
                 end_month=end_month,
                 status_filename=status_filename,
                 requestor=requestor,
-                metric_units=metric_units,
+                units=units,
             )
 
     # Generate summary figure
     summary_figure_filename = join(figure_directory, f"summary_{ROI_name}.png")
-    for metric_units in [True, False]:
-        logger.info(f"generating summary figure for ROI {ROI_name} metric_units: {metric_units}")
+    for units in [MetricETUnit(), ImperialETUnit(), AcreFeetETUnit(acres=ROI_acres)]:
+        logger.info(f"generating summary figure for ROI {ROI_name} units: {units}")
         generate_summary_figure(
             ROI_name=ROI_name,
             ROI_acres=ROI_acres,
@@ -223,5 +224,5 @@ def generate_all_figures(
             figure_filename=summary_figure_filename,
             status_filename=status_filename,
             requestor=requestor,
-            metric_units=metric_units,
+            units=units,
         )

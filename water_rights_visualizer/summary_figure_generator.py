@@ -2,15 +2,13 @@ from datetime import datetime
 from logging import getLogger
 from os.path import join, exists, dirname
 from os import makedirs
-import math
 import matplotlib.pyplot as plt
-import calendar
 import pandas as pd
 import numpy as np
 import seaborn as sns
 from .write_status import write_status
 from .variable_types import get_available_variable_source_for_date, OPENET_TRANSITION_DATE
-from .plotting_helpers import mm_to_in, convert_to_nice_number_range
+from .plotting_helpers import convert_to_nice_number_range, MetricETUnit, ETUnit, PercentageUnits
 
 logger = getLogger(__name__)
 
@@ -36,7 +34,7 @@ def generate_summary_figure(
     text_panel=None,
     root=None,
     requestor: dict[str, str] = None,
-    metric_units: bool = True,
+    units: ETUnit = MetricETUnit(),
 ):
     """
     Generate a summary figure displaying evapotranspiration data for all years in the record.
@@ -62,12 +60,14 @@ def generate_summary_figure(
         text_panel (optional): Text panel for displaying messages. Defaults to None.
         root (optional): Root Tkinter window. Defaults to None.
         requestor (dict[str, str], optional): Requestor information. Defaults to None.
-        metric_units (bool, optional): Whether to use metric units for the report. Defaults to True.
+        units (ETUnit, optional): Units to use for the report. Defaults to MetricETUnit().
     """
     # Create a new figure in landscape orientation
     fig = plt.figure(figsize=(11, 8.5))
-    et_unit = "mm" if metric_units else "in"
-    figure_filename = figure_filename if metric_units else figure_filename.replace(".png", "_in.png")
+    et_unit = units.abbreviation
+    figure_filename = (
+        figure_filename if units.units == "metric" else figure_filename.replace(".png", f"_{units.abbreviation}.png")
+    )
 
     title_fontsize = 16
     axis_label_fontsize = 12
@@ -127,17 +127,17 @@ def generate_summary_figure(
     main_df = pd.concat(all_data, ignore_index=True)
 
     # Convert units if necessary
-    main_df["ET"] = main_df["ET"] if metric_units else mm_to_in(main_df["ET"])
-    main_df["PET"] = main_df["PET"] if metric_units else mm_to_in(main_df["PET"])
+    main_df["ET"] = units.convert_from_metric(main_df["ET"])
+    main_df["PET"] = units.convert_from_metric(main_df["PET"])
 
     if "ppt_avg" in main_df.columns:
-        main_df["ppt_avg"] = main_df["ppt_avg"] if metric_units else mm_to_in(main_df["ppt_avg"])
+        main_df["ppt_avg"] = units.convert_from_metric(main_df["ppt_avg"])
 
     if "avg_min" in main_df.columns:
-        main_df["avg_min"] = main_df["avg_min"] if metric_units else mm_to_in(main_df["avg_min"])
+        main_df["avg_min"] = units.convert_from_metric(main_df["avg_min"])
 
     if "avg_max" in main_df.columns:
-        main_df["avg_max"] = main_df["avg_max"] if metric_units else mm_to_in(main_df["avg_max"])
+        main_df["avg_max"] = units.convert_from_metric(main_df["avg_max"])
 
     # Calculate confidence intervals
     main_df["pet_ci_ymin"] = main_df.apply(
@@ -280,19 +280,19 @@ def generate_summary_figure(
     )
 
     # Set up y-axis limits and labels
-    combined_range_values = convert_to_nice_number_range(combined_abs_min, combined_abs_max, metric_units)
+    combined_range_values = convert_to_nice_number_range(combined_abs_min, combined_abs_max, units)
     combined_abs_min = combined_range_values[0]
     combined_abs_max = combined_range_values[-1]
 
-    et_padding = 10 if metric_units else mm_to_in(10)
+    et_padding = 10 if units.units == "metric" else units.convert_from_metric(10)
     adjusted_max = combined_abs_max + et_padding
     ax.set_ylim(0, adjusted_max)
     ax.set_yticks(combined_range_values)
     ax.set_yticklabels([f"{tick} {et_unit}" for tick in combined_range_values])
 
     if "ppt_avg" in main_df.columns and not main_df["ppt_avg"].empty and not main_df["ppt_avg"].isnull().all():
-        ppt_padding = 15 if metric_units else mm_to_in(15)
-        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, metric_units, subdivisions=3)
+        ppt_padding = 15 if units.units == "metric" else units.convert_from_metric(15)
+        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, units, subdivisions=3)
         ppt_min = ppt_range_values[0]
         ppt_max = ppt_range_values[-1]
 
@@ -308,7 +308,9 @@ def generate_summary_figure(
     ax_precip.set_yticklabels([f"{tick} {et_unit}" for tick in precip_ticks])
 
     if not is_confidence_data_null:
-        nice_cloud_cover_range = convert_to_nice_number_range(cloud_cover_min, cloud_cover_max, True, subdivisions=3)
+        nice_cloud_cover_range = convert_to_nice_number_range(
+            cloud_cover_min, cloud_cover_max, PercentageUnits(), subdivisions=3
+        )
         min_cloud_coverage = nice_cloud_cover_range[0]
         max_cloud_coverage = nice_cloud_cover_range[-1]
 

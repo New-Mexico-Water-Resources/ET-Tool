@@ -4,28 +4,23 @@ from os.path import join, exists, dirname
 from os import makedirs
 from tkinter import Text, Tk
 from tkinter.scrolledtext import ScrolledText
-import math
 import matplotlib.pyplot as plt
 import calendar
 import pandas as pd
 import rasterio
 import seaborn as sns
 from affine import Affine
-from matplotlib.colors import LinearSegmentedColormap, to_rgba
+from matplotlib.colors import LinearSegmentedColormap
 from shapely.geometry import Polygon
 import numpy as np
-from matplotlib.collections import PolyCollection
-
 
 from .constants import START_MONTH, END_MONTH
 from .display_image_tk import display_image_tk
-
-# from .display_text_tk import display_text_tk
-from .generate_patch import generate_patch
-
 from .write_status import write_status
-from .variable_types import get_available_variable_source_for_date, OPENET_TRANSITION_DATE
-from .plotting_helpers import mm_to_in, convert_to_nice_number_range
+
+from .generate_patch import generate_patch
+from .variable_types import OPENET_TRANSITION_DATE, get_available_variable_source_for_date
+from .plotting_helpers import convert_to_nice_number_range, MetricETUnit, ETUnit, PercentageUnits
 
 logger = getLogger(__name__)
 
@@ -55,7 +50,7 @@ def generate_figure(
     image_panel: Text = None,
     status_filename: str = None,
     requestor: dict[str, str] = None,
-    metric_units: bool = True,
+    units: ETUnit = MetricETUnit(),
 ):
     """
     Generate a figure displaying evapotranspiration data for a specific region of interest (ROI).
@@ -89,8 +84,10 @@ def generate_figure(
 
     # Create a new figure
     fig = plt.figure(figsize=(8.5, 11))
-    et_unit = "mm" if metric_units else "in"
-    figure_filename = figure_filename if metric_units else figure_filename.replace(".png", "_in.png")
+    et_unit = units.abbreviation
+    figure_filename = (
+        figure_filename if units.units == "metric" else figure_filename.replace(".png", f"_{units.abbreviation}.png")
+    )
 
     # title_fontsize = 14
     # axis_label_fontsize = 10
@@ -134,7 +131,7 @@ def generate_figure(
     grid = plt.GridSpec(grid_rows + 3, grid_cols, wspace=0.4, hspace=0.3)
 
     # Initially use metric units for the colorbar (geotiff data is in mm, not inches)
-    range_values = convert_to_nice_number_range(et_vmin, et_vmax, True)
+    range_values = convert_to_nice_number_range(et_vmin, et_vmax, MetricETUnit())
     et_vmin = range_values[0]
     et_vmax = range_values[-1]
 
@@ -173,8 +170,8 @@ def generate_figure(
             spine.set_linewidth(0.5)
 
     # Now convert to inches if necessary
-    if not metric_units:
-        range_values = convert_to_nice_number_range(et_vmin, et_vmax, metric_units)
+    if units.units != "metric":
+        range_values = convert_to_nice_number_range(et_vmin, et_vmax, units)
         et_vmin = range_values[0]
         et_vmax = range_values[-1]
 
@@ -236,20 +233,20 @@ def generate_figure(
     df = main_df[main_df["Year"] == year]
     x = df["Month"]
 
-    df["ET"] = df["ET"] if metric_units else mm_to_in(df["ET"])
-    df["PET"] = df["PET"] if metric_units else mm_to_in(df["PET"])
+    df["ET"] = units.convert_from_metric(df["ET"])
+    df["PET"] = units.convert_from_metric(df["PET"])
 
     y = df["PET"]
     y2 = df["ET"]
 
     if "ppt_avg" in df.columns:
-        df["ppt_avg"] = df["ppt_avg"] if metric_units else mm_to_in(df["ppt_avg"])
+        df["ppt_avg"] = units.convert_from_metric(df["ppt_avg"])
 
     if "avg_min" in df.columns:
-        df["avg_min"] = df["avg_min"] if metric_units else mm_to_in(df["avg_min"])
+        df["avg_min"] = units.convert_from_metric(df["avg_min"])
 
     if "avg_max" in df.columns:
-        df["avg_max"] = df["avg_max"] if metric_units else mm_to_in(df["avg_max"])
+        df["avg_max"] = units.convert_from_metric(df["avg_max"])
 
     df["pet_ci_ymin"] = df.apply(
         lambda row: (
@@ -350,7 +347,7 @@ def generate_figure(
     ax.set(xlabel="", ylabel="")
     ax_precip.set(xlabel="", ylabel="")
 
-    combined_range_values = convert_to_nice_number_range(combined_abs_min, combined_abs_max, metric_units)
+    combined_range_values = convert_to_nice_number_range(combined_abs_min, combined_abs_max, units)
     combined_abs_min = combined_range_values[0]
     combined_abs_max = combined_range_values[-1]
 
@@ -391,7 +388,7 @@ def generate_figure(
         normalized_cloud_cover_min = cloud_cover_min if not pd.isna(cloud_cover_min) and cloud_cover_min > 0 else 0
         normalized_cloud_cover_max = cloud_cover_max if not pd.isna(cloud_cover_max) and cloud_cover_max < 100 else 100
         nice_cloud_cover_range = convert_to_nice_number_range(
-            normalized_cloud_cover_min, normalized_cloud_cover_max, True, subdivisions=3
+            normalized_cloud_cover_min, normalized_cloud_cover_max, PercentageUnits(), subdivisions=3
         )
         min_cloud_coverage = nice_cloud_cover_range[0]
         max_cloud_coverage = nice_cloud_cover_range[-1]
@@ -411,7 +408,7 @@ def generate_figure(
     custom_lines = [plt.Line2D([0], [0], color=legend_colors[i], lw=2, alpha=0.8) for i in range(len(legend_labels))]
     ax_cloud.legend(custom_lines, legend_labels, loc="upper left", fontsize=axis_label_fontsize / 2, frameon=False)
 
-    et_padding = 10 if metric_units else mm_to_in(10)
+    et_padding = 10 if units.units == "metric" else units.convert_from_metric(10)
     adjusted_max = combined_abs_max + et_padding
     ax.set_ylim(0, adjusted_max)
 
@@ -422,8 +419,8 @@ def generate_figure(
     ax.grid(True, linestyle="--", alpha=0.3, color="gray", axis="y")
 
     if "ppt_avg" in df.columns and not df["ppt_avg"].empty and not df["ppt_avg"].isnull().all():
-        ppt_padding = 15 if metric_units else mm_to_in(15)
-        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, metric_units, subdivisions=3)
+        ppt_padding = 15 if units.units == "metric" else units.convert_from_metric(15)
+        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, units, subdivisions=3)
         ppt_min = ppt_range_values[0]
         ppt_max = ppt_range_values[-1]
 

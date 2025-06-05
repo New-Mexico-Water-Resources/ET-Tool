@@ -1,13 +1,86 @@
 import math
 import numpy as np
 import pandas as pd
+import abc
 
 
 def mm_to_in(mm: float | pd.DataFrame) -> float:
     return mm / 25.4
 
 
-def convert_to_nice_number_range(start: float, end: float, metric_units: bool, subdivisions: int = 5) -> list[float]:
+def in_to_mm(inches: float | pd.DataFrame) -> float:
+    return inches * 25.4
+
+
+class ETUnit(abc.ABC):
+    units: str
+    min_increment: float
+    nice_increments: list[float]
+    abbreviation: str
+
+    def __init__(self, units: str, min_increment: float, nice_increments: list[float], abbreviation: str):
+        self.units = units
+        self.min_increment = min_increment
+        self.nice_increments = nice_increments
+        self.abbreviation = abbreviation
+
+    @abc.abstractmethod
+    def convert_from_metric(self, metric_value: float | pd.DataFrame) -> float | pd.DataFrame:
+        pass
+
+    @abc.abstractmethod
+    def convert_to_metric(self, value: float | pd.DataFrame) -> float | pd.DataFrame:
+        pass
+
+
+class MetricETUnit(ETUnit):
+    def __init__(self, min_increment: float = 0.5, nice_increments: list[float] = [0.5, 1, 2, 5, 10]):
+        super().__init__("metric", min_increment, nice_increments, "mm")
+
+    def convert_from_metric(self, metric_value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return metric_value
+
+    def convert_to_metric(self, value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return value
+
+
+class ImperialETUnit(ETUnit):
+    def __init__(self, min_increment: float = 0.1, nice_increments: list[float] = [0.1, 0.2, 0.5, 1, 2, 5, 10]):
+        super().__init__("imperial", min_increment, nice_increments, "in")
+
+    def convert_from_metric(self, metric_value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return mm_to_in(metric_value)
+
+    def convert_to_metric(self, value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return in_to_mm(value)
+
+
+class PercentageUnits(ETUnit):
+    def __init__(self, min_increment: float = 1, nice_increments: list[float] = [1, 5, 10, 25, 50, 75, 100]):
+        super().__init__("percentage", min_increment, nice_increments, "%")
+
+    def convert_from_metric(self, metric_value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return np.clip(metric_value, 0, 100)
+
+    def convert_to_metric(self, value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return np.clip(value, 0, 100)
+
+
+class AcreFeetETUnit(ETUnit):
+    def __init__(
+        self, min_increment: float = 0.1, nice_increments: list[float] = [0.1, 0.2, 0.5, 1, 2, 5, 10], acres: float = 1
+    ):
+        super().__init__("acre-feet", min_increment, nice_increments, "AF")
+        self.acres = acres
+
+    def convert_from_metric(self, metric_value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return metric_value * self.acres * 0.003259
+
+    def convert_to_metric(self, value: float | pd.DataFrame) -> float | pd.DataFrame:
+        return value / (self.acres * 0.003259)
+
+
+def convert_to_nice_number_range(start: float, end: float, units: ETUnit, subdivisions: int = 5) -> list[float]:
     """
     Convert a range of values to "nice" numbers in the given units (assumes input is in mm).
     The nice numbers are readable multiples of the subdivision.
@@ -44,15 +117,15 @@ def convert_to_nice_number_range(start: float, end: float, metric_units: bool, s
     if start > end:
         start, end = end, start  # Swap values to ensure start <= end
 
-    start = mm_to_in(start) if not metric_units else start
-    end = mm_to_in(end) if not metric_units else end
+    start = units.convert_from_metric(start)
+    end = units.convert_from_metric(end)
 
     # If start and end are the same, return a single value
     if start == end:
         return [start]
 
     # Set minimum increment based on units
-    min_increment = 0.5 if metric_units else 0.1
+    min_increment = units.min_increment
 
     # Calculate the range and ideal increment size
     data_range = end - start
@@ -64,7 +137,7 @@ def convert_to_nice_number_range(start: float, end: float, metric_units: bool, s
     normalized = increment / magnitude
 
     # Define nice number increments based on units
-    increments = [0.1, 0.2, 0.5, 1, 2, 5, 10] if not metric_units else [0.5, 1, 2, 5, 10]
+    increments = units.nice_increments
 
     # Find first increment larger than normalized value
     try:
