@@ -359,7 +359,15 @@ const CurrentJobChip = () => {
           {activeJob && (
             <div
               className="job-controls-header"
-              onClick={() => setShowJobControls(!showJobControls)}
+              onClick={() => {
+                if (showJobControls) {
+                  setShowJobControls(false);
+                  setShowPreview(false);
+                } else {
+                  setShowJobControls(true);
+                  setShowPreview(true);
+                }
+              }}
               style={{
                 cursor: "pointer",
                 display: "flex",
