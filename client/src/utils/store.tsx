@@ -803,7 +803,7 @@ const useStore = create<Store>()(
       },
       clearPendingJobs: () => {
         const pendingJobs = get()
-          .queue.filter((job) => job.status === "Pending")
+          .queue.filter((job) => ["Pending", "WaitingApproval"].includes(job.status))
           .map((job) => job.key);
 
         if (pendingJobs.length === 0) {
