@@ -74,11 +74,11 @@ const UploadDialog = () => {
       reader.onload = () => {
         setLoadedFile(file);
         if (!jobName) {
-          let fileName = file.name.replace(/\.[^/.]+$/, "");
+          const fileName = file.name.replace(/\.[^/.]+$/, "");
           setJobName(fileName);
         }
 
-        let prepareRequest = prepareGeoJSON(file);
+        const prepareRequest = prepareGeoJSON(file);
         if (!prepareRequest) {
           // User not authenticated
           console.error("User not authenticated, cannot prepare GeoJSON.");
@@ -136,8 +136,8 @@ const UploadDialog = () => {
 
   const generateRows = useCallback((multipolygons: any[]) => {
     const rows: PolygonLocation[] = multipolygons.map((geojson, index) => {
-      let defaultName = `${geojson?.county || ""} ${index + 1}`;
-      let name = geojson?.features[0]?.properties?.name || defaultName;
+      const defaultName = `${geojson?.county || ""} ${index + 1}`;
+      const name = geojson?.features[0]?.properties?.name || defaultName;
 
       let lat = geojson?.geometry?.coordinates[0][0][0];
       let long = geojson?.geometry?.coordinates[0][0][1];
@@ -148,10 +148,7 @@ const UploadDialog = () => {
         long = geojson?.features[0]?.geometry?.coordinates[0][0][1];
       }
 
-      let area = geojson?.features[0]?.properties?.Shape_Area;
-      if (!area) {
-        area = turfArea(geojson);
-      }
+      const area = turfArea(geojson);
 
       return {
         visible: true,
@@ -374,7 +371,7 @@ const UploadDialog = () => {
               if (multipolygons.length > 0 && loadedFile) {
                 previewMultipolygonJob();
               } else {
-                let job = formJobForQueue(jobName, startYear, endYear, loadedGeoJSON);
+                const job = formJobForQueue(jobName, startYear, endYear, loadedGeoJSON);
                 previewJob(job);
               }
             }}
@@ -393,13 +390,13 @@ const UploadDialog = () => {
               if (canSubmitJob) {
                 submitJob();
               } else if (canSubmitBulkJob) {
-                let jobs = prepareMultipolygonJob();
-                let totalNumberOfYears = jobs.reduce((acc, job) => acc + job.end_year - job.start_year + 1, 0);
+                const jobs = prepareMultipolygonJob();
+                const totalNumberOfYears = jobs.reduce((acc, job) => acc + job.end_year - job.start_year + 1, 0);
 
                 // Rough estimate of 5 minutes per year
-                let estimatedTimePerYear = 5;
-                let estimatedTimeMS = totalNumberOfYears * estimatedTimePerYear * 60 * 1000;
-                let estimatedTime = formatElapsedTime(estimatedTimeMS).trim();
+                const estimatedTimePerYear = 5;
+                const estimatedTimeMS = totalNumberOfYears * estimatedTimePerYear * 60 * 1000;
+                const estimatedTime = formatElapsedTime(estimatedTimeMS).trim();
 
                 confirm({
                   title: "Submit Bulk Job",

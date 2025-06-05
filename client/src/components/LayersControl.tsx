@@ -145,10 +145,7 @@ const LayersControl: FC = () => {
         long = geojson?.features?.[0]?.geometry?.coordinates[0][0][1];
       }
 
-      let area = geojson?.properties?.shape_Area;
-      if (!area) {
-        area = turfArea(geojson);
-      }
+      const area = turfArea(geojson);
 
       const isValidArea = area > minimumValidArea && area < maximumValidArea;
 
