@@ -179,7 +179,7 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
           borderBottom: "1px solid #1b1d1e",
         }}
       >
-        <img src="/src/assets/favicon.png" alt="New Mexico ET Reporting Tool" style={{ height: "32px" }} />
+        <img src="/favicon.png" alt="New Mexico ET Reporting Tool" style={{ height: "32px" }} />
         <Typography
           variant="h6"
           noWrap
