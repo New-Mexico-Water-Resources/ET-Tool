@@ -1,3 +1,18 @@
+## 1.29.0 (2025-06-12)
+
+### Features
+- New ET Tool icon
+- Adds support for exporting the report in acre-feet/month units
+  - Refactors units to use a custom abstraction layer to make it easier to add new units in the future
+- "Clear Pending" button now also clears jobs that are waiting approval
+- Automatically opens show preview on interactive preview toggle
+
+## Bug Fixes
+- Always uses calculated acreage instead of optionally relying on the shapefile's "Acres" property
+  - This fixes an issue where the acreage was showing as 0 for some jobs where the field was set, but the value was incorrect
+- Fixes minor scrolling issue with the new jobs panel where the scrollbar would appear when it wasn't needed
+- Fixes color scale width so large numbers or numbers with many decimal places don't cause the color scale to overflow or be too wide
+
 ## 1.28.0 (2025-05-28)
 
 ### Features
