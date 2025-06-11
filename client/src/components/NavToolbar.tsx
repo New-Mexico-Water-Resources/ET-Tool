@@ -15,7 +15,6 @@ import {
   Typography,
 } from "@mui/material";
 import { useAuth0 } from "@auth0/auth0-react";
-import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import ViewStreamIcon from "@mui/icons-material/ViewStream";
 import PendingActionsIcon from "@mui/icons-material/PendingActions";
 import AddIcon from "@mui/icons-material/Add";
@@ -180,7 +179,6 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
           borderBottom: "1px solid #1b1d1e",
         }}
       >
-        {/* <WaterDropIcon style={{ color: "var(--st-gray-30)" }} /> */}
         <img src="/src/assets/favicon.png" alt="New Mexico ET Reporting Tool" style={{ height: "32px" }} />
         <Typography
           variant="h6"
