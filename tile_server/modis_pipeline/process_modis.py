@@ -37,9 +37,9 @@ OUTPUT_DIR = get_env_path("MODIS_OUTPUT_DIR", os.path.join(BASE_DATA_DIR, "et_ti
 MERGED_DIR = get_env_path("MODIS_MERGED_DIR", os.path.join(BASE_DATA_DIR, "raw_et"))
 TEMP_DIR = get_env_path("MODIS_TEMP_DIR", os.path.join(BASE_DATA_DIR, "temp"))
 
-# Data Product Configuration
 BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
 DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
+
 S3_ENDPOINT = os.getenv("MODIS_S3_ENDPOINT", "https://data.lpdaac.earthdatacloud.nasa.gov/s3credentials")
 S3_BUCKET = os.getenv("MODIS_S3_BUCKET", "lp-prod-protected")
 
@@ -118,10 +118,21 @@ def start_workflow(
     bands=["ET_500m", "PET_500m"],
     monitor=False,
     interval=24 * 60 * 60,
+    data_product=None,
+    data_product_version=None,
 ):
     """
     Start the MODIS processing workflow.
     """
+    # Update data product configuration if CLI arguments are provided
+    global BASE_DATA_PRODUCT, DATA_PRODUCT_VERSION
+    if data_product or data_product_version:
+        BASE_DATA_PRODUCT = data_product or os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
+        DATA_PRODUCT_VERSION = data_product_version or os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
+        # Update environment variables for imported modules
+        os.environ["MODIS_BASE_DATA_PRODUCT"] = BASE_DATA_PRODUCT
+        os.environ["MODIS_DATA_PRODUCT_VERSION"] = DATA_PRODUCT_VERSION
+
     # Remove duplicates from bands and set default bands if none provided
     bands = list(set(bands)) if bands else ["ET_500m", "PET_500m"]
 
@@ -184,6 +195,8 @@ def main():
         min_zoom (int): Minimum zoom level if generating tiles (1-11).
         max_zoom (int): Maximum zoom level if generating tiles (1-11).
         band_name (str): Band name.
+        data_product (str): MODIS base data product (e.g., MOD16A2).
+        data_product_version (str): MODIS data product version (e.g., 061).
     """
     parser = argparse.ArgumentParser(description="Process MODIS data")
     parser.add_argument(
@@ -193,6 +206,12 @@ def main():
     parser.add_argument("--min-zoom", type=int, help="Minimum zoom level", default=1)
     parser.add_argument("--max-zoom", type=int, help="Maximum zoom level", default=11)
     parser.add_argument("-b", "--bands", action="append", help="List of band names", default=[])
+
+    # Data product configuration
+    parser.add_argument("-d", "--data-product", type=str, help="MODIS base data product (e.g., MOD16A2)", default=None)
+    parser.add_argument(
+        "-p", "--data-product-version", type=str, help="MODIS data product version (e.g., 061)", default=None
+    )
 
     # Monitoring
     parser.add_argument("--monitor", action="store_true", help="Monitor the process", default=False)
@@ -212,6 +231,8 @@ def main():
         bands=args.bands,
         monitor=args.monitor,
         interval=args.monitor_interval,
+        data_product=args.data_product,
+        data_product_version=args.data_product_version,
     )
 
 
