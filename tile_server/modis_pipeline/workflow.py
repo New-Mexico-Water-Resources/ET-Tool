@@ -16,7 +16,7 @@ def get_env_path(key, default):
 # Get paths from environment variables
 DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "~/data/modis_net_et_8_day/downloads")
 INPUT_DIR = get_env_path("MODIS_INPUT_DIR", "~/data/modis_net_et_8_day/et_tiffs")
-BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2GF")
 
 
 def convert_date(yyyyddd):
