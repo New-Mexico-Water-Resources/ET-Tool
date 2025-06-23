@@ -178,7 +178,7 @@ def start_workflow(
 
         logging.info("\nMODIS processing workflow completed!")
 
-        if not monitor:
+        if not monitor or limit is not None:
             break
 
         time.sleep(interval)
