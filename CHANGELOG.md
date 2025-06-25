@@ -1,3 +1,15 @@
+## 1.30.0 (2025-06-25)
+
+### Features
+- Backend Refactoring
+  - Data sources are now available for configuration in the `variables.yaml` file
+- Adds new data pipelines for fetching data from the following sources:
+  - OpenET (ET, ET_MIN, ET_MAX) : Google Earth Engine
+  - GRIDMET (ETO) : Google Earth Engine
+  - PRISM (PPT) : Oregon State University FTP Server
+- Pipelines can be manually run via the `pipelines/run_pipeline.py` CLI script
+- Pipeline usage is documented in the `pipelines/NewDataPipeline.ipynb` notebook
+
 ## 1.29.0 (2025-06-12)
 
 ### Features
