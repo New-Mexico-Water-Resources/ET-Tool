@@ -33,3 +33,6 @@ misc
 ~$*.docx
 tile_server/modis_pipeline/package.json
 google_drive_personal_key.txt
+prism_data
+prism_data_monthly
+prism_tiles

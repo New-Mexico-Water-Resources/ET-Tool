@@ -12,6 +12,7 @@ from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 import geopandas as gpd
 from datetime import datetime, timedelta
+import boto3
 
 
 class PrismAWSDataPipeline:
@@ -23,12 +24,15 @@ class PrismAWSDataPipeline:
         aws_access_key_id: str = None,
         aws_secret_access_key: str = None,
         base_url: str = "https://ftp.prism.oregonstate.edu/monthly/ppt/",
+        product_prefix: str = "OREGON_STATE_PRISM",
         raw_dir: str = "prism_data",
         monthly_dir: str = "prism_data_monthly",
         output_dir: str = "prism_tiles",
         delay: float = 0.2,
         source_crs: str = "EPSG:4269",
         target_crs: str = "EPSG:4326",
+        tiles_geojson: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ARD_tiles.geojson"),
+        allow_provisional: bool = False,
     ):
         self.aws_bucket = aws_bucket
         self.aws_region = aws_region
@@ -36,12 +40,23 @@ class PrismAWSDataPipeline:
         self.aws_access_key_id = aws_access_key_id
         self.aws_secret_access_key = aws_secret_access_key
         self.base_url = base_url
+        self.product_prefix = product_prefix
         self.raw_dir = raw_dir
         self.monthly_dir = monthly_dir
         self.output_dir = output_dir
         self.delay = delay
         self.source_crs = source_crs
         self.target_crs = target_crs
+        self.tiles_geojson = tiles_geojson
+        self.allow_provisional = allow_provisional
+
+        self.session = boto3.Session(profile_name=self.aws_profile)
+        self.s3 = self.session.client(
+            "s3",
+            region_name=self.aws_region,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+        )
 
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
@@ -103,7 +118,18 @@ class PrismAWSDataPipeline:
         if success:
             self._extract_bil_and_hdr(zip_path, year_dir, year)
         else:
-            self.logger.error(f"Failed to download {file_name}")
+            # Try provisional data
+            if self.allow_provisional:
+                file_name = f"PRISM_ppt_provisional_4kmM3_{year}{month:02d}_bil.zip"
+                file_url = f"{year_url}{file_name}"
+                zip_path = os.path.join(year_dir, file_name)
+                success = self._download_file(file_url, zip_path)
+                if success:
+                    self._extract_bil_and_hdr(zip_path, year_dir, year)
+                else:
+                    self.logger.error(f"Failed to download {file_name}")
+            else:
+                self.logger.error(f"Failed to download {file_name}")
 
     def download_by_year(self, year: int):
         """
@@ -122,15 +148,15 @@ class PrismAWSDataPipeline:
         if not os.path.exists(zip_path):
             self.logger.info(f"Downloading {file_name}...")
             success = self._download_file(file_url, zip_path, allow_fail=True)
-            if not success:
+            if success:
+                self._extract_bil_and_hdr(zip_path, year_dir, year)
+            else:
                 # The all_bil file is not available, so we need to download the monthly files
                 for month in range(1, 13):
                     self.download_by_month(year, month)
                     time.sleep(self.delay)
         else:
             self.logger.info(f"{file_name} already exists. Skipping download.")
-
-        self._extract_bil_and_hdr(zip_path, year_dir, year)
 
     def consolidate_bil_files(self, year: int):
         """Consolidate all .bil files into a flat directory."""
@@ -143,13 +169,18 @@ class PrismAWSDataPipeline:
         for root, _, files in os.walk(year_dir):
             for file in files:
                 # Make sure filename matches PRISM_ppt_stable_4kmM3_198501_bil.bil
-                matches = re.match(r"PRISM_ppt_stable_4kmM3_(\d{6})_bil.[a-z]{3,3}", file)
+                if self.allow_provisional:
+                    # Allow either stable or provisional data
+                    matches = re.match(r"PRISM_ppt_(stable|provisional)_4kmM3_(\d{6})_bil.[a-z]{3,3}", file)
+                else:
+                    matches = re.match(r"PRISM_ppt_stable_4kmM3_(\d{6})_bil.[a-z]{3,3}", file)
                 if not matches:
                     self.logger.info(f"Skipping {file} - wrong filename format")
                     continue
 
                 if file.endswith(".bil") or file.endswith(".hdr"):
                     source_path = os.path.join(root, file)
+                    os.makedirs(self.monthly_dir, exist_ok=True)
                     target_path = os.path.join(self.monthly_dir, file)
 
                     # If already exists, skip
@@ -217,13 +248,13 @@ class PrismAWSDataPipeline:
         for bil_file in os.listdir(self.monthly_dir):
             if bil_file.endswith(".bil"):
                 bil_path = os.path.join(self.monthly_dir, bil_file)
-                print(f"Processing {bil_file}...")
+                self.logger.info(f"Processing {bil_file}...")
 
                 # Parse dates from filename
                 try:
                     start_date, end_date = self._parse_date_from_filename(bil_file)
                 except ValueError as e:
-                    print(e)
+                    self.logger.error(e)
                     continue
 
                 # Open the .bil file
@@ -245,13 +276,79 @@ class PrismAWSDataPipeline:
                             # Reproject the raster data to WGS84
                             reprojected_data, reprojected_meta = self._reproject_raster(src_crs, out_image, out_transform)
 
+                            os.makedirs(self.output_dir, exist_ok=True)
                             # Generate output filename
-                            output_filename = f"OREGON_STATE_PRISM_{hv}_{start_date}_{end_date}_PPT.tif"
+                            output_filename = f"{self.product_prefix}_{hv}_{start_date}_{end_date}_PPT.tif"
                             output_path = os.path.join(self.output_dir, output_filename)
 
                             # Write the output tile
                             with rasterio.open(output_path, "w", **reprojected_meta) as dest:
                                 dest.write(reprojected_data)
-                            print(f"Saved tile {output_filename}")
+                            self.logger.info(f"Saved tile {output_filename}")
                         except Exception as e:
-                            print(f"Error processing tile {hv}: {e}")
+                            self.logger.error(f"Error processing tile {hv}: {e}")
+
+    def check_if_s3_key_exists(self, key: str) -> bool:
+        """
+        Check if the file exists in the aws bucket
+        Args:
+            key (str): key of the file to check
+        Returns:
+            bool: True if the file exists, False otherwise
+        """
+        try:
+            self.s3.head_object(Bucket=self.aws_bucket, Key=key)
+            return True
+        except self.s3.exceptions.ClientError:
+            return False
+
+    def upload_to_aws(self, path: str, overwrite: bool = False):
+        """
+        Upload the file to the aws bucket
+        Args:
+            path (str): path to the file to upload
+            overwrite (bool, optional): whether to overwrite the file if it already exists [default: False]
+        """
+        file_name = os.path.basename(path)
+        if not overwrite:
+            # Check if the file already exists in the bucket
+            if self.check_if_s3_key_exists(file_name):
+                self.logger.info(f"File {file_name} already exists in aws bucket {self.aws_bucket}, skipping upload")
+                return
+
+        self.s3.upload_file(path, self.aws_bucket, file_name)
+        self.logger.info(f"Uploaded file {file_name} to aws bucket {self.aws_bucket}")
+        return file_name
+
+    def upload_local_folder_to_aws(self, output_dir: str | None = None, overwrite: bool = False):
+        """
+        Upload all the files to the aws bucket
+        Args:
+            output_dir (str): path to the directory to upload
+            overwrite (bool, optional): whether to overwrite the files if they already exist [default: False]
+        Returns:
+            list[str]: list of files that were uploaded
+        """
+        if output_dir is None:
+            output_dir = self.output_dir
+
+        files = []
+        pbar = tqdm(os.listdir(output_dir), desc=f"Uploading files to aws bucket {self.aws_bucket}", leave=False)
+        for file in pbar:
+            file_path = os.path.join(output_dir, file)
+            files.append(self.upload_to_aws(file_path, overwrite))
+            pbar.set_description(f"Uploading file: {file}")
+        return files
+
+    def process_year(self, year: int, upload: bool = False):
+        """
+        Process the year
+        Args:
+            year (int): The year to process
+            upload (bool, optional): Whether to upload the files to the aws bucket [default: False]
+        """
+        self.download_by_year(year)
+        self.consolidate_bil_files(year)
+        self.process_tiles()
+        if upload:
+            self.upload_local_folder_to_aws()

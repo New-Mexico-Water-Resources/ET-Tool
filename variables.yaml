@@ -1,0 +1,101 @@
+openet_transition_date: "2008-01-01"
+
+sources:
+  - id: "landsat_ptjpl_et"
+    name: "Landsat PT-JPL ET"
+    variable: "ET"
+    mapped_variable: "ET"
+    file_prefix: "LC08_"
+    monthly: false
+    parent_dir: ""
+    start: "1983-01-01"
+    end: "2008-01-01"
+    daylight_corrected: true
+
+  - id: "landsat_ptjpl_esi"
+    name: "Landsat PT-JPL ESI"
+    variable: "ESI"
+    mapped_variable: "ESI"
+    file_prefix: "LC08_"
+    monthly: false
+    parent_dir: ""
+    start: "1983-01-01"
+    end: "2008-01-01"
+    daylight_corrected: true
+
+  - id: "openet_ensemble_et"
+    name: "OpenET Ensemble ET"
+    variable: "ET"
+    mapped_variable: "ET"
+    file_prefix: "OPENET_ENSEMBLE_"
+    monthly: true
+    parent_dir: "monthly"
+    start: "2008-01-01"
+    end: "2025-01-01"
+    daylight_corrected: true
+
+  - id: "openet_ensemble_ccount"
+    name: "OpenET Ensemble CCOUNT"
+    variable: "CCOUNT"
+    mapped_variable: "CCOUNT"
+    file_prefix: "OPENET_ENSEMBLE_"
+    monthly: true
+    parent_dir: "monthly"
+    start: "2008-01-01"
+    end: "2025-01-01"
+    daylight_corrected: true
+
+  - id: "openet_ensemble_et_min"
+    name: "OpenET Ensemble ET MIN"
+    variable: "ET_MIN"
+    mapped_variable: "ET_MIN"
+    file_prefix: "OPENET_ENSEMBLE_"
+    monthly: true
+    parent_dir: "uncertainty/output/2019"
+    start: "2008-01-01"
+    end: "2025-01-01"
+    daylight_corrected: true
+
+  - id: "openet_ensemble_et_max"
+    name: "OpenET Ensemble ET MAX"
+    variable: "ET_MAX"
+    mapped_variable: "ET_MAX"
+    file_prefix: "OPENET_ENSEMBLE_"
+    monthly: true
+    parent_dir: "uncertainty/output/2019"
+    start: "2008-01-01"
+    end: "2025-01-01"
+    daylight_corrected: true
+
+  - id: "openet_ptjpl_cloud_count"
+    name: "OpenET PTJPL Cloud Count"
+    variable: "COUNT"
+    mapped_variable: "COUNT"
+    file_prefix: "OPENET_PTJPL_"
+    monthly: true
+    parent_dir: "uncertainty/output/2019"
+    start: "2008-01-01"
+    end: "2025-01-01"
+    daylight_corrected: true
+
+  - id: "idaho_epscor_gridmet_eto"
+    name: "IDAHO EPSCOR GRIDMET ETO"
+    variable: "PET"
+    mapped_variable: "ETO"
+    file_prefix: "IDAHO_EPSCOR_GRIDMET_"
+    monthly: true
+    parent_dir: "monthly"
+    start: "2008-01-01"
+    end: "2025-01-01"
+    daylight_corrected: false
+
+  - id: "oregon_state_prism_ppt"
+    name: "Oregon State PRISM PPT"
+    variable: "PPT"
+    mapped_variable: "PPT"
+    file_prefix: "OREGON_STATE_PRISM_"
+    monthly: true
+    parent_dir: "precipitation"
+    start: "1985-01-01"
+    end: "2025-01-01"
+    daylight_corrected: true

@@ -1,12 +1,13 @@
+import os
+import yaml
 from datetime import datetime
 from typing import TypedDict
-
-OPENET_TRANSITION_DATE = 2008
 
 
 class VariableType:
     def __init__(
         self,
+        id: str,
         name: str,
         variable: str,
         mapped_variable: str,
@@ -17,6 +18,7 @@ class VariableType:
         end: datetime.date,
         daylight_corrected: bool = True,
     ):
+        self.id = id
         self.name = name
         self.variable = variable
         self.mapped_variable = mapped_variable
@@ -28,99 +30,52 @@ class VariableType:
         self.end = end
 
 
-VARIABLE_TYPES = [
-    VariableType(
-        name="Landsat PT-JPL ET",
-        variable="ET",
-        mapped_variable="ET",
-        file_prefix="LC08_",
-        monthly=False,
-        parent_dir="",
-        start=datetime(1983, 1, 1).date(),
-        end=datetime(2008, 1, 1).date(),
-    ),
-    VariableType(
-        name="Landsat PT-JPL ESI",
-        variable="ESI",
-        mapped_variable="ESI",
-        file_prefix="LC08_",
-        monthly=False,
-        parent_dir="",
-        start=datetime(1983, 1, 1).date(),
-        end=datetime(2008, 1, 1).date(),
-    ),
-    VariableType(
-        name="OpenET Ensemble ET",
-        variable="ET",
-        mapped_variable="ET",
-        file_prefix="OPENET_ENSEMBLE_",
-        monthly=True,
-        parent_dir="monthly",
-        start=datetime(2008, 1, 1).date(),
-        end=datetime(2025, 1, 1).date(),
-    ),
-    VariableType(
-        name="OpenET Ensemble CCOUNT",
-        variable="CCOUNT",
-        mapped_variable="CCOUNT",
-        file_prefix="OPENET_ENSEMBLE_",
-        monthly=True,
-        parent_dir="monthly",
-        start=datetime(2008, 1, 1).date(),
-        end=datetime(2025, 1, 1).date(),
-    ),
-    VariableType(
-        name="OpenET Ensemble ET MIN",
-        variable="ET_MIN",
-        mapped_variable="ET_MIN",
-        file_prefix="OPENET_ENSEMBLE_",
-        monthly=True,
-        parent_dir="uncertainty/output/2019",
-        start=datetime(2008, 1, 1).date(),
-        end=datetime(2025, 1, 1).date(),
-    ),
-    VariableType(
-        name="OpenET Ensemble ET MAX",
-        variable="ET_MAX",
-        mapped_variable="ET_MAX",
-        file_prefix="OPENET_ENSEMBLE_",
-        monthly=True,
-        parent_dir="uncertainty/output/2019",
-        start=datetime(2008, 1, 1).date(),
-        end=datetime(2025, 1, 1).date(),
-    ),
-    VariableType(
-        name="OpenET PTJPL Cloud Count",
-        variable="COUNT",
-        mapped_variable="COUNT",
-        file_prefix="OPENET_PTJPL_",
-        monthly=True,
-        parent_dir="uncertainty/output/2019",
-        start=datetime(2008, 1, 1).date(),
-        end=datetime(2025, 1, 1).date(),
-    ),
-    VariableType(
-        name="IDAHO EPSCOR GRIDMET ETO",
-        variable="PET",
-        mapped_variable="ETO",
-        file_prefix="IDAHO_EPSCOR_GRIDMET_",
-        monthly=True,
-        daylight_corrected=False,
-        parent_dir="monthly",
-        start=datetime(2008, 1, 1).date(),
-        end=datetime(2025, 1, 1).date(),
-    ),
-    VariableType(
-        name="Oregon State PRISM PPT",
-        variable="PPT",
-        mapped_variable="PPT",
-        file_prefix="OREGON_STATE_PRISM_",
-        monthly=True,
-        parent_dir="precipitation",
-        start=datetime(1985, 1, 1).date(),
-        end=datetime(2025, 1, 1).date(),
-    ),
-]
+def _load_variable_types() -> list[VariableType]:
+    """Load variable types from YAML configuration file."""
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+    except NameError:
+        project_root = os.getcwd()
+
+    yaml_path = os.path.join(project_root, "variables.yaml")
+
+    try:
+        with open(yaml_path, "r") as file:
+            config = yaml.safe_load(file)
+
+        openet_transition_date = datetime.strptime(config["openet_transition_date"], "%Y-%m-%d").date()
+
+        variable_types = []
+        for var_config in config["sources"]:
+            start_date = datetime.strptime(var_config["start"], "%Y-%m-%d").date()
+            end_date = datetime.strptime(var_config["end"], "%Y-%m-%d").date()
+
+            variable_type = VariableType(
+                id=var_config["id"],
+                name=var_config["name"],
+                variable=var_config["variable"],
+                mapped_variable=var_config["mapped_variable"],
+                file_prefix=var_config["file_prefix"],
+                monthly=var_config["monthly"],
+                parent_dir=var_config["parent_dir"],
+                start=start_date,
+                end=end_date,
+                daylight_corrected=var_config.get("daylight_corrected", True),
+            )
+            variable_types.append(variable_type)
+
+        return variable_types, openet_transition_date
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Configuration file not found: {yaml_path}")
+    except yaml.YAMLError as e:
+        raise ValueError(f"Error parsing YAML configuration: {e}")
+    except KeyError as e:
+        raise ValueError(f"Missing required key in configuration: {e}")
+
+
+VARIABLE_TYPES, OPENET_TRANSITION_DATE = _load_variable_types()
 
 
 def get_available_variables_for_date(date: datetime.date) -> list[VariableType]:
