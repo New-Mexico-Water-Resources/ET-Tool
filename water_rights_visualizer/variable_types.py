@@ -44,7 +44,7 @@ def _load_variable_types() -> list[VariableType]:
         with open(yaml_path, "r") as file:
             config = yaml.safe_load(file)
 
-        openet_transition_date = datetime.strptime(config["openet_transition_date"], "%Y-%m-%d").date()
+        openet_transition_date = config["openet_transition_date"]
 
         variable_types = []
         for var_config in config["sources"]:

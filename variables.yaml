@@ -1,4 +1,4 @@
-openet_transition_date: "2008-01-01"
+openet_transition_date: 2008
 
 sources:
   - id: "landsat_ptjpl_et"
