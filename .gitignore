@@ -6,6 +6,7 @@ google_drive_api_key.txt
 client_secrets.json
 water_rights_visualizer/google_drive_key.txt
 water_rights_visualizer/client_secrets.json
+water_rights_visualizer/client_secret_personal.json
 try_water_rights_gui.sh
 water_rights_visualizer.egg-info
 dist
