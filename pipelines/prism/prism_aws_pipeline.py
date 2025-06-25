@@ -1,0 +1,257 @@
+import logging
+import os
+import time
+import zipfile
+import requests
+from tqdm import tqdm
+import re
+import shutil
+import numpy as np
+import rasterio
+from rasterio.mask import mask
+from rasterio.warp import calculate_default_transform, reproject, Resampling
+import geopandas as gpd
+from datetime import datetime, timedelta
+
+
+class PrismAWSDataPipeline:
+    def __init__(
+        self,
+        aws_bucket: str = "ose-dev-inputs",
+        aws_region: str = "us-west-2",
+        aws_profile: str = None,
+        aws_access_key_id: str = None,
+        aws_secret_access_key: str = None,
+        base_url: str = "https://ftp.prism.oregonstate.edu/monthly/ppt/",
+        raw_dir: str = "prism_data",
+        monthly_dir: str = "prism_data_monthly",
+        output_dir: str = "prism_tiles",
+        delay: float = 0.2,
+        source_crs: str = "EPSG:4269",
+        target_crs: str = "EPSG:4326",
+    ):
+        self.aws_bucket = aws_bucket
+        self.aws_region = aws_region
+        self.aws_profile = aws_profile
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_access_key = aws_secret_access_key
+        self.base_url = base_url
+        self.raw_dir = raw_dir
+        self.monthly_dir = monthly_dir
+        self.output_dir = output_dir
+        self.delay = delay
+        self.source_crs = source_crs
+        self.target_crs = target_crs
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+
+    def _download_file(self, url, save_path, allow_fail: bool = False):
+        """Download a file from a URL and save it to the specified path."""
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            total_size = int(response.headers.get("content-length", 0))
+            with open(save_path, "wb") as f, tqdm(
+                desc=f"Downloading {os.path.basename(save_path)}",
+                total=total_size,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as bar:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+                    bar.update(len(chunk))
+            return True
+        else:
+            if not allow_fail:
+                self.logger.error(f"Failed to download {url} - HTTP Status Code: {response.status_code}")
+
+            return False
+
+    def _extract_bil_and_hdr(self, zip_path, extract_dir, year):
+        """Extract .bil and .hdr files from a yearly zip archive."""
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                for file in zip_ref.namelist():
+                    if file.endswith(".bil") or file.endswith(".hdr"):
+                        # Create month subdirectory
+                        month = file.split("_")[4][:6]  # Extract YYYYMM from the filename
+                        month_dir = os.path.join(extract_dir, month)
+                        os.makedirs(month_dir, exist_ok=True)
+                        # Extract the file
+                        zip_ref.extract(file, month_dir)
+                        self.logger.info(f"Extracted {file} to {month_dir}")
+        except zipfile.BadZipFile:
+            self.logger.error(f"Error: {zip_path} is not a valid zip file")
+
+    def download_by_month(self, year: int, month: int):
+        """
+        Download the monthly data for the given year and month.
+        Args:
+            year (int): The year to download data for
+            month (int): The month to download data for
+        """
+        year_url = f"{self.base_url}{year}/"
+        file_name = f"PRISM_ppt_stable_4kmM3_{year}{month:02d}_bil.zip"
+        file_url = f"{year_url}{file_name}"
+
+        year_dir = os.path.join(self.raw_dir, str(year))
+        os.makedirs(year_dir, exist_ok=True)
+
+        zip_path = os.path.join(year_dir, file_name)
+        success = self._download_file(file_url, zip_path)
+        if success:
+            self._extract_bil_and_hdr(zip_path, year_dir, year)
+        else:
+            self.logger.error(f"Failed to download {file_name}")
+
+    def download_by_year(self, year: int):
+        """
+        Download all monthly data for the given year
+        """
+        year_url = f"{self.base_url}{year}/"
+        file_name = f"PRISM_ppt_stable_4kmM3_{year}_all_bil.zip"
+        file_url = f"{year_url}{file_name}"
+
+        year_dir = os.path.join(self.raw_dir, str(year))
+        os.makedirs(year_dir, exist_ok=True)
+
+        zip_path = os.path.join(year_dir, file_name)
+
+        # Download the file if it doesn't already exist
+        if not os.path.exists(zip_path):
+            self.logger.info(f"Downloading {file_name}...")
+            success = self._download_file(file_url, zip_path, allow_fail=True)
+            if not success:
+                # The all_bil file is not available, so we need to download the monthly files
+                for month in range(1, 13):
+                    self.download_by_month(year, month)
+                    time.sleep(self.delay)
+        else:
+            self.logger.info(f"{file_name} already exists. Skipping download.")
+
+        self._extract_bil_and_hdr(zip_path, year_dir, year)
+
+    def consolidate_bil_files(self, year: int):
+        """Consolidate all .bil files into a flat directory."""
+        year_dir = os.path.join(self.raw_dir, str(year))
+        if not os.path.exists(year_dir):
+            self.logger.info(f"Year directory {year_dir} does not exist. Skipping.")
+            return
+
+        self.logger.info(f"Processing year {year}...")
+        for root, _, files in os.walk(year_dir):
+            for file in files:
+                # Make sure filename matches PRISM_ppt_stable_4kmM3_198501_bil.bil
+                matches = re.match(r"PRISM_ppt_stable_4kmM3_(\d{6})_bil.[a-z]{3,3}", file)
+                if not matches:
+                    self.logger.info(f"Skipping {file} - wrong filename format")
+                    continue
+
+                if file.endswith(".bil") or file.endswith(".hdr"):
+                    source_path = os.path.join(root, file)
+                    target_path = os.path.join(self.monthly_dir, file)
+
+                    # If already exists, skip
+                    if os.path.exists(target_path):
+                        self.logger.info(f"Skipping {source_path} - already exists")
+                        continue
+
+                    shutil.copy(source_path, target_path)
+                    self.logger.info(f"Copied {source_path} to {target_path}")
+
+    def _parse_date_from_filename(self, filename):
+        """Parse start and end dates from the filename."""
+        parts = filename.split("_")
+        if len(parts) < 5:
+            raise ValueError(f"Unexpected filename format: {filename}")
+        date_str = parts[4]  # YYYYMM
+        start_date = datetime.strptime(date_str, "%Y%m")
+        end_date = (start_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return start_date.strftime("%Y%m01"), end_date.strftime("%Y%m01")
+
+    def _calculate_bounds(self, transform, width, height):
+        """Calculate bounds from an Affine transform and raster dimensions."""
+        left = transform.c
+        top = transform.f
+        right = left + transform.a * width
+        bottom = top + transform.e * height
+        return left, bottom, right, top
+
+    def _reproject_raster(self, src_crs, data, transform):
+        """Reproject raster data to the target CRS."""
+        bounds = self._calculate_bounds(transform, data.shape[2], data.shape[1])
+        transform, width, height = calculate_default_transform(
+            src_crs, self.target_crs, data.shape[2], data.shape[1], *bounds
+        )
+        dest_data = np.empty((data.shape[0], height, width), dtype=data.dtype)
+        dest_meta = {
+            "crs": self.target_crs,
+            "transform": transform,
+            "width": width,
+            "height": height,
+            "count": data.shape[0],
+            "dtype": data.dtype.name,
+            "driver": "GTiff",
+        }
+
+        for i in range(data.shape[0]):
+            reproject(
+                source=data[i],
+                destination=dest_data[i],
+                src_transform=transform,
+                src_crs=src_crs,
+                dst_transform=transform,
+                dst_crs=self.target_crs,
+                resampling=Resampling.nearest,
+            )
+
+        return dest_data, dest_meta
+
+    def process_tiles(self):
+        """Chop each .bil file into tiles and save them in the specified format."""
+        # Load GeoJSON
+        tiles_gdf = gpd.read_file(self.tiles_geojson)
+
+        # Loop through all .bil files
+        for bil_file in os.listdir(self.monthly_dir):
+            if bil_file.endswith(".bil"):
+                bil_path = os.path.join(self.monthly_dir, bil_file)
+                print(f"Processing {bil_file}...")
+
+                # Parse dates from filename
+                try:
+                    start_date, end_date = self._parse_date_from_filename(bil_file)
+                except ValueError as e:
+                    print(e)
+                    continue
+
+                # Open the .bil file
+                with rasterio.open(bil_path) as src:
+                    # Manually assign CRS if missing
+                    if src.crs is None:
+                        src_crs = self.source_crs
+                    else:
+                        src_crs = src.crs
+
+                    # Loop through each feature in the GeoJSON
+                    for _, feature in tiles_gdf.iterrows():
+                        hv = feature["hv"]
+                        geometry = [feature["geometry"]]
+
+                        # Mask the raster with the feature geometry
+                        try:
+                            out_image, out_transform = mask(src, geometry, crop=True)
+                            # Reproject the raster data to WGS84
+                            reprojected_data, reprojected_meta = self._reproject_raster(src_crs, out_image, out_transform)
+
+                            # Generate output filename
+                            output_filename = f"OREGON_STATE_PRISM_{hv}_{start_date}_{end_date}_PPT.tif"
+                            output_path = os.path.join(self.output_dir, output_filename)
+
+                            # Write the output tile
+                            with rasterio.open(output_path, "w", **reprojected_meta) as dest:
+                                dest.write(reprojected_data)
+                            print(f"Saved tile {output_filename}")
+                        except Exception as e:
+                            print(f"Error processing tile {hv}: {e}")
