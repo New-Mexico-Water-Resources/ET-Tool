@@ -205,6 +205,7 @@ class GEEAWSDataPipeline:
             "et_ensemble_mad": "ET",
             "et_ensemble_mad_min": "ET_MIN",
             "et_ensemble_mad_max": "ET_MAX",
+            "eto": "ETO",
         }
         band_name = BAND_NAME_MAP[band] if band in BAND_NAME_MAP else band
 

@@ -29,9 +29,9 @@ class S3Source(DataSource):
         bucket_name: str = None,
         region_name: str = None,
         temporary_directory: str = None,
-        S3_table_filename: str = None,
-        remove_temporary_files: bool = None,
-        aws_profile: str = None,
+        S3_table_filename: str | None = None,
+        remove_temporary_files: bool | None = None,
+        aws_profile: str | None = None,
     ):
         if remove_temporary_files is None:
             remove_temporary_files = REMOVE_TEMPORARY_FILES
