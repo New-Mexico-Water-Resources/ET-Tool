@@ -2,7 +2,7 @@ import ee
 import geemap
 import boto3
 from water_rights_visualizer.google_drive import google_drive_login
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from typing import Any
 import logging
 import os
@@ -104,6 +104,7 @@ class GEEAWSDataPipeline:
         """
         with open(self.error_log_filename, "a") as error_log_file:
             err_start = self._error_log_prefix()
+            error_log_file.write(f"{err_start}****************************************************\n")
             error_log_file.write(f"{err_start}Error log for {self.product}\n")
             error_log_file.write(f"{err_start}Product: {self.product}\n")
             error_log_file.write(f"{err_start}Product prefix: {self.product_prefix}\n")
@@ -115,6 +116,7 @@ class GEEAWSDataPipeline:
             error_log_file.write(f"{err_start}AWS profile: {self.aws_profile}\n")
             error_log_file.write(f"{err_start}Gdrive folder: {self.gdrive_folder}\n")
             error_log_file.write(f"{err_start}Temp local folder: {self.temp_local_folder}\n")
+            error_log_file.write(f"{err_start}****************************************************\n")
 
     def log_error(self, error_message: str):
         """

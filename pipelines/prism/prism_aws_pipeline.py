@@ -3,7 +3,7 @@ import os
 import time
 import zipfile
 import requests
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import re
 import shutil
 import numpy as np

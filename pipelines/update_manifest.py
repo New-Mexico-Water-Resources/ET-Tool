@@ -3,7 +3,7 @@ import pandas as pd
 import yaml
 from datetime import datetime
 import re
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import logging
 
 
@@ -172,7 +172,7 @@ class S3ManifestTracker:
             self.logger.info("No files found matching the criteria")
 
         if write_to_file:
-            new_inventory_df.sort_values("date").to_csv(
+            new_inventory_df.sort_values(["date", "filename"]).to_csv(
                 output_path, index=False, columns=["filename", "variable", "date", "tile"]
             )
 
