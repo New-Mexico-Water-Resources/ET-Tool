@@ -84,7 +84,7 @@ export const MAP_LAYER_OPTIONS = {
     name: "MODIS ET 500",
     attribution:
       'Imagery re-formatted and made available from the NASA MODIS MOD16A2 dataset, "Steve Running, Qiaozhen Mu - University of Montana and MODAPS SIPS - NASA. (2015). MOD16A2 MODIS/Terra Evapotranspiration 8-day L4 Global 500m SIN Grid. NASA LP DAAC. http://doi.org/10.5067/MODIS/MOD16A2.006"',
-    url: `${TILE_SERVER_URL}/{refresh}/ET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    url: `${TILE_SERVER_URL}/{refresh}/MOD16A2/ET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
     maxZoom: 11,
     time: "2021-01-01",
     backgroundProvider: "Google Satellite",
@@ -93,7 +93,7 @@ export const MAP_LAYER_OPTIONS = {
     refresh: "dynamic",
     showColorScale: true,
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
-    statsURL: `${TILE_SERVER_URL}/stats/ET/{time}/{mode}`,
+    statsURL: `${TILE_SERVER_URL}/stats/MOD16A2/ET/{time}/{mode}`,
     units: "mm/8-days",
     modes: {
       absolute: "Absolute",
@@ -105,7 +105,7 @@ export const MAP_LAYER_OPTIONS = {
     name: "MODIS PET 500",
     attribution:
       'Imagery re-formatted and made available from the NASA MODIS MOD16A2 dataset, "Steve Running, Qiaozhen Mu - University of Montana and MODAPS SIPS - NASA. (2015). MOD16A2 MODIS/Terra Evapotranspiration 8-day L4 Global 500m SIN Grid. NASA LP DAAC. http://doi.org/10.5067/MODIS/MOD16A2.006"',
-    url: `${TILE_SERVER_URL}/{refresh}/PET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    url: `${TILE_SERVER_URL}/{refresh}/MOD16A2/PET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
     maxZoom: 11,
     time: "2021-01-01",
     backgroundProvider: "Google Satellite",
@@ -114,7 +114,7 @@ export const MAP_LAYER_OPTIONS = {
     refresh: "dynamic",
     showColorScale: true,
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
-    statsURL: `${TILE_SERVER_URL}/stats/PET/{time}/{mode}`,
+    statsURL: `${TILE_SERVER_URL}/stats/MOD16A2/PET/{time}/{mode}`,
     units: "mm/8-days",
     modes: {
       absolute: "Absolute",
@@ -126,7 +126,7 @@ export const MAP_LAYER_OPTIONS = {
     name: "MODIS ESI 500",
     attribution:
       'Imagery re-formatted and made available from the NASA MODIS MOD16A2 dataset, "Steve Running, Qiaozhen Mu - University of Montana and MODAPS SIPS - NASA. (2015). MOD16A2 MODIS/Terra Evapotranspiration 8-day L4 Global 500m SIN Grid. NASA LP DAAC. http://doi.org/10.5067/MODIS/MOD16A2.006"',
-    url: `${TILE_SERVER_URL}/{refresh}/ESI/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    url: `${TILE_SERVER_URL}/{refresh}/MOD16A2/ESI/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
     maxZoom: 11,
     time: "2021-01-01",
     backgroundProvider: "Google Satellite",
@@ -135,7 +135,70 @@ export const MAP_LAYER_OPTIONS = {
     refresh: "dynamic",
     showColorScale: true,
     availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
-    statsURL: `${TILE_SERVER_URL}/stats/ESI/{time}/{mode}`,
+    statsURL: `${TILE_SERVER_URL}/stats/MOD16A2/ESI/{time}/{mode}`,
+    units: "",
+    step: 0.01,
+    modes: {
+      absolute: "Absolute",
+      prevPass: "Previous Pass Difference",
+    },
+  },
+  "VIIRS ET 500": {
+    name: "VIIRS ET 500",
+    attribution:
+      'Imagery re-formatted and made available from the NASA VIIRS VJ116A2 dataset, "Zhao, M., Kimball, J., & Devadiga, S. (2025). VIIRS/JPSS1 Actual and Potential Evapotranspiration 8-Day L4 Global 500m SIN Grid V002 [Data set]. NASA LP DAAC. https://doi.org/10.5067/VIIRS/VJ116A2.002"',
+    url: `${TILE_SERVER_URL}/{refresh}/VJ116A2/ET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    maxZoom: 11,
+    time: "2021-01-01",
+    backgroundProvider: "Google Satellite",
+    labelsProvider: "CartoDB DarkMatter Labels",
+    tms: true,
+    refresh: "dynamic",
+    showColorScale: true,
+    availableDatesURL: `${TILE_SERVER_URL}/viirs-dates`,
+    statsURL: `${TILE_SERVER_URL}/stats/VJ116A2/ET/{time}/{mode}`,
+    units: "mm/8-days",
+    modes: {
+      absolute: "Absolute",
+      prevPass: "Previous Pass Difference",
+    },
+  },
+
+  "VIIRS PET 500": {
+    name: "VIIRS PET 500",
+    attribution:
+      'Imagery re-formatted and made available from the NASA VIIRS VJ116A2 dataset, "Zhao, M., Kimball, J., & Devadiga, S. (2025). VIIRS/JPSS1 Actual and Potential Evapotranspiration 8-Day L4 Global 500m SIN Grid V002 [Data set]. NASA LP DAAC. https://doi.org/10.5067/VIIRS/VJ116A2.002"',
+    url: `${TILE_SERVER_URL}/{refresh}/VJ116A2/PET/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    maxZoom: 11,
+    time: "2021-01-01",
+    backgroundProvider: "Google Satellite",
+    labelsProvider: "CartoDB DarkMatter Labels",
+    tms: true,
+    refresh: "dynamic",
+    showColorScale: true,
+    availableDatesURL: `${TILE_SERVER_URL}/viirs-dates`,
+    statsURL: `${TILE_SERVER_URL}/stats/VJ116A2/PET/{time}/{mode}`,
+    units: "mm/8-days",
+    modes: {
+      absolute: "Absolute",
+      prevPass: "Previous Pass Difference",
+    },
+  },
+
+  "VIIRS ESI 500": {
+    name: "VIIRS ESI 500",
+    attribution:
+      'Imagery re-formatted and made available from the NASA VIIRS VJ116A2 dataset, "Zhao, M., Kimball, J., & Devadiga, S. (2025). VIIRS/JPSS1 Actual and Potential Evapotranspiration 8-Day L4 Global 500m SIN Grid V002 [Data set]. NASA LP DAAC. https://doi.org/10.5067/VIIRS/VJ116A2.002"',
+    url: `${TILE_SERVER_URL}/{refresh}/VJ116A2/ESI/{time}/{z}/{x}/{y}.png?color_min={minColor}&color_max={maxColor}&comparison_mode={mode}`,
+    maxZoom: 11,
+    time: "2021-01-01",
+    backgroundProvider: "Google Satellite",
+    labelsProvider: "CartoDB DarkMatter Labels",
+    tms: true,
+    refresh: "dynamic",
+    showColorScale: true,
+    availableDatesURL: `${TILE_SERVER_URL}/viirs-dates`,
+    statsURL: `${TILE_SERVER_URL}/stats/VJ116A2/ESI/{time}/{mode}`,
     units: "",
     step: 0.01,
     modes: {

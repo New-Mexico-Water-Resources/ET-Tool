@@ -33,7 +33,7 @@ app.add_middleware(
 
 ET_PROCESSED_DIR = os.environ.get("ET_PROCESSED_DIR", "/root/data/modis/raw_et")
 PET_PROCESSED_DIR = os.environ.get("PET_PROCESSED_DIR", "/root/data/modis/raw_pet")
-BASE_DATA_PRODUCT = os.environ.get("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
+# BASE_DATA_PRODUCT = os.environ.get("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
 BUCKET_PREFIX = os.environ.get("MODIS_S3_BUCKET_PREFIX", "modis/")
 
 AWS_PROFILE = os.environ.get("AWS_PROFILE", None)
@@ -67,16 +67,16 @@ def get_required_bands(band: str) -> List[str]:
     return ["ET", "PET"] if band == "ESI" else [band]
 
 
-def load_band_data(time_str: str, bands: List[str]) -> Dict[str, np.ndarray]:
+def load_band_data(data_product: str, time_str: str, bands: List[str]) -> Dict[str, np.ndarray]:
     """Load band data from local files or S3."""
     band_data = {}
     for band in bands:
-        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif")
+        path = os.path.join(ET_PROCESSED_DIR, f"{data_product}_MERGED_{time_str}_{band}.tif")
 
         if not os.path.exists(path):
             if S3_INPUT_BUCKET:
                 s3 = boto3.Session(profile_name=AWS_PROFILE).client("s3")
-                key = f"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band}.tif"
+                key = f"{BUCKET_PREFIX}{data_product}_MERGED_{time_str}_{band}.tif"
                 try:
                     s3.download_file(S3_INPUT_BUCKET, key, path)
                 except Exception as e:
@@ -163,15 +163,15 @@ def create_rgba_tile(data: np.ndarray, min_val: float, max_val: float, compariso
     return np.dstack([rgb_data, alpha])
 
 
-@app.get("/ts_v1/tiles/modis-dates")
-async def get_modis_dates():
+@app.get("/ts_v1/tiles/{data_product}/dates")
+async def get_dates(data_product: str):
     if not os.path.exists(ET_PROCESSED_DIR):
         os.makedirs(ET_PROCESSED_DIR, exist_ok=True)
 
     # Return a list of available MODIS dates
     dates = []
     for tiff_file in os.listdir(ET_PROCESSED_DIR):
-        matches = re.match(rf"{BASE_DATA_PRODUCT}_MERGED_(\d{{8}})_.+\.tif", tiff_file)
+        matches = re.match(rf"{data_product}_MERGED_(\d{{8}})_.+\.tif", tiff_file)
         if not matches:
             continue
         raw_date = matches.group(1)
@@ -190,7 +190,7 @@ async def get_modis_dates():
             for response in pages:
                 for obj in response.get("Contents", []):
                     key = obj["Key"]
-                    matches = re.match(rf"{BUCKET_PREFIX}{BASE_DATA_PRODUCT}_MERGED_(\d{{8}})_.+\.tif", key)
+                    matches = re.match(rf"{BUCKET_PREFIX}{data_product}_MERGED_(\d{{8}})_.+\.tif", key)
                     if not matches:
                         continue
                     raw_date = matches.group(1)
@@ -355,8 +355,8 @@ def get_counties() -> List[Dict[str, str]]:
         return counties["features"]
 
 
-@app.get("/ts_v1/tiles/stats/{band}/{time}/{comparison_mode}")
-async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
+@app.get("/ts_v1/tiles/stats/{data_product}/{band}/{time}/{comparison_mode}")
+async def get_stats(data_product: str, band: str, time: str, comparison_mode: str = "absolute"):
     """Get statistics for a given band and time."""
     validate_band(band)
     validate_date_format(time)
@@ -366,20 +366,20 @@ async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
     bands = get_required_bands(band)
 
     # Load current data
-    band_data = load_band_data(time_str, bands)
+    band_data = load_band_data(data_product, time_str, bands)
     current_data = calculate_band_values(band, band_data)
 
     if comparison_mode == "absolute":
         min_val, max_val = get_color_limits(current_data, esi_mode, comparison_mode, use_std_dev=True)
     else:
         # Get previous date data
-        available_dates = await get_modis_dates()
+        available_dates = await get_dates(data_product)
         prev_date = get_previous_date(time, available_dates)
         if not prev_date:
             raise HTTPException(status_code=404, detail="Previous date not found")
 
         prev_time_str = get_time_str(prev_date)
-        prev_band_data = load_band_data(prev_time_str, bands)
+        prev_band_data = load_band_data(data_product, prev_time_str, bands)
         prev_data = calculate_band_values(band, prev_band_data)
 
         diff = calculate_difference(current_data, prev_data, esi_mode)
@@ -389,7 +389,7 @@ async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
     county_stats = []
 
     with rasterio.open(
-        os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{list(band_data.keys())[0]}.tif")
+        os.path.join(ET_PROCESSED_DIR, f"{data_product}_MERGED_{time_str}_{list(band_data.keys())[0]}.tif")
     ) as src:
         transform = src.transform
 
@@ -420,8 +420,9 @@ async def get_stats(band: str, time: str, comparison_mode: str = "absolute"):
     return {"min": min_val, "max": max_val, "county_stats": county_stats}
 
 
-@app.get("/ts_v1/tiles/dynamic/{band}/{time}/{z}/{x}/{y}.png")
+@app.get("/ts_v1/tiles/dynamic/{data_product}/{band}/{time}/{z}/{x}/{y}.png")
 async def serve_dynamic_tile(
+    data_product: str,
     band: str,
     time: str,
     z: int,
@@ -442,7 +443,7 @@ async def serve_dynamic_tile(
     # Load current data
     band_data = {}
     for band_name in bands:
-        path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{time_str}_{band_name}.tif")
+        path = os.path.join(ET_PROCESSED_DIR, f"{data_product}_MERGED_{time_str}_{band_name}.tif")
         full_data = get_tile(path, z, x, y)
 
         if full_data is None or np.isnan(full_data).all():
@@ -454,7 +455,7 @@ async def serve_dynamic_tile(
 
     if comparison_mode == "prevPass":
         # Get previous date data
-        available_dates = await get_modis_dates()
+        available_dates = await get_dates(data_product)
         prev_date = get_previous_date(time, available_dates)
         if not prev_date:
             return Response(content=b"", media_type="image/png", status_code=404)
@@ -462,7 +463,7 @@ async def serve_dynamic_tile(
         prev_time_str = get_time_str(prev_date)
         prev_band_data = {}
         for band_name in bands:
-            prev_path = os.path.join(ET_PROCESSED_DIR, f"{BASE_DATA_PRODUCT}_MERGED_{prev_time_str}_{band_name}.tif")
+            prev_path = os.path.join(ET_PROCESSED_DIR, f"{data_product}_MERGED_{prev_time_str}_{band_name}.tif")
             prev_data = get_tile(prev_path, z, x, y)
             if prev_data is None or np.isnan(prev_data).all():
                 return Response(content=b"", media_type="image/png", status_code=404)
