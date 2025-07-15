@@ -89,9 +89,7 @@ def download_tile_from_s3(date, tile, dest_folder="modis_downloads"):
     if "Contents" not in response:
         print(f"No files found for {filename} in {BUCKET_NAME}.")
         return
-
-    hdf_path = next((item["Key"] for item in response["Contents"] if item["Key"].endswith(".hdf")), None)
-
+    hdf_path = next((item["Key"] for item in response["Contents"] if item["Key"].endswith(".h5")), None)
     s3.download_file(BUCKET_NAME, hdf_path, save_path)
 
     return save_path
