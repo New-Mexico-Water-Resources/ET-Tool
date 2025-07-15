@@ -16,7 +16,7 @@ def get_env_path(key, default):
 # Get paths from environment variables
 DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "~/data/modis_net_et_8_day/downloads")
 INPUT_DIR = get_env_path("MODIS_INPUT_DIR", "~/data/modis_net_et_8_day/et_tiffs")
-BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "VJ116A2")
 
 
 def convert_date(yyyyddd):
@@ -82,7 +82,7 @@ def process_hdf_files(bands=["ET_500m"]):
     et_tile_folder = INPUT_DIR
     pattern = (
         rf"{BASE_DATA_PRODUCT}(?:GF)?\.A(\d{{7}})\.(h\d{{2}}v\d{{2}})"
-        if BASE_DATA_PRODUCT == "MOD16A2"
+        if BASE_DATA_PRODUCT == "MOD16A2" or BASE_DATA_PRODUCT == "VJ116A2"
         else rf"{BASE_DATA_PRODUCT}\.A(\d{{7}})\.(h\d{{2}}v\d{{2}})"
     )
 

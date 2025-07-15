@@ -212,7 +212,7 @@ class GEEAWSDataPipeline:
         band_name = BAND_NAME_MAP[band] if band in BAND_NAME_MAP else band
 
         start_output_date = date.format("YYYYMMdd").getInfo()
-        next_day = date.advance(1, "day")
+        next_day = date.advance(1, "month")
         end_output_date = next_day.format("YYYYMMdd").getInfo()
         layer_name = f"{self.product_prefix}_{tile_hv}_{start_output_date}_{end_output_date}_{band_name}"
         return layer_name

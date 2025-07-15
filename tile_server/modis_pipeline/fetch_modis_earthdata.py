@@ -11,8 +11,8 @@ load_dotenv()
 # Configuration via environment variables with defaults
 S3_ENDPOINT = os.getenv("MODIS_S3_ENDPOINT", "https://data.lpdaac.earthdatacloud.nasa.gov/s3credentials")
 BUCKET_NAME = os.getenv("MODIS_S3_BUCKET", "lp-prod-protected")
-BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
-DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "VJ116A2")
+DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "002")
 DATA_PRODUCT = f"{BASE_DATA_PRODUCT}.{DATA_PRODUCT_VERSION}"
 
 

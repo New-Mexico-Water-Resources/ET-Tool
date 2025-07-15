@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import axios, { AxiosInstance } from "axios";
-import { API_URL, QUEUE_STATUSES, ROLES } from "./constants";
+import { API_URL, DATA_END_YEAR, QUEUE_STATUSES, ROLES } from "./constants";
 import { formatElapsedTime, formJobForQueue } from "./helpers";
 import packageJson from "../../package.json";
 
@@ -273,11 +273,11 @@ const useStore = create<Store>()(
       setJobName: (jobName) => set({ jobName }),
       minYear: 1985,
       setMinYear: (minYear) => set({ minYear }),
-      maxYear: 2023,
+      maxYear: DATA_END_YEAR,
       setMaxYear: (maxYear) => set({ maxYear }),
       startYear: 1985,
       setStartYear: (startYear) => set({ startYear }),
-      endYear: 2023,
+      endYear: DATA_END_YEAR,
       setEndYear: (endYear) => set({ endYear }),
       loadedFile: null,
       setLoadedFile: (loadedFile) => set({ loadedFile }),

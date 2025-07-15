@@ -19,6 +19,7 @@ export const ROLES = {
 };
 
 export const OPENET_TRANSITION_DATE = 2008;
+export const DATA_END_YEAR = 2024;
 
 export const ET_COLORMAP = ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"];
 export const DIFF_COLORMAP = ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"];

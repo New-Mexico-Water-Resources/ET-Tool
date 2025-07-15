@@ -153,7 +153,7 @@ const UploadDialog = () => {
       return {
         visible: true,
         name: name,
-        acres: geojson?.properties?.Acres,
+        acres: area,
         comments: geojson?.properties?.Comments,
         county: geojson?.properties?.County,
         polygon_So: geojson?.properties?.Polygon_So,

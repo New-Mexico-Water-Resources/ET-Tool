@@ -8,8 +8,8 @@ from datetime import datetime
 from fetch_modis_earthdata import download_tile_from_s3
 
 # Configuration
-BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")  # MOD16A2GF for gap-filled data
-DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "VJ116A2")  # MOD16A2GF for gap-filled data
+DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "002")
 MODIS_BASE_URL = f"https://e4ftl01.cr.usgs.gov/MOLT/{BASE_DATA_PRODUCT}.{DATA_PRODUCT_VERSION}/"
 
 S3_INPUT_BUCKET = os.getenv("S3_INPUT_BUCKET", "ose-dev-inputs")
