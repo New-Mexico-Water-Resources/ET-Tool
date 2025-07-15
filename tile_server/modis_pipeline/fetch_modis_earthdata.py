@@ -125,5 +125,32 @@ def list_all_tiles_for_year(year):
     return tiles
 
 
+def list_all_dates_for_year(year):
+    """List all available MODIS dates for a given year."""
+    year_str = str(year)
+    filename = f"{BASE_DATA_PRODUCT}.A{year_str}"
+    creds = retrieve_credentials()
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=creds["accessKeyId"],
+        aws_secret_access_key=creds["secretAccessKey"],
+        aws_session_token=creds["sessionToken"],
+    )
+    object_path = f"{DATA_PRODUCT}/{filename}"
+    dates = set()
+    paginator = s3.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=BUCKET_NAME, Prefix=object_path)
+    for page in pages:
+        if "Contents" not in page:
+            print(f"No files found for {filename} in {BUCKET_NAME}.")
+            continue
+        for item in page["Contents"]:
+            key = item["Key"]
+            raw_date = key.split(".")[2]
+            date = datetime.datetime.strptime(raw_date, "A%Y%j").strftime("%Y.%m.%d")
+            dates.add(date)
+    return dates
+
+
 if __name__ == "__main__":
     download_tile_from_s3("2025.03.14", "h08v05", dest_folder="temp_test")

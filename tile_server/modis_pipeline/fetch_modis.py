@@ -5,7 +5,7 @@ import boto3
 import tqdm
 import re
 from datetime import datetime
-from fetch_modis_earthdata import download_tile_from_s3, list_all_tiles_for_year
+from fetch_modis_earthdata import download_tile_from_s3, list_all_dates_for_year
 
 # Configuration
 BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "VJ116A2")  # MOD16A2GF for gap-filled data
@@ -87,7 +87,7 @@ def get_date_from_s3_key(key):
 
 def fetch_new_dates(limit=None):
     current_year = datetime.now().year
-    available_dates = list_all_tiles_for_year(current_year)
+    available_dates = list_all_dates_for_year(current_year)
 
     if not os.path.exists(EXISTING_MERGED_FOLDER):
         os.makedirs(EXISTING_MERGED_FOLDER, exist_ok=True)
