@@ -127,8 +127,8 @@ def start_workflow(
     # Update data product configuration if CLI arguments are provided
     global BASE_DATA_PRODUCT, DATA_PRODUCT_VERSION
     if data_product or data_product_version:
-        BASE_DATA_PRODUCT = data_product or os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
-        DATA_PRODUCT_VERSION = data_product_version or os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
+        BASE_DATA_PRODUCT = data_product or os.getenv("MODIS_BASE_DATA_PRODUCT", "VJ116A2")
+        DATA_PRODUCT_VERSION = data_product_version or os.getenv("MODIS_DATA_PRODUCT_VERSION", "002")
         # Update environment variables for imported modules
         os.environ["MODIS_BASE_DATA_PRODUCT"] = BASE_DATA_PRODUCT
         os.environ["MODIS_DATA_PRODUCT_VERSION"] = DATA_PRODUCT_VERSION

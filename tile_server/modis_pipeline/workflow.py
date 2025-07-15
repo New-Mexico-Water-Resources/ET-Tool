@@ -1,5 +1,6 @@
 import os
 from pyhdf.SD import SD, SDC
+import h5py
 import numpy as np
 from osgeo import gdal, osr
 import re
@@ -27,14 +28,14 @@ def convert_date(yyyyddd):
     return date.strftime("%Y%m%d")
 
 
-def extract_band_name(hdf_file, band_name="ET_500m", output_tif=None):
+def extract_band_from_hdf4(hdf_file, band_name="ET_500m", output_tif=None):
     """
-    Extract the band name from the HDF file name.
+    Extract band data from HDF4 files using pyhdf.
 
     Args:
-        hdf_file: Path to the HDF file
+        hdf_file: Path to the HDF4 file
         band_name: Name of the band to extract (default: "ET_500m")
-        output_tif: Path to save the output TIFF (if None, will be derived from hdf_file)
+        output_tif: Path to save the output TIFF
     """
     hdf = SD(hdf_file, SDC.READ)
 
@@ -71,6 +72,93 @@ def extract_band_name(hdf_file, band_name="ET_500m", output_tif=None):
     dst_ds.GetRasterBand(1).WriteArray(data)
     dst_ds.FlushCache()
     dst_ds = None
+    hdf.end()
+
+
+def extract_band_from_h5(h5_file, band_name="ET_500m", output_tif=None):
+    """
+    Extract band data from HDF5 files using h5py.
+
+    Args:
+        h5_file: Path to the HDF5 file
+        band_name: Name of the band to extract (default: "ET_500m")
+        output_tif: Path to save the output TIFF
+    """
+    with h5py.File(h5_file, "r") as h5f:
+        # Find the band dataset in the H5 file
+        band_data = None
+
+        def find_dataset(name, obj):
+            if isinstance(obj, h5py.Dataset) and band_name in name:
+                nonlocal band_data
+                band_data = obj[:]
+
+        h5f.visititems(find_dataset)
+
+        if band_data is None:
+            raise ValueError(f"Band {band_name} not found in {h5_file}")
+
+        # Apply data filters
+        data = np.where(band_data == -32767, np.nan, band_data)
+        data = np.where(data > 32700, np.nan, data)
+
+        # Try to extract geospatial information from metadata
+        # H5 files might store metadata differently, so we'll look for common attributes
+        geotransform = None
+        projection = None
+
+        # Look for StructMetadata or other geospatial attributes
+        for attr_name in h5f.attrs.keys():
+            if "StructMetadata" in attr_name:
+                struct_metadata = h5f.attrs[attr_name]
+                if isinstance(struct_metadata, bytes):
+                    struct_metadata = struct_metadata.decode("utf-8")
+
+                ul_match = re.search(r"UpperLeftPointMtrs=\((-?\d+\.\d+),\s*(-?\d+\.\d+)\)", struct_metadata)
+                lr_match = re.search(r"LowerRightMtrs=\((-?\d+\.\d+),\s*(-?\d+\.\d+)\)", struct_metadata)
+
+                if ul_match and lr_match:
+                    ulx, uly = map(float, ul_match.groups())
+                    geotransform = (ulx, 463.312716527917246, 0, uly, 0, -463.312716527917246)
+                    break
+
+        # Default geotransform if not found in metadata
+        if geotransform is None:
+            geotransform = (0, 1, 0, 0, 0, -1)  # Default identity transform
+
+        # Create output TIFF
+        driver = gdal.GetDriverByName("GTiff")
+        rows, cols = data.shape
+        dst_ds = driver.Create(output_tif, cols, rows, 1, gdal.GDT_Float32)
+
+        dst_ds.SetGeoTransform(geotransform)
+
+        srs = osr.SpatialReference()
+        srs.ImportFromProj4("+proj=sinu +R=6371007.181 +nadgrids=@null +wktext")
+        dst_ds.SetProjection(srs.ExportToWkt())
+
+        dst_ds.GetRasterBand(1).WriteArray(data)
+        dst_ds.FlushCache()
+        dst_ds = None
+
+
+def extract_band_name(hdf_file, band_name="ET_500m", output_tif=None):
+    """
+    Extract band data from HDF4 or HDF5 files by routing to appropriate function.
+
+    Args:
+        hdf_file: Path to the HDF4 (.hdf) or HDF5 (.h5) file
+        band_name: Name of the band to extract (default: "ET_500m")
+        output_tif: Path to save the output TIFF
+    """
+    file_ext = os.path.splitext(hdf_file)[1].lower()
+
+    if file_ext == ".hdf":
+        extract_band_from_hdf4(hdf_file, band_name, output_tif)
+    elif file_ext == ".h5":
+        extract_band_from_h5(hdf_file, band_name, output_tif)
+    else:
+        raise ValueError(f"Unsupported file format: {file_ext}")
 
 
 def process_hdf_files(bands=["ET_500m"]):
@@ -86,11 +174,11 @@ def process_hdf_files(bands=["ET_500m"]):
         else rf"{BASE_DATA_PRODUCT}\.A(\d{{7}})\.(h\d{{2}}v\d{{2}})"
     )
 
-    for hdf_file in tqdm(os.listdir(DOWNLOAD_FOLDER), desc="Processing HDF files"):
-        if hdf_file.endswith(".hdf"):
-            match = re.search(pattern, hdf_file)
+    for filename in tqdm(os.listdir(DOWNLOAD_FOLDER), desc="Processing HDF files"):
+        if filename.endswith((".hdf", ".h5")):
+            match = re.search(pattern, filename)
             if not match:
-                print(f"Skipping {hdf_file}")
+                print(f"Skipping {filename}")
                 continue
 
             yyyyddd, tile_id = match.groups()
@@ -101,7 +189,7 @@ def process_hdf_files(bands=["ET_500m"]):
 
             for band_name in bands:
                 output_tif = os.path.join(output_dir, f"{BASE_DATA_PRODUCT}_{band_name}_{date_str}_{tile_id}.tif")
-                hdf_path = os.path.join(DOWNLOAD_FOLDER, hdf_file)
+                file_path = os.path.join(DOWNLOAD_FOLDER, filename)
 
                 if not os.path.exists(output_tif):
-                    extract_band_name(hdf_path, band_name, output_tif)
+                    extract_band_name(file_path, band_name, output_tif)
