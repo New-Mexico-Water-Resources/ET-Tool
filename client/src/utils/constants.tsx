@@ -92,7 +92,7 @@ export const MAP_LAYER_OPTIONS = {
     tms: true,
     refresh: "dynamic",
     showColorScale: true,
-    availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
+    availableDatesURL: `${TILE_SERVER_URL}/MOD16A2/dates`,
     statsURL: `${TILE_SERVER_URL}/stats/MOD16A2/ET/{time}/{mode}`,
     units: "mm/8-days",
     modes: {
@@ -113,7 +113,7 @@ export const MAP_LAYER_OPTIONS = {
     tms: true,
     refresh: "dynamic",
     showColorScale: true,
-    availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
+    availableDatesURL: `${TILE_SERVER_URL}/MOD16A2/dates`,
     statsURL: `${TILE_SERVER_URL}/stats/MOD16A2/PET/{time}/{mode}`,
     units: "mm/8-days",
     modes: {
@@ -134,7 +134,7 @@ export const MAP_LAYER_OPTIONS = {
     tms: true,
     refresh: "dynamic",
     showColorScale: true,
-    availableDatesURL: `${TILE_SERVER_URL}/modis-dates`,
+    availableDatesURL: `${TILE_SERVER_URL}/MOD16A2/dates`,
     statsURL: `${TILE_SERVER_URL}/stats/MOD16A2/ESI/{time}/{mode}`,
     units: "",
     step: 0.01,
@@ -155,7 +155,7 @@ export const MAP_LAYER_OPTIONS = {
     tms: true,
     refresh: "dynamic",
     showColorScale: true,
-    availableDatesURL: `${TILE_SERVER_URL}/viirs-dates`,
+    availableDatesURL: `${TILE_SERVER_URL}/VJ116A2/dates`,
     statsURL: `${TILE_SERVER_URL}/stats/VJ116A2/ET/{time}/{mode}`,
     units: "mm/8-days",
     modes: {
@@ -176,7 +176,7 @@ export const MAP_LAYER_OPTIONS = {
     tms: true,
     refresh: "dynamic",
     showColorScale: true,
-    availableDatesURL: `${TILE_SERVER_URL}/viirs-dates`,
+    availableDatesURL: `${TILE_SERVER_URL}/VJ116A2/dates`,
     statsURL: `${TILE_SERVER_URL}/stats/VJ116A2/PET/{time}/{mode}`,
     units: "mm/8-days",
     modes: {
@@ -197,7 +197,7 @@ export const MAP_LAYER_OPTIONS = {
     tms: true,
     refresh: "dynamic",
     showColorScale: true,
-    availableDatesURL: `${TILE_SERVER_URL}/viirs-dates`,
+    availableDatesURL: `${TILE_SERVER_URL}/VJ116A2/dates`,
     statsURL: `${TILE_SERVER_URL}/stats/VJ116A2/ESI/{time}/{mode}`,
     units: "",
     step: 0.01,
