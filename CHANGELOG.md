@@ -1,3 +1,12 @@
+## 1.31.0 (2025-07-15)
+
+### Features
+- **New VIIRS Data**
+  - Adds VIIRS ET, PET, and ESI data to the application
+  - Pipeline was updated to switch from MODIS to VIIRS. MODIS data is still available historically.
+- Data Pipeline documentation
+  - New `pipelines` directory containing the pipeline code and documentation so that data can be added in the future
+
 ## 1.30.0 (2025-06-25)
 
 ### Features
