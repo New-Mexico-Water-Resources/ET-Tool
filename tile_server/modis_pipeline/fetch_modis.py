@@ -5,7 +5,7 @@ import boto3
 import tqdm
 import re
 from datetime import datetime
-from fetch_modis_earthdata import download_tile_from_s3
+from fetch_modis_earthdata import download_tile_from_s3, list_all_tiles_for_year
 
 # Configuration
 BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "VJ116A2")  # MOD16A2GF for gap-filled data
@@ -28,22 +28,22 @@ DOWNLOAD_FOLDER = get_env_path("MODIS_DOWNLOAD_DIR", "/root/data/modis/downloads
 EXISTING_MERGED_FOLDER = get_env_path("MODIS_MERGED_DIR", "/root/data/modis/raw_et")
 
 
-def get_available_dates(url=MODIS_BASE_URL):
-    response = requests.get(url)
-    response.raise_for_status()
+# def get_available_dates(url=MODIS_BASE_URL):
+#     response = requests.get(url)
+#     response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    dates = []
+#     soup = BeautifulSoup(response.text, "html.parser")
+#     dates = []
 
-    for a in soup.find_all("a"):
-        href = a.get("href")
-        if href and href.endswith("/"):
-            potential_date = href.strip("/")
-            formatted_date = potential_date.replace(".", "")
-            if formatted_date.isdigit():
-                dates.append(potential_date)
+#     for a in soup.find_all("a"):
+#         href = a.get("href")
+#         if href and href.endswith("/"):
+#             potential_date = href.strip("/")
+#             formatted_date = potential_date.replace(".", "")
+#             if formatted_date.isdigit():
+#                 dates.append(potential_date)
 
-    return dates
+#     return dates
 
 
 # *** We're rate limited by HTTP requests, better to use S3
@@ -86,7 +86,8 @@ def get_date_from_s3_key(key):
 
 
 def fetch_new_dates(limit=None):
-    available_dates = get_available_dates()
+    current_year = datetime.now().year
+    available_dates = list_all_tiles_for_year(current_year)
 
     if not os.path.exists(EXISTING_MERGED_FOLDER):
         os.makedirs(EXISTING_MERGED_FOLDER, exist_ok=True)
