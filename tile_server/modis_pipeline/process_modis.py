@@ -37,8 +37,8 @@ OUTPUT_DIR = get_env_path("MODIS_OUTPUT_DIR", os.path.join(BASE_DATA_DIR, "et_ti
 MERGED_DIR = get_env_path("MODIS_MERGED_DIR", os.path.join(BASE_DATA_DIR, "raw_et"))
 TEMP_DIR = get_env_path("MODIS_TEMP_DIR", os.path.join(BASE_DATA_DIR, "temp"))
 
-BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "MOD16A2")
-DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "061")
+BASE_DATA_PRODUCT = os.getenv("MODIS_BASE_DATA_PRODUCT", "VJ116A2")
+DATA_PRODUCT_VERSION = os.getenv("MODIS_DATA_PRODUCT_VERSION", "002")
 
 S3_ENDPOINT = os.getenv("MODIS_S3_ENDPOINT", "https://data.lpdaac.earthdatacloud.nasa.gov/s3credentials")
 S3_BUCKET = os.getenv("MODIS_S3_BUCKET", "lp-prod-protected")
