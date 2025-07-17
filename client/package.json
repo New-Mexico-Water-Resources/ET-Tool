@@ -1,7 +1,7 @@
 {
   "name": "water-rights-visualizer",
   "private": true,
-  "version": "1.29.2",
+  "version": "1.30.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
