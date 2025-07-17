@@ -203,3 +203,4 @@ websocket-client==1.8.0
 wheel==0.45.1
 widgetsnbextension==4.0.14
 xyzservices==2025.4.0
+netcdf4==1.7.1
