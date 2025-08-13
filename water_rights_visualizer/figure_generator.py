@@ -91,12 +91,14 @@ def generate_all_figures(
         year_df = pd.read_csv(file)
 
         try:
-            current_year = int(file.stem.split("_")[0])
-            # Expand the year range if more data is available
-            if current_year < start_year:
-                start_year = current_year
-            elif current_year > end_year:
-                end_year = current_year
+            # if ends with _combined, skip
+            if not file.stem.endswith("_combined"):
+                current_year = int(file.stem.split("_")[0])
+                # Expand the year range if more data is available
+                if current_year < start_year:
+                    start_year = current_year
+                elif current_year > end_year:
+                    end_year = current_year
         except (ValueError, IndexError):
             logger.warning(f"Could not parse year from filename: {file.stem}")
 
@@ -144,12 +146,18 @@ def generate_all_figures(
     years = range(start_year, end_year + 1)
     for year in years:
         # Prepare main_df
-        if exists(f"{monthly_nan_directory}/{year}.csv"):
-            nd = pd.read_csv(f"{monthly_nan_directory}/{year}.csv")
+        nd_filename = f"{monthly_nan_directory}/{year}.csv"
+        if exists(nd_filename):
+            nd = pd.read_csv(nd_filename)
         else:
-            nd = pd.DataFrame(columns=["year", "month", "percent_nan"])
+            nd = pd.DataFrame(columns=["year", "month", "percent_nan", "avg_min", "avg_max"])
 
-        mm = pd.read_csv(f"{monthly_means_directory}/{year}_monthly_means.csv")
+        mm_filename = f"{monthly_means_directory}/{year}_monthly_means.csv"
+        if exists(mm_filename):
+            mm = pd.read_csv(mm_filename)
+        else:
+            mm = pd.DataFrame(columns=["Year", "Month", "ET", "PET"])
+
         idx = {"Months": range(start_month, end_month + 1)}
         df1 = pd.DataFrame(idx, columns=["Months"])
         main_dfa = pd.merge(left=df1, right=mm, how="left", left_on="Months", right_on="Month")
