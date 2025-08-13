@@ -426,8 +426,12 @@ def generate_figure(
 
         ax_precip.set_ylim(ppt_min, ppt_max + ppt_padding)
         precip_ticks = ppt_range_values
-        if precip_ticks[0] == precip_ticks[1] or precip_ticks[1] == precip_ticks[2]:
-            precip_ticks = [0, precip_ticks[1]]
+        if not precip_ticks or len(precip_ticks) == 0:
+            precip_ticks = [0]  # No precip data
+        elif len(precip_ticks) == 1:
+            precip_ticks = [0, precip_ticks[0]]  # Only 1 pixel and 1 year of precip data
+        elif precip_ticks[0] == precip_ticks[1] or precip_ticks[1] == precip_ticks[2]:
+            precip_ticks = [0, precip_ticks[1]]  # Multiple pixels or multiple years, but same value
     else:
         ax_precip.set_ylim(0, 0)
         precip_ticks = [0]
