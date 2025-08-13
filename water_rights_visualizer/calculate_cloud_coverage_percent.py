@@ -76,7 +76,8 @@ def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir) -> Union[float, None]
         data = src.read(1)
         data = data[data != src.nodata]
         data = data[~np.isnan(data)]
-        return np.mean(data)
+        data = data[data >= 0]  # No negative values allowed
+        return np.nanmean(data)
 
 
 def calculate_cloud_coverage_percent(

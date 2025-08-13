@@ -293,8 +293,8 @@ def generate_summary_figure(
     if "ppt_avg" in main_df.columns and not main_df["ppt_avg"].empty and not main_df["ppt_avg"].isnull().all():
         ppt_padding = 15 if units.units == "metric" else units.convert_from_metric(15)
         ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, units, subdivisions=3)
-        ppt_min = ppt_range_values[0]
-        ppt_max = ppt_range_values[-1]
+        ppt_min = max(ppt_range_values[0], 0)
+        ppt_max = max(ppt_range_values[-1], ppt_min)
 
         ax_precip.set_ylim(ppt_min, ppt_max + ppt_padding)
         precip_ticks = ppt_range_values
@@ -302,11 +302,10 @@ def generate_summary_figure(
             precip_ticks = [0]
         elif len(precip_ticks) == 1:
             precip_ticks = [0, precip_ticks[0]]
-        elif len(precip_ticks) == 2:
-            if precip_ticks[0] == precip_ticks[1]:
-                precip_ticks = [0, precip_ticks[0]]
-            elif precip_ticks[1] == precip_ticks[2]:
-                precip_ticks = [0, precip_ticks[1]]
+        elif len(precip_ticks) >= 2 and precip_ticks[0] == precip_ticks[1]:
+            precip_ticks = [0, precip_ticks[0]]  # Multiple pixels or multiple years, but same value
+        elif len(precip_ticks) >= 3 and precip_ticks[1] == precip_ticks[2]:
+            precip_ticks = [0, precip_ticks[1]]  # Multiple pixels or multiple years, but same value
     else:
         ax_precip.set_ylim(0, 0)
         precip_ticks = [0]

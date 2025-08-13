@@ -130,7 +130,9 @@ def generate_all_figures(
 
         year_ppt_min, year_ppt_max = calculate_year_bounds(year_df, file, "ppt_avg", abs=True)
         ppt_min = year_ppt_min if ppt_min is None else min(ppt_min, year_ppt_min)
+        ppt_min = max(ppt_min, 0)
         ppt_max = year_ppt_max if ppt_max is None else max(ppt_max, year_ppt_max)
+        ppt_max = max(ppt_max, ppt_min)
 
         year_cloud_cover_min, year_cloud_cover_max = calculate_year_bounds(year_df, file, "percent_nan", abs=True)
         if year_cloud_cover_min is not None and not pd.isna(year_cloud_cover_min):
