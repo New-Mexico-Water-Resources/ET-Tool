@@ -4,7 +4,7 @@
 - Adds Job Runner Test notebook to the misc directory for testing the job runner in an isolated environment
 
 ### Bug Fixes
-- Fixes issue where PPT subsetting was not properly masking out negative values leading to NaN values in certain edge cases
+- Fixes issue where precipitation subsetting was not properly masking out negative values leading to NaN values in certain edge cases
 
 ## 1.31.0 (2025-07-15)
 
