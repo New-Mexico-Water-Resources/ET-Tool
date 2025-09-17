@@ -1,4 +1,4 @@
-openet_transition_date: 2008
+openet_transition_date: 1985
 
 sources:
   - id: "landsat_ptjpl_et"
@@ -9,7 +9,7 @@ sources:
     monthly: false
     parent_dir: ""
     start: "1983-01-01"
-    end: "2008-01-01"
+    end: "1985-01-01"
     daylight_corrected: true
 
   - id: "landsat_ptjpl_esi"
@@ -20,7 +20,7 @@ sources:
     monthly: false
     parent_dir: ""
     start: "1983-01-01"
-    end: "2008-01-01"
+    end: "1985-01-01"
     daylight_corrected: true
 
   - id: "openet_ensemble_et"
@@ -30,7 +30,7 @@ sources:
     file_prefix: "OPENET_ENSEMBLE_"
     monthly: true
     parent_dir: "monthly"
-    start: "2008-01-01"
+    start: "1985-01-01"
     end: "2025-01-01"
     daylight_corrected: true
 
@@ -41,7 +41,7 @@ sources:
     file_prefix: "OPENET_ENSEMBLE_"
     monthly: true
     parent_dir: "monthly"
-    start: "2008-01-01"
+    start: "1985-01-01"
     end: "2025-01-01"
     daylight_corrected: true
 
@@ -52,7 +52,7 @@ sources:
     file_prefix: "OPENET_ENSEMBLE_"
     monthly: true
     parent_dir: "uncertainty/output/2019"
-    start: "2008-01-01"
+    start: "1985-01-01"
     end: "2025-01-01"
     daylight_corrected: true
 
@@ -63,7 +63,7 @@ sources:
     file_prefix: "OPENET_ENSEMBLE_"
     monthly: true
     parent_dir: "uncertainty/output/2019"
-    start: "2008-01-01"
+    start: "1985-01-01"
     end: "2025-01-01"
     daylight_corrected: true
 
@@ -74,7 +74,7 @@ sources:
     file_prefix: "OPENET_PTJPL_"
     monthly: true
     parent_dir: "uncertainty/output/2019"
-    start: "2008-01-01"
+    start: "1985-01-01"
     end: "2025-01-01"
     daylight_corrected: true
 
@@ -85,9 +85,9 @@ sources:
     file_prefix: "IDAHO_EPSCOR_GRIDMET_"
     monthly: true
     parent_dir: "monthly"
-    start: "2008-01-01"
+    start: "1985-01-01"
     end: "2025-01-01"
-    daylight_corrected: false
+    daylight_corrected: true # This is not daylight corrected, but we're standardizing the data across all sources
 
   - id: "oregon_state_prism_ppt"
     name: "Oregon State PRISM PPT"

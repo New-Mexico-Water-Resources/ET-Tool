@@ -10,7 +10,8 @@ import geopandas as gpd
 import numpy as np
 from shapely.geometry import box, shape
 import logging
-
+import boto3
+from tqdm import tqdm
 
 class GridMETPipeline:
 
@@ -22,6 +23,7 @@ class GridMETPipeline:
         aws_region: str = "us-west-2",
         tile_path: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ARD_tiles.geojson"),
         url: str = "https://www.northwestknowledge.net/metdata/data/",
+        alt_url: str = "http://thredds.northwestknowledge.net:8080/thredds/fileServer/MET/pet/",
         temp_dir: str = "temp_data",
         output_dir: str = "output_data",
     ):
@@ -30,19 +32,38 @@ class GridMETPipeline:
         self.aws_bucket = aws_bucket
         self.aws_region = aws_region
         self.tile_path = tile_path
-        self.url = url
+        self.url = url.rstrip("/")
+        self.alt_url = alt_url.rstrip("/")
         self.temp_dir = temp_dir
         self.output_dir = output_dir
+        self.session = boto3.Session(profile_name=self.aws_profile, region_name=self.aws_region)
+        self.s3 = self.session.client(
+            "s3",
+            region_name=self.aws_region,
+        )
+
         self.band_mapping = {
             "pet": "ETO",
         }
         self.internal_band_mapping = {
             "pet": "potential_evapotranspiration",
         }
+        
+        self.manifest = set()
 
         # Set up logging
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
         self.logger = logging.getLogger(__name__)
+        self.update_manifest()
+
+    def update_manifest(self):
+        # Check AWS and store all keys in a set
+        paginator = self.s3.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=self.aws_bucket, Prefix=f"IDAHO_EPSCOR_GRIDMET_")
+        
+        for page in pages:
+            for obj in page.get("Contents", []):
+                self.manifest.add(obj["Key"])
 
     def fetch_year_netcdf(self, year: int):
         paths = []
@@ -61,8 +82,18 @@ class GridMETPipeline:
                 )
                 continue
 
-            response = requests.get(url)
-            response.raise_for_status()
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                url = f"{self.alt_url}/{band}_{year}.nc"
+                try:
+                    response = requests.get(url)
+                    response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    self.logger.error(f"Failed to fetch {url}: {str(e)}")
+                    continue
+            
             with open(os.path.join(self.temp_dir, f"{band}_{year}.nc"), "wb") as f:
                 f.write(response.content)
             paths.append(
@@ -250,9 +281,18 @@ class GridMETPipeline:
                 filename = (
                     f"IDAHO_EPSCOR_GRIDMET_{tile['properties']['hv']}_{date_str}_{next_month_date_str}_{band_name}.tif"
                 )
+                if filename in self.manifest:
+                    self.logger.info(f"File {filename} already exists in aws bucket {self.aws_bucket}, skipping")
+                    paths.append(filename)
+                    continue
+
                 if not os.path.exists(self.output_dir):
                     os.makedirs(self.output_dir)
                 output_path = os.path.join(self.output_dir, filename)
+                if os.path.exists(output_path):
+                    self.logger.info(f"File {output_path} already exists, skipping")
+                    paths.append(output_path)
+                    continue
 
                 # Update profile with clipped data dimensions and transform
                 profile = src.profile.copy()
@@ -284,3 +324,61 @@ class GridMETPipeline:
     def fetch_year_range(self, start_year: int, end_year: int):
         for year in range(start_year, end_year + 1):
             self.fetch_year(year)
+
+    def check_if_s3_key_exists(self, key: str) -> bool:
+        """
+        Check if the file exists in the aws bucket
+        Args:
+            key (str): key of the file to check
+        Returns:
+            bool: True if the file exists, False otherwise
+        """
+        try:
+            self.s3.head_object(Bucket=self.aws_bucket, Key=key)
+            return True
+        except self.s3.exceptions.ClientError:
+            return False
+
+    def upload_file_to_aws(self, path: str, overwrite: bool = False):
+        """
+        Upload the file to the aws bucket
+        Args:
+            path (str): path to the file to upload
+            overwrite (bool, optional): whether to overwrite the file if it already exists [default: False]
+        Returns:
+            bool: True if upload was successful, False otherwise
+        """
+        file_name = os.path.basename(path)
+        if not overwrite:
+            # Check if the file already exists in the bucket
+            if self.check_if_s3_key_exists(file_name):
+                self.logger.info(f"File {file_name} already exists in aws bucket {self.aws_bucket}, skipping upload")
+                return True
+
+        try:
+            self.s3.upload_file(path, self.aws_bucket, file_name)
+            self.logger.info(f"Uploaded file {file_name} to aws bucket {self.aws_bucket}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to upload {file_name}: {str(e)}")
+            return False
+
+    def upload_to_aws(self, delete_on_success: bool = False):
+        """
+        Upload all files in output directory to AWS
+        Args:
+            delete_on_success (bool): Whether to delete local files after successful upload
+        """
+        files = os.listdir(self.output_dir)
+        pbar = tqdm(files, desc="Uploading files to AWS")
+        for file in pbar:
+            full_path = os.path.join(self.output_dir, file)
+            pbar.set_description(f"Uploading {file}")
+            
+            if self.upload_file_to_aws(full_path):
+                if delete_on_success:
+                    try:
+                        os.remove(full_path)
+                        self.logger.info(f"Deleted local file {file}")
+                    except Exception as e:
+                        self.logger.error(f"Failed to delete {file}: {str(e)}")

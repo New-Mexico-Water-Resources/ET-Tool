@@ -293,14 +293,18 @@ def generate_figure(
 
     pet_label = "PET" if year < OPENET_TRANSITION_DATE else "ETo"
 
-    if year >= OPENET_TRANSITION_DATE:
-        logger.info(f"Correcting ETo based on ET for year {year} (ET < ETo)")
-        # y = np.where(y < y2, df["et_ci_ymax"], y)
-        y = np.maximum(y, df["et_ci_ymax"])
-        y = np.maximum(y, y2)
-        # Go through et_ci and make sure ymin is less than y2 and ymax is greater than y2, if not, set et_ci to y2
-        df["et_ci_ymin"] = np.where(df["et_ci_ymin"] < y2, df["et_ci_ymin"], y2)
-        df["et_ci_ymax"] = np.where(df["et_ci_ymax"] > y2, df["et_ci_ymax"], y2)
+    #########################################################
+    # NOTE: Uncomment this to correct ETo based on ET and ensure ET < ETo
+    #########################################################
+    # if year >= OPENET_TRANSITION_DATE:
+    #     logger.info(f"Correcting ETo based on ET for year {year} (ET < ETo)")
+    #     # y = np.where(y < y2, df["et_ci_ymax"], y)
+    #     y = np.maximum(y, df["et_ci_ymax"])
+    #     y = np.maximum(y, y2)
+    #     # Go through et_ci and make sure ymin is less than y2 and ymax is greater than y2, if not, set et_ci to y2
+    #     df["et_ci_ymin"] = np.where(df["et_ci_ymin"] < y2, df["et_ci_ymin"], y2)
+    #     df["et_ci_ymax"] = np.where(df["et_ci_ymax"] > y2, df["et_ci_ymax"], y2)
+    #########################################################
 
     sns.lineplot(x=x, y=y, ax=ax, color=pet_color, label=pet_label, marker=marker, markersize=marker_size)
     sns.lineplot(x=x, y=y2, ax=ax, color=et_color, label="ET", marker=marker, markersize=marker_size)

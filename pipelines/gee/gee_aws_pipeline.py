@@ -7,7 +7,7 @@ from typing import Any
 import logging
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 
@@ -17,6 +17,9 @@ class GEEAWSDataPipeline:
         "gridmet": {"min": 0.0, "max": 100.0, "palette": ["f6e8c3", "d8b365", "99974a", "53792d", "6bdfd2", "1839c5"]},
         "tiles": {"color": "blue", "fillColor": "00000000", "strokeWidth": 2},
     }
+
+    job_names = set()
+    last_task_list_update = None
 
     def __init__(
         self,
@@ -89,8 +92,13 @@ class GEEAWSDataPipeline:
         self.tile_ids = tile_ids
         self.temp_local_folder = temp_local_folder
         self.monthly_sum = monthly_sum
+        self.manifest = set()
+
+        self.update_task_list()
 
         self._configure_error_log()
+
+        self.update_manifest()
 
     def _error_log_prefix(self):
         """
@@ -156,6 +164,20 @@ class GEEAWSDataPipeline:
             aws_secret_access_key=aws_secret_access_key,
         )
 
+    def update_manifest(self):
+        if not self.s3:
+            return
+
+        self.logger.info(f"Updating manifest for {self.product_prefix}")
+        # Check AWS and store all keys in a set
+        paginator = self.s3.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=self.aws_bucket, Prefix=f"{self.product_prefix}_")
+
+        for page in pages:
+            for obj in page.get("Contents", []):
+                self.manifest.add(obj["Key"])
+        self.logger.info(f"Updated manifest for {self.product_prefix} with {len(self.manifest)} keys")
+
     def generate_mosaic_for_month(self, date: ee.Date, band: str) -> tuple[ee.Image, ee.Date, ee.Date]:
         """
         Process the month for the given date and bands
@@ -217,6 +239,30 @@ class GEEAWSDataPipeline:
         layer_name = f"{self.product_prefix}_{tile_hv}_{start_output_date}_{end_output_date}_{band_name}"
         return layer_name
 
+    def update_task_list(self):
+        """
+        List the operations in the gdrive folder
+        """
+        if self.last_task_list_update is not None and self.last_task_list_update > datetime.now() - timedelta(minutes=10):
+            return
+
+        task_list = ee.data.listOperations()
+        valid_tasks = [
+            task
+            for task in task_list
+            if task.get("metadata", {}).get("description")
+            and task["metadata"]["state"] in ["RUNNING", "PENDING", "SUCCEEDED"]
+        ]
+        self.job_names = set([task.get("metadata", {}).get("description") for task in valid_tasks])
+        self.last_task_list_update = datetime.now()
+
+    def check_if_task_exists(self, layer_name: str) -> bool:
+        """
+        Check if the task already exists
+        """
+        self.update_task_list()
+        return layer_name in self.job_names
+
     def export_to_gdrive(self, image: ee.Image, layer_name: str, tile_geometry: ee.Geometry):
         """
         Export the image to the gdrive folder
@@ -225,6 +271,10 @@ class GEEAWSDataPipeline:
             layer_name (str): name of the layer
             tile_geometry (ee.Geometry): geometry of the tile
         """
+        if self.check_if_task_exists(layer_name):
+            self.logger.info(f"Task {layer_name} already exists, skipping export")
+            return
+
         task = ee.batch.Export.image.toDrive(
             image=image,
             description=layer_name,
@@ -427,7 +477,8 @@ class GEEAWSDataPipeline:
         if folder_id is None:
             folder_id = self.get_gdrive_folder_id()
 
-        return self.drive.ListFile({"q": f"'{folder_id}' in parents and trashed=false"}).GetList()
+        files = self.drive.ListFile({"q": f"'{folder_id}' in parents and trashed=false"}).GetList()
+        return files
 
     def download_from_gdrive(self, file_id: str, local_path: str, overwrite: bool = False) -> str:
         """
@@ -479,14 +530,21 @@ class GEEAWSDataPipeline:
             files.append(file)
         return files
 
-    def check_if_s3_key_exists(self, key: str) -> bool:
+    def check_if_s3_key_exists(self, key: str, manifest_only: bool = False) -> bool:
         """
         Check if the file exists in the aws bucket
         Args:
             key (str): key of the file to check
+            manifest_only (bool, optional): whether to only check the manifest [default: False]
         Returns:
             bool: True if the file exists, False otherwise
         """
+        if not self.s3:
+            return False
+
+        if manifest_only or key in self.manifest:
+            return key in self.manifest
+
         try:
             self.s3.head_object(Bucket=self.aws_bucket, Key=key)
             return True
@@ -585,6 +643,9 @@ class GEEAWSDataPipeline:
             delete_from_gdrive (bool, optional): whether to delete the files from the gdrive folder after uploading [default: False]
         """
         files = self.list_gdrive_files()
+        # Remove files that are already in the aws bucket
+        files = [file for file in files if not self.check_if_s3_key_exists(file["title"], manifest_only=True)]
+
         pbar = tqdm(
             files,
             desc=f"Transferring files from gdrive folder {self.gdrive_folder} to aws bucket {self.aws_bucket}",

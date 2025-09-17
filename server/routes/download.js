@@ -8,7 +8,7 @@ const { area: turfArea } = require("@turf/turf");
 
 const router = express.Router();
 const { run_directory_base, report_queue_collection, connectToDatabase } = constants;
-const OPENET_TRANSITION_DATE = 2008;
+const OPENET_TRANSITION_DATE = 1985;
 
 const mmToIn = (mm) => {
   let mmValue = typeof mm === "string" ? parseFloat(mm) : mm;
