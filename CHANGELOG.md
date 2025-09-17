@@ -1,3 +1,11 @@
+## 1.33.0 (2025-09-17)
+
+### Features
+- Updates all data from 1985 to 2024 to use OpenET
+- Calculates error percentage using the QA_PIXEL band in Landsat from Microsoft Planetary Computer on the fly
+- Removes daylight and ET correction for ETo now that data is standardized for the full record
+- Adds "pipelines/DataPipeline2026.ipynb" documentation for fetching and processing 2025 data to be run next year once the data is available
+
 ## 1.32.0 (2025-08-13)
 
 ### Features
