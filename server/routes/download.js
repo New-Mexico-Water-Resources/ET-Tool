@@ -142,20 +142,47 @@ const processMonthlyNanFiles = (runDir, key, jobName) => {
   return nanValues;
 };
 
-const processLandsatPassCounts = (runDir, key, jobName) => {
-  const landsatPassCountDir = path.join(runDir, key, "output", "subset", jobName, "landsat_pass_count_cache");
-  const jsonPattern = path.join(landsatPassCountDir, "*.json");
-  const landsatPassCountFiles = glob.sync(jsonPattern);
-  const landsatPassCounts = {};
-
-  landsatPassCountFiles.forEach((file) => {
+const processLandsatCloudCoverageCache = (runDir, key, jobName) => {
+  const landsatCloudCoverageCacheDir = path.join(runDir, key, "output", "nan_subsets", jobName, "cloud_coverage_cache");
+  if (!fs.existsSync(landsatCloudCoverageCacheDir)) {
+    return null;
+  }
+  const jsonPattern = path.join(landsatCloudCoverageCacheDir, "*.json");
+  const landsatCloudCoverageCacheFiles = glob.sync(jsonPattern);
+  const landsatCloudCoverageCache = {};
+  landsatCloudCoverageCacheFiles.forEach((file) => {
     const data = fs.readFileSync(file, "utf8");
     const jsonData = JSON.parse(data);
-    landsatPassCounts[jsonData.year] = landsatPassCounts[jsonData.year] || {};
-    landsatPassCounts[jsonData.year][jsonData.month] = jsonData;
+    landsatCloudCoverageCache[jsonData.year] = landsatCloudCoverageCache[jsonData.year] || {};
+    landsatCloudCoverageCache[jsonData.year][jsonData.month] = jsonData;
   });
+  return landsatCloudCoverageCache;
+};
 
-  return landsatPassCounts;
+const processLandsatPassCountCache = (runDir, key, jobName) => {
+  const landsatPassCountCacheDir = path.join(runDir, key, "output", "subset", jobName, "landsat_pass_count_cache");
+  if (!fs.existsSync(landsatPassCountCacheDir)) {
+    return null;
+  }
+  const jsonPattern = path.join(landsatPassCountCacheDir, "*.json");
+  const landsatPassCountCacheFiles = glob.sync(jsonPattern);
+  const landsatPassCountCache = {};
+  landsatPassCountCacheFiles.forEach((file) => {
+    const data = fs.readFileSync(file, "utf8");
+    const jsonData = JSON.parse(data);
+    landsatPassCountCache[jsonData.year] = landsatPassCountCache[jsonData.year] || {};
+    landsatPassCountCache[jsonData.year][jsonData.month] = jsonData;
+  });
+  return landsatPassCountCache;
+};
+
+const processLandsatPassCounts = (runDir, key, jobName) => {
+  // Landsat Pass Count cache is the older format, but much simpler, so check if this exists first
+  const landsatPassCountCache = processLandsatPassCountCache(runDir, key, jobName);
+  if (!landsatPassCountCache) {
+    return processLandsatCloudCoverageCache(runDir, key, jobName);
+  }
+  return landsatPassCountCache;
 };
 
 const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsatPassCounts, units, area) => {

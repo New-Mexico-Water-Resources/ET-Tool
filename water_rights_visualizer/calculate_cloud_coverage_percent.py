@@ -142,6 +142,7 @@ def calculate_cloud_coverage_percent(
         ccount_average = None
         if not cloud_coverage:
             ccount_average = get_nan_tiff_roi_average(ccount_subset_file, ROI_geometry, nan_subset_directory)
+            cloud_coverage = {}
             if ccount_average is None:
                 logger.error(f"Failed to calculate cloud coverage percentage for {year}-{month} ({ccount_subset_file})")
 
@@ -157,18 +158,25 @@ def calculate_cloud_coverage_percent(
         if ppt_average is None:
             logger.error(f"Failed to calculate PPT average for {year}-{month} ({ppt_subset_file})")
 
+        # This is necessary in case the variable is present, but has no data
+        pass_count = cloud_coverage.get("pass_count", 0) or 0
+        mean_cloud_coverage = cloud_coverage.get("mean_cloud_coverage", None)
+        # Cloud coverage is 100% if it's not present
+        if mean_cloud_coverage is None:
+            mean_cloud_coverage = 100
+        total_observations = cloud_coverage.get("total_observations", 0) or 0
+        cloudy_observations = cloud_coverage.get("cloudy_observations", 0) or 0
+
         yearly_ccount_percentages[year][month] = {
-            "avg_cloud_count": (
-                ccount_average if ccount_average is not None else cloud_coverage.get("mean_cloud_coverage", 0)
-            ),
+            "avg_cloud_count": ccount_average,
             "days_in_month": days_in_month,
             "avg_min": et_min_average,
             "avg_max": et_max_average,
             "ppt_avg": ppt_average,
-            "landsat_passes": cloud_coverage.get("pass_count", 0),
-            "cloud_coverage_percent": cloud_coverage.get("mean_cloud_coverage", 0) / 100,
-            "cloudy_observations": cloud_coverage.get("cloudy_observations", 0),
-            "total_observations": cloud_coverage.get("total_observations", 0),
+            "landsat_passes": pass_count,
+            "cloud_coverage_percent": mean_cloud_coverage / 100,
+            "cloudy_observations": cloudy_observations,
+            "total_observations": total_observations,
         }
 
     for year, month_percentages in yearly_ccount_percentages.items():

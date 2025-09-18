@@ -143,7 +143,7 @@ def count_landsat_passes_for_month(
         for item in items:
             platform = item.properties.get("platform")
             if platform in sat_ids:
-                unique_dates.add(item.datetime.date())
+                unique_dates.add(f"{item.properties.get('platform')}-{item.datetime.strftime('%m-%d-%Y')}")
                 pass_list.append({"date": str(item.datetime.date()), "satellite": platform, "id": item.id})
 
     pass_count = len(unique_dates)
@@ -313,7 +313,7 @@ def calculate_monthly_cloud_coverage(
             if platform not in sat_ids:
                 continue
 
-            unique_dates.add(item.datetime.date())
+            unique_dates.add(f"{item.properties.get('platform')}-{item.datetime.strftime('%m-%d-%Y')}")
             pass_list.append({"date": str(item.datetime.date()), "satellite": platform, "id": item.id})
 
             try:

@@ -125,7 +125,7 @@ router.post("/start_run", async (req, res) => {
     pipeline_script = path.join(project_directory, pipeline_script);
   }
 
-  let pythonExecutable = dev_mode ? "/opt/homebrew/anaconda3/envs/nmw-test/bin/python" : "/opt/conda/bin/python";
+  let pythonExecutable = dev_mode ? "python" : "/opt/conda/bin/python";
   let command = `${pythonExecutable} ${pipeline_script} ${config_filename}`;
 
   let canWriteJob = req.auth?.payload?.permissions?.includes("write:jobs") || false;
