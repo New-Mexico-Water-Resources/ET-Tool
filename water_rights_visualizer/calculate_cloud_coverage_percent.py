@@ -12,7 +12,7 @@ from logging import getLogger
 import re
 import datetime
 
-from water_rights_visualizer.landsat_pass_count import count_landsat_passes_for_month
+from water_rights_visualizer.landsat_pass_count import count_landsat_passes_for_month, calculate_monthly_cloud_coverage
 
 logger = getLogger(__name__)
 
@@ -32,7 +32,7 @@ def get_days_in_month(year, month):
     return last_day_of_month.day
 
 
-def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir) -> Union[float, None]:
+def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir, min_value=0) -> Union[float, None]:
     """
     Get the average of the non-NaN values in the subset file within the given directory.
 
@@ -76,7 +76,7 @@ def get_nan_tiff_roi_average(tiff_file, ROI_geometry, dir) -> Union[float, None]
         data = src.read(1)
         data = data[data != src.nodata]
         data = data[~np.isnan(data)]
-        data = data[data >= 0]  # No negative values allowed
+        data = data[data >= min_value]  # No negative values allowed
         return np.nanmean(data)
 
 
@@ -136,15 +136,21 @@ def calculate_cloud_coverage_percent(
 
         days_in_month = get_days_in_month(int(year), int(month))
 
-        ccount_average = get_nan_tiff_roi_average(ccount_subset_file, ROI_geometry, nan_subset_directory)
-        if ccount_average is None:
-            logger.error(f"Failed to calculate cloud coverage percentage for {year}-{month} ({ccount_subset_file})")
+        cloud_coverage = calculate_monthly_cloud_coverage(ROI_geometry, int(month), int(year), nan_subset_directory)
 
-        et_min_average = get_nan_tiff_roi_average(et_min_subset_file, ROI_geometry, nan_subset_directory)
+        # If we can't calculate cloud coverage, use the ccount data
+        ccount_average = None
+        if not cloud_coverage:
+            ccount_average = get_nan_tiff_roi_average(ccount_subset_file, ROI_geometry, nan_subset_directory)
+            cloud_coverage = {}
+            if ccount_average is None:
+                logger.error(f"Failed to calculate cloud coverage percentage for {year}-{month} ({ccount_subset_file})")
+
+        et_min_average = get_nan_tiff_roi_average(et_min_subset_file, ROI_geometry, nan_subset_directory, min_value=1)
         if et_min_average is None:
             logger.error(f"Failed to calculate ET min average for {year}-{month} ({et_min_subset_file})")
 
-        et_max_average = get_nan_tiff_roi_average(et_max_subset_file, ROI_geometry, nan_subset_directory)
+        et_max_average = get_nan_tiff_roi_average(et_max_subset_file, ROI_geometry, nan_subset_directory, min_value=1)
         if et_max_average is None:
             logger.error(f"Failed to calculate ET max average for {year}-{month} ({et_max_subset_file})")
 
@@ -152,9 +158,14 @@ def calculate_cloud_coverage_percent(
         if ppt_average is None:
             logger.error(f"Failed to calculate PPT average for {year}-{month} ({ppt_subset_file})")
 
-        landsat_passes_in_month = count_landsat_passes_for_month(
-            ROI_geometry, int(month), int(year), subset_directory=subset_directory
-        )
+        # This is necessary in case the variable is present, but has no data
+        pass_count = cloud_coverage.get("pass_count", 0) or 0
+        mean_cloud_coverage = cloud_coverage.get("mean_cloud_coverage", None)
+        # Cloud coverage is 100% if it's not present
+        if mean_cloud_coverage is None:
+            mean_cloud_coverage = 100
+        total_observations = cloud_coverage.get("total_observations", 0) or 0
+        cloudy_observations = cloud_coverage.get("cloudy_observations", 0) or 0
 
         yearly_ccount_percentages[year][month] = {
             "avg_cloud_count": ccount_average,
@@ -162,7 +173,10 @@ def calculate_cloud_coverage_percent(
             "avg_min": et_min_average,
             "avg_max": et_max_average,
             "ppt_avg": ppt_average,
-            "landsat_passes": landsat_passes_in_month,
+            "landsat_passes": pass_count,
+            "cloud_coverage_percent": mean_cloud_coverage / 100,
+            "cloudy_observations": cloudy_observations,
+            "total_observations": total_observations,
         }
 
     for year, month_percentages in yearly_ccount_percentages.items():
@@ -180,11 +194,11 @@ def calculate_cloud_coverage_percent(
 
             percentage = None
 
-            # Old calculation using total number of days in a month
-            # if percentages and percentages.get("avg_cloud_count") is not None and percentages.get("days_in_month"):
-            #     percentage = (percentages["days_in_month"] - percentages["avg_cloud_count"]) / percentages["days_in_month"]
-            # New calculation using landsat passes
-            if percentages and percentages.get("landsat_passes"):
+            if percentages and percentages.get("cloud_coverage_percent"):
+                percentage = percentages["cloud_coverage_percent"]
+                percentage = max(percentage, 0)
+                percentage = min(percentage, 1)
+            elif percentages and percentages.get("avg_cloud_count") is not None and percentages.get("landsat_passes"):
                 percentage = (percentages["landsat_passes"] - percentages["avg_cloud_count"]) / percentages["landsat_passes"]
                 percentage = max(percentage, 0)
                 percentage = min(percentage, 1)

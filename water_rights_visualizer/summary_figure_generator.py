@@ -190,14 +190,18 @@ def generate_summary_figure(
 
     # Adjust PET/ETo values for years after transition date
     if end_year >= OPENET_TRANSITION_DATE:
-        logger.info(f"Correcting ETo based on ET for years after {OPENET_TRANSITION_DATE}")
-        # Make sure PET/ETo is never below ET_MAX or ET
-        main_df["PET"] = np.maximum(main_df["PET"], main_df["et_ci_ymax"])
-        main_df["PET"] = np.maximum(main_df["PET"], main_df["ET"])
         # Adjust confidence intervals
         main_df["et_ci_ymin"] = np.where(main_df["et_ci_ymin"] < main_df["ET"], main_df["et_ci_ymin"], main_df["ET"])
         main_df["et_ci_ymax"] = np.where(main_df["et_ci_ymax"] > main_df["ET"], main_df["et_ci_ymax"], main_df["ET"])
 
+        #########################################################
+        # NOTE: Uncomment this to correct ETo based on ET and ensure ET < ETo
+        #########################################################
+        #     logger.info(f"Correcting ETo based on ET for years after {OPENET_TRANSITION_DATE}")
+        #     # Make sure PET/ETo is never below ET_MAX or ET
+        #     main_df["PET"] = np.maximum(main_df["PET"], main_df["et_ci_ymax"])
+        #     main_df["PET"] = np.maximum(main_df["PET"], main_df["ET"])
+        #########################################################
     # Plot ET/ETo data
     pet_label = "PET" if end_year < OPENET_TRANSITION_DATE else "ETo"
     sns.lineplot(

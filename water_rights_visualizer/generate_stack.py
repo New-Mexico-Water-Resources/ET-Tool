@@ -23,6 +23,7 @@ from .date_helpers import (
     calculate_hours_of_sunlight,
 )
 from .variable_types import get_available_variable_source_for_date
+import os
 
 logger = getLogger(__name__)
 
@@ -118,7 +119,7 @@ def generate_stack(
         # Just keep processing as this only causes issues with showing uncertainty on the report
         except Exception as e:
             logger.exception(e)
-            logger.info(f"problem generating uncertainty subset for date: {date_step.strftime('%Y-%m-%d')}, continuing...")
+            logger.info(f"problem generating PPT subset for date: {date_step.strftime('%Y-%m-%d')}, continuing...")
 
     if len(dates_in_year) == 0:
         raise ValueError(f"no dates for year: {year}")
@@ -178,7 +179,6 @@ def generate_stack(
                 uncertainty_variables = {
                     "ET_MIN": et_min_subset_filename,
                     "ET_MAX": et_max_subset_filename,
-                    "COUNT": count_subset_filename,
                 }
 
                 for variable_name, subset_filename in uncertainty_variables.items():
@@ -190,6 +190,19 @@ def generate_stack(
                         ROI_acres=ROI_acres,
                         variable_name=variable_name,
                         subset_filename=subset_filename,
+                        target_CRS=target_CRS,
+                    )
+
+                # If we don't have a COUNT subset, then we'll just re-generate this later via cloudy observations
+                if os.path.exists(count_subset_filename):
+                    generate_subset(
+                        input_datastore=input_datastore,
+                        acquisition_date=date_step,
+                        ROI_name=ROI_name,
+                        ROI_latlon=ROI_latlon,
+                        ROI_acres=ROI_acres,
+                        variable_name="COUNT",
+                        subset_filename=count_subset_filename,
                         target_CRS=target_CRS,
                     )
         # Just keep processing as this only causes issues with showing uncertainty on the report
