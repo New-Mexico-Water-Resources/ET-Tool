@@ -61,30 +61,8 @@ def generate_subset(
     """
     logger.info(f"generating {variable_name} subset")
 
-    # Make square bounding box around ROI with even size and treat this as the ROI to adjust for buffer size
-    # and compensate for weird polygons
-
-    # roi_size = round(ROI_acres, 2)
-
-    # if roi_size <= 4:
-    #     buffer_degrees = 0.005
-    # elif 4 < roi_size <= 10:
-    #     buffer_degrees = 0.005
-    # elif 10 < roi_size <= 30:
-    #     roi_filter = roi_size / 4
-    #     buffer_degrees = roi_filter / 1000
-    # elif 30 < roi_size <= 60:
-    #     roi_filter = roi_size / 6
-    #     buffer_degrees = roi_filter / 1000
-    # else:
-    #     roi_filter = roi_size / 8
-    #     buffer_degrees = roi_filter / 1000
-
     if cell_size is None:
         cell_size = CELL_SIZE_DEGREES
-
-    # if buffer_size is None:
-    #     buffer_size = buffer_degrees
 
     if target_CRS is None:
         target_CRS = WGS84
@@ -95,12 +73,6 @@ def generate_subset(
 
         return subset
 
-        # with rasterio.open(subset_filename, "r") as f:
-        #     subset = f.read(1)
-        #     affine = f.transform
-
-        # return subset, affine
-
     tiles = select_tiles(ROI_latlon)
 
     if len(tiles) == 0:
@@ -110,11 +82,6 @@ def generate_subset(
         f"generating subset for date {cl.time(acquisition_date)} variable {cl.name(variable_name)} ROI {cl.name(ROI_name)} from tiles: {', '.join(tiles)}"
     )
     ROI_projected = gpd.GeoDataFrame({}, geometry=[ROI_latlon], crs=WGS84).to_crs(target_CRS).geometry[0]
-    # centroid = ROI_projected.centroid
-    # x_min = centroid.x - buffer_size
-    # x_max = centroid.x + buffer_size
-    # y_min = centroid.y - buffer_size
-    # y_max = centroid.y + buffer_size
 
     centroid = ROI_projected.centroid
     x_min, y_min, x_max, y_max = ROI_projected.bounds
@@ -138,6 +105,22 @@ def generate_subset(
     height_meters = y_max - y_min
     target_rows = int(height_meters / cell_size)
 
+    # For small ROIs (under 10 tiles in either dimension), ensure odd number of tiles
+    # This prevents centering issues caused by even pixel counts
+    if target_cols < 10 and target_cols % 2 == 0:
+        target_cols += 1
+        width_meters = target_cols * cell_size
+        x_min = centroid.x - width_meters / 2
+        x_max = centroid.x + width_meters / 2
+
+    if target_rows < 10 and target_rows % 2 == 0:
+        target_rows += 1
+        height_meters = target_rows * cell_size
+        y_min = centroid.y - height_meters / 2
+        y_max = centroid.y + height_meters / 2
+
+    target_affine = Affine(cell_size, 0, x_min, 0, -cell_size, y_max)
+
     target_geometry = RasterGrid.from_affine(affine=target_affine, rows=target_rows, cols=target_cols, crs=target_CRS)
 
     target_raster = None
@@ -155,7 +138,11 @@ def generate_subset(
         if target_raster is None:
             target_raster = tile_raster
         else:
-            target_raster = rt.where(np.isnan(target_raster) | (target_raster < 0), tile_raster, target_raster)
+            target_raster = rt.where(
+                (np.isnan(target_raster) | (target_raster < 0) | ((target_raster == 0) & (tile_raster != 0))),
+                tile_raster,
+                target_raster,
+            )
 
     if not allow_blank and np.all(np.isnan(target_raster)):
         raise BlankOutput(
