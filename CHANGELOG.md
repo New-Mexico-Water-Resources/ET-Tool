@@ -1,3 +1,9 @@
+## 1.34.0 (2025-10-09)
+
+### Bug Fixes
+- Fixes issue where subsetting was not properly joining 0-represented NaN values in some edge cases
+- Fixes centering issue for small ROIs caused by dimensions being floored to nearest pixel. Now ensures odd number of pixels in each dimension for small areas to prevent cut off.
+
 ## 1.33.0 (2025-09-17)
 
 ### Features
