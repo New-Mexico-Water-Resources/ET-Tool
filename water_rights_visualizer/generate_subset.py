@@ -155,7 +155,11 @@ def generate_subset(
         if target_raster is None:
             target_raster = tile_raster
         else:
-            target_raster = rt.where(np.isnan(target_raster) | (target_raster < 0), tile_raster, target_raster)
+            target_raster = rt.where(
+                (np.isnan(target_raster) | (target_raster < 0) | ((target_raster == 0) & (tile_raster != 0))),
+                tile_raster,
+                target_raster,
+            )
 
     if not allow_blank and np.all(np.isnan(target_raster)):
         raise BlankOutput(
