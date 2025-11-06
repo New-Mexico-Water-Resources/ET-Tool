@@ -417,7 +417,7 @@ def generate_summary_figure(
         package_json_path = join(project_root, "client", "package.json")
         with open(package_json_path, 'r') as f:
             version = json.load(f).get('version', 'unknown')
-            caption += f" (v{version})"
+            caption += f" (ET Tool version {version})"
     except Exception:
         pass  # If version can't be read, continue without it
 
