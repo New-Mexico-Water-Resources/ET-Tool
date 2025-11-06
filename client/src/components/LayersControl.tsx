@@ -334,6 +334,7 @@ const LayersControl: FC = () => {
                     border: "1px solid var(--st-gray-40)",
                     borderRadius: "4px",
                     padding: "4px",
+                    color: "var(--st-gray-10)",
                   }}
                   onChange={(evt) => {
                     setRowName(evt.target.value);
