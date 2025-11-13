@@ -1,11 +1,12 @@
 from datetime import datetime
 from logging import getLogger
-from os.path import join, exists, dirname
+from os.path import join, exists, dirname, abspath
 from os import makedirs
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
+import json
 from .write_status import write_status
 from .variable_types import get_available_variable_source_for_date, OPENET_TRANSITION_DATE
 from .plotting_helpers import convert_to_nice_number_range, MetricETUnit, ETUnit, PercentageUnits
@@ -409,6 +410,16 @@ def generate_summary_figure(
     else:
         caption = f"ET and PET calculated from Landsat with PT-JPL (Fisher et al. 2008)"
     caption += f"\nPrecipitation data from PRISM Climate Group, Oregon State University, https://prism.oregonstate.edu"
+
+    # Add version from client/package.json
+    try:
+        project_root = dirname(dirname(abspath(__file__)))
+        package_json_path = join(project_root, "client", "package.json")
+        with open(package_json_path, 'r') as f:
+            version = json.load(f).get('version', 'unknown')
+            caption += f" (ET Tool version {version})"
+    except Exception:
+        pass  # If version can't be read, continue without it
 
     plt.figtext(
         0.48,
