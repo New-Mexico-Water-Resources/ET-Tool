@@ -1,3 +1,20 @@
+## 1.34.1 (2025-11-13)
+
+### Bug Fixes
+- **KML Upload Fix**: Fixed critical bug where KML files with HTML descriptions were failing to upload with error "Failed to read GeoJSON data"
+  - Root cause: Destructive string manipulation was corrupting valid JSON when HTML content was present
+  - Solution: Replaced with proper JSON parsing and stringification
+  - Impact: Safely handles all file types (KML, GeoJSON, and Shapefiles)
+
+### Features
+- **Improved Version Display**: Changed version display in report outputs from "(v1.34.0)" to "(ET Tool version 1.34.0)" for better clarity
+- **Landing Page Update**: Added descriptive text and contact information for access requests
+  - Added NM OSE contact email with clickable link
+  - Improved formatting and readability
+
+### UI Improvements
+- Fixed text visibility in polygon name edit mode
+
 ## 1.34.0 (2025-10-09)
 
 ### Bug Fixes
