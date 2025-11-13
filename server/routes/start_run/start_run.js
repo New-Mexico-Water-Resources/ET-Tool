@@ -53,13 +53,20 @@ router.post("/start_run", async (req, res) => {
   geojson_filename = path.join(run_directory, `${name}.geojson`);
   console.log(`writing GeoJSON to ${geojson_filename}`);
 
-  geojson_text = JSON.stringify(geojson);
-
-  if (geojson_text.startsWith('"') && geojson_text.endsWith('"')) {
-    geojson_text = geojson_text.slice(1, -1);
+  // Handle case where geojson might be double-encoded as a string
+  // If it's already a string, try to parse it; otherwise use as-is
+  let geojson_obj = geojson;
+  if (typeof geojson === 'string') {
+    try {
+      geojson_obj = JSON.parse(geojson);
+    } catch (e) {
+      // If parsing fails, assume it's already an object that was stringified
+      console.warn('GeoJSON is a string but failed to parse, using as-is');
+    }
   }
 
-  geojson_text = geojson_text.replace(/\\"/g, '"');
+  // Properly stringify the GeoJSON object (pretty-printed for readability)
+  geojson_text = JSON.stringify(geojson_obj, null, 2);
 
   fs.writeFile(geojson_filename, geojson_text, "utf8", function (err) {
     if (err) {

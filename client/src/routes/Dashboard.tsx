@@ -298,13 +298,48 @@ const Dashboard = () => {
             </Typography>
             <Typography
               variant="h4"
-              style={{ fontSize: "16px", color: "var(--st-gray-30)", textAlign: "center", marginBottom: "32px" }}
+              style={{
+                fontSize: "16px",
+                color: "var(--st-gray-30)",
+                textAlign: "center",
+                marginBottom: "32px",
+                maxWidth: "600px",
+                lineHeight: "1.6"
+              }}
             >
-              {!isAuthenticated
-                ? "Please login or sign up for an account to continue"
-                : user?.email_verified
-                ? "Thanks for creating an account. Your email address has been verified. NM OSE staff will review your request for access shortly."
-                : "Please verify your email address and then log out and back in to continue."}
+              {!isAuthenticated ? (
+                <>
+                  This tool is administered by the New Mexico Office of the State Engineer.
+                  <br />
+                  <br />
+                  Please login or sign up for an account to continue.
+                  <br />
+                  <br />
+                  If you are not a current agency employee and would like to request access or have any questions,
+                  please contact the OSE's Water Use and Conservation Bureau at{" "}
+                  <a
+                    href="https://mail.google.com/mail/?view=cm&fs=1&to=water.nm@ose.nm.gov&su=ET%20Tool%20Access%20Request"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: "var(--st-blue-40)",
+                      textDecoration: "none",
+                      borderBottom: "1px solid var(--st-blue-40)",
+                      cursor: "pointer",
+                      transition: "color 0.2s ease"
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.color = "var(--st-blue-30)")}
+                    onMouseOut={(e) => (e.currentTarget.style.color = "var(--st-blue-40)")}
+                    title="Click to compose email in Gmail"
+                  >
+                    water.nm@ose.nm.gov
+                  </a>.
+                </>
+              ) : user?.email_verified ? (
+                "Thanks for creating an account. Your email address has been verified. NM OSE staff will review your request for access shortly."
+              ) : (
+                "Please verify your email address and then log out and back in to continue."
+              )}
             </Typography>
             {isAuthenticated && !user?.email_verified && (
               <Button
