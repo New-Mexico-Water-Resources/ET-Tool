@@ -1,3 +1,10 @@
+## 1.36.0 (2026-01-14)
+
+### Data Output Changes
+- Removed "Adjusted PET" column from CSV output
+- Renamed "Uncorrected PET" column to "ETo (AF/month)" in CSV output
+- Updated ETo data source caveats in PDF documentation to clarify data update cadence
+
 ## 1.35.0 (2025-11-13)
 
 ### Bug Fixes

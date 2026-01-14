@@ -203,8 +203,7 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
     "Year",
     "Month",
     `ET (${unitsAbbreviation}/month)`,
-    hasPostTransitionData ? `Uncorrected PET (${unitsAbbreviation}/month)` : `PET (${unitsAbbreviation}/month)`,
-    ...(hasPostTransitionData ? [`Adjusted PET (${unitsAbbreviation}/month)`] : []),
+    `ETo (${unitsAbbreviation}/month)`,
     `Precipitation (${unitsAbbreviation}/month)`,
     "Cloud Coverage + Missing Data (%)",
     ...(hasPostTransitionData ? ["Days with Landsat Passes"] : []),
@@ -244,18 +243,6 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
       let convertedRow = [year, month, et, pet];
 
       const nanRow = nanValues?.[year]?.[month];
-
-      if (hasPostTransitionData) {
-        if (year >= OPENET_TRANSITION_DATE && nanRow) {
-          let etMax = UnitConverter.convert(nanRow["avg_max"], units, area);
-          etMax = isNaN(etMax) ? "" : Math.round(etMax * 100) / 100;
-          let adjustedPET = pet < etMax ? etMax : pet;
-          adjustedPET = isNaN(adjustedPET) ? "" : Math.round(adjustedPET * 100) / 100;
-          convertedRow.push(adjustedPET);
-        } else {
-          convertedRow.push(""); // Empty for pre-transition years
-        }
-      }
 
       // Add precipitation and cloud coverage (for all years)
       if (nanRow) {
