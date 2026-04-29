@@ -13,7 +13,8 @@ export interface Job {
   [key: string]: any;
 }
 
-export type PreviewVariableType = "ET" | "PET" | "ET_MIN" | "COUNT";
+export type PreviewVariableType = "ET" | "PET" | "PPT" | "ET_MIN" | "ET_MAX" | "COUNT";
+export type PreviewUnitsType = "mm" | "inches";
 
 export type AvailableDay = {
   year: number;
@@ -26,6 +27,7 @@ interface Store {
   previewMonth: number | string | null;
   previewYear: number | string | null;
   previewVariable: PreviewVariableType | null;
+  previewUnits: PreviewUnitsType;
   showPreview: boolean;
   previewDay: number | string | null;
   availableDays: AvailableDay[];
@@ -40,6 +42,7 @@ interface Setters {
   setPreviewMonth: (month: number | string | null) => void;
   setPreviewYear: (year: number | string | null) => void;
   setPreviewVariable: (variable: PreviewVariableType | null) => void;
+  setPreviewUnits: (units: PreviewUnitsType) => void;
   setShowPreview: (show: boolean) => void;
   setPreviewDay: (day: number | string | null) => void;
   setAvailableDays: (days: AvailableDay[]) => void;
@@ -62,6 +65,8 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   setPreviewYear: (year) => set({ previewYear: year }),
   previewVariable: "ET",
   setPreviewVariable: (variable) => set({ previewVariable: variable }),
+  previewUnits: "mm",
+  setPreviewUnits: (units) => set({ previewUnits: units }),
   showPreview: false,
   setShowPreview: (show) => set({ showPreview: show }),
   previewDay: null,

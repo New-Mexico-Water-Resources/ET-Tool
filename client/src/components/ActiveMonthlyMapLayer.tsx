@@ -107,6 +107,22 @@ const getValueAtLatLng = (georaster: GeoRaster, lat: number, lng: number) => {
   return georaster.values[0][y][x];
 };
 
+const formatPreviewValue = (value: number) => {
+  const previewUnits = useCurrentJobStore.getState().previewUnits;
+
+  if (previewUnits === "inches") {
+    return {
+      value: value / 25.4,
+      units: "in/month",
+    };
+  }
+
+  return {
+    value,
+    units: "mm/month",
+  };
+};
+
 const ActiveMonthlyMapLayer: FC = () => {
   const map = useMap();
   const [previewJobId, setPreviewJobId] = useState<string>("");
@@ -404,7 +420,7 @@ const ActiveMonthlyMapLayer: FC = () => {
           }
 
           if (value !== null && value !== undefined) {
-            const units = "mm/month";
+            const formattedValue = formatPreviewValue(value);
             currentTooltip
               ?.setLatLng(e.latlng)
               .setContent(
@@ -413,7 +429,7 @@ const ActiveMonthlyMapLayer: FC = () => {
                   Number(previewMonth) - 1
                 ).toLocaleString("default", {
                   month: "short",
-                })} ${previewYear})<br><b>${variableName}: ${value.toFixed(2)} ${units}</b></div>`
+                })} ${previewYear})<br><b>${variableName}: ${formattedValue.value.toFixed(2)} ${formattedValue.units}</b></div>`
               )
               .openOn(map);
           } else {

@@ -326,7 +326,7 @@ const MapLayersPanel: FC = () => {
               style={{ padding: 0, marginRight: "4px", marginLeft: "4px" }}
             />
             <Typography variant="body2" style={{ color: "var(--st-gray-30)", fontSize: "12px" }}>
-              All Jobs {allGeoJSONs.length ? `(${allGeoJSONs.length})` : ""}
+              Previously Run Jobs {allGeoJSONs.length ? `(${allGeoJSONs.length})` : ""}
             </Typography>
             {showAllCompletedJobs && allGeoJSONs.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "auto" }}>

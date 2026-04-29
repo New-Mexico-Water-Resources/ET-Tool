@@ -9,6 +9,7 @@ const { area: turfArea } = require("@turf/turf");
 const router = express.Router();
 const { run_directory_base, report_queue_collection, connectToDatabase } = constants;
 const OPENET_TRANSITION_DATE = 1985;
+const ANNUAL_ARCHIVE_DIR = "annual";
 
 const mmToIn = (mm) => {
   let mmValue = typeof mm === "string" ? parseFloat(mm) : mm;
@@ -62,6 +63,8 @@ const unitsToPdfId = (units) => {
   return units;
 };
 
+const getFigureArchiveName = (name) => (/^\d{4}_/.test(name) ? `${ANNUAL_ARCHIVE_DIR}/${name}` : name);
+
 const processFigureFiles = (archive, figureDirectory, units) => {
   const pattern = path.join(figureDirectory, "*.png");
   const figureFiles = glob.sync(pattern);
@@ -69,12 +72,14 @@ const processFigureFiles = (archive, figureDirectory, units) => {
     const suffix = unitsToFileSuffix(units);
     if (suffix !== "" && units !== "metric" && file.endsWith(`_${suffix}.png`)) {
       const newName = path.basename(file).replace(`_${suffix}.png`, ".png");
-      console.log(`Adding figure file: ${file} as ${newName}`);
-      archive.file(file, { name: newName });
+      const archiveName = getFigureArchiveName(newName);
+      console.log(`Adding figure file: ${file} as ${archiveName}`);
+      archive.file(file, { name: archiveName });
     } else if (suffix === "" && units === "metric" && !file.endsWith(`_in.png`) && !file.endsWith(`_AF.png`)) {
       const name = path.basename(file);
-      console.log(`Adding figure file: ${file} as ${name}`);
-      archive.file(file, { name });
+      const archiveName = getFigureArchiveName(name);
+      console.log(`Adding figure file: ${file} as ${archiveName}`);
+      archive.file(file, { name: archiveName });
     }
   });
 };
@@ -281,7 +286,7 @@ const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsat
     const newData = [header, ...lines].join("\n");
     const tempPath = file.replace(".csv", `_temp_${unitsAbbreviation}.csv`);
     fs.writeFileSync(tempPath, newData);
-    archive.file(tempPath, { name: path.basename(file) });
+    archive.file(tempPath, { name: `${ANNUAL_ARCHIVE_DIR}/${path.basename(file)}` });
     combinedDataRows = combinedDataRows.concat(lines);
   }
 

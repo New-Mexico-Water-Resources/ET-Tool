@@ -21,7 +21,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
-import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
+import useCurrentJobStore, { PreviewUnitsType, PreviewVariableType } from "../utils/currentJobStore";
 import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS, VARIABLE_DISPLAY_NAMES } from "../utils/constants";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
@@ -48,6 +48,7 @@ const CurrentJobChip = () => {
     state.previewVariable,
     state.setPreviewVariable,
   ]);
+  const [previewUnits, setPreviewUnits] = useCurrentJobStore((state) => [state.previewUnits, state.setPreviewUnits]);
   const [previewDay, setPreviewDay] = useCurrentJobStore((state) => [state.previewDay, state.setPreviewDay]);
   const currentJobChipRef = useRef<HTMLDivElement>(null);
   const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
@@ -451,21 +452,35 @@ const CurrentJobChip = () => {
                         </FormControl>
                       </div>
                     </div>
-                    <FormControl sx={{ flex: 1 }}>
-                      <InputLabel size="small">Variable</InputLabel>
-                      <Select
-                        label="Variable"
-                        size="small"
-                        value={previewVariable}
-                        onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
-                      >
-                        {displayVariableOptions.map((variable) => (
-                          <MenuItem key={variable} value={variable}>
-                            {VARIABLE_DISPLAY_NAMES[variable as keyof typeof VARIABLE_DISPLAY_NAMES] || variable}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <FormControl sx={{ flex: 1 }}>
+                        <InputLabel size="small">Variable</InputLabel>
+                        <Select
+                          label="Variable"
+                          size="small"
+                          value={previewVariable}
+                          onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
+                        >
+                          {displayVariableOptions.map((variable) => (
+                            <MenuItem key={variable} value={variable}>
+                              {VARIABLE_DISPLAY_NAMES[variable as keyof typeof VARIABLE_DISPLAY_NAMES] || variable}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <FormControl sx={{ flex: 1 }}>
+                        <InputLabel size="small">Units</InputLabel>
+                        <Select
+                          label="Units"
+                          size="small"
+                          value={previewUnits}
+                          onChange={(e) => setPreviewUnits(e.target.value as PreviewUnitsType)}
+                        >
+                          <MenuItem value="mm">mm</MenuItem>
+                          <MenuItem value="inches">inches</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </div>
                   </div>
                   {availableDays &&
                     availableDays.length > 0 &&
