@@ -22,7 +22,7 @@ import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
 import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
-import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS } from "../utils/constants";
+import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS, VARIABLE_DISPLAY_NAMES } from "../utils/constants";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 import { useAtomValue } from "jotai";
@@ -461,7 +461,7 @@ const CurrentJobChip = () => {
                       >
                         {displayVariableOptions.map((variable) => (
                           <MenuItem key={variable} value={variable}>
-                            {variable}
+                            {VARIABLE_DISPLAY_NAMES[variable as keyof typeof VARIABLE_DISPLAY_NAMES] || variable}
                           </MenuItem>
                         ))}
                       </Select>

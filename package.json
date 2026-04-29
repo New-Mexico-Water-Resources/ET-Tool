@@ -9,7 +9,6 @@
     "demo": "node server/server.js demo",
     "dev": "RUN_DIRECTORY_BASE=./output node server/server.js demo"
   },
-  "author": "Gregory Halverson",
   "license": "ISC",
   "dependencies": {
     "@mapbox/togeojson": "^0.16.2",

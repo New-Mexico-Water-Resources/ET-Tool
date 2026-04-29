@@ -8,6 +8,7 @@ import re
 import shutil
 import numpy as np
 import rasterio
+from rasterio.crs import CRS
 from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 import geopandas as gpd
@@ -23,7 +24,7 @@ class PrismAWSDataPipeline:
         aws_profile: str = None,
         aws_access_key_id: str = None,
         aws_secret_access_key: str = None,
-        base_url: str = "https://ftp.prism.oregonstate.edu/monthly/ppt/",
+        base_url: str = "https://ftp.prism.oregonstate.edu/time_series/us/an/800m/ppt/monthly/",
         product_prefix: str = "OREGON_STATE_PRISM",
         raw_dir: str = "prism_data",
         monthly_dir: str = "prism_data_monthly",
@@ -83,19 +84,24 @@ class PrismAWSDataPipeline:
 
             return False
 
-    def _extract_bil_and_hdr(self, zip_path, extract_dir, year):
-        """Extract .bil and .hdr files from a yearly zip archive."""
+    def _extract_raster_files(self, zip_path, extract_dir):
+        """Extract PRISM raster files from a monthly zip archive."""
         try:
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 for file in zip_ref.namelist():
-                    if file.endswith(".bil") or file.endswith(".hdr"):
-                        # Create month subdirectory
-                        month = file.split("_")[4][:6]  # Extract YYYYMM from the filename
-                        month_dir = os.path.join(extract_dir, month)
-                        os.makedirs(month_dir, exist_ok=True)
-                        # Extract the file
-                        zip_ref.extract(file, month_dir)
-                        self.logger.info(f"Extracted {file} to {month_dir}")
+                    if not self._is_supported_prism_file(file):
+                        continue
+
+                    try:
+                        month = self._parse_year_month_from_filename(file)
+                    except ValueError:
+                        self.logger.info(f"Skipping {file} - wrong filename format")
+                        continue
+
+                    month_dir = os.path.join(extract_dir, month)
+                    os.makedirs(month_dir, exist_ok=True)
+                    zip_ref.extract(file, month_dir)
+                    self.logger.info(f"Extracted {file} to {month_dir}")
         except zipfile.BadZipFile:
             self.logger.error(f"Error: {zip_path} is not a valid zip file")
 
@@ -107,59 +113,35 @@ class PrismAWSDataPipeline:
             month (int): The month to download data for
         """
         year_url = f"{self.base_url}{year}/"
-        file_name = f"PRISM_ppt_stable_4kmM3_{year}{month:02d}_bil.zip"
+        # prism_ppt_us_30s_202501.zip
+        file_name = f"prism_ppt_us_30s_{year}{month:02d}.zip"
         file_url = f"{year_url}{file_name}"
 
         year_dir = os.path.join(self.raw_dir, str(year))
         os.makedirs(year_dir, exist_ok=True)
 
         zip_path = os.path.join(year_dir, file_name)
+        if os.path.exists(zip_path):
+            self.logger.info(f"{file_name} already exists. Skipping download.")
+            self._extract_raster_files(zip_path, year_dir)
+            return
+
         success = self._download_file(file_url, zip_path)
         if success:
-            self._extract_bil_and_hdr(zip_path, year_dir, year)
+            self._extract_raster_files(zip_path, year_dir)
         else:
-            # Try provisional data
-            if self.allow_provisional:
-                file_name = f"PRISM_ppt_provisional_4kmM3_{year}{month:02d}_bil.zip"
-                file_url = f"{year_url}{file_name}"
-                zip_path = os.path.join(year_dir, file_name)
-                success = self._download_file(file_url, zip_path)
-                if success:
-                    self._extract_bil_and_hdr(zip_path, year_dir, year)
-                else:
-                    self.logger.error(f"Failed to download {file_name}")
-            else:
-                self.logger.error(f"Failed to download {file_name}")
+            self.logger.error(f"Failed to download {file_name}")
 
     def download_by_year(self, year: int):
         """
         Download all monthly data for the given year
         """
-        year_url = f"{self.base_url}{year}/"
-        file_name = f"PRISM_ppt_stable_4kmM3_{year}_all_bil.zip"
-        file_url = f"{year_url}{file_name}"
+        for month in range(1, 13):
+            self.download_by_month(year, month)
+            time.sleep(self.delay)
 
-        year_dir = os.path.join(self.raw_dir, str(year))
-        os.makedirs(year_dir, exist_ok=True)
-
-        zip_path = os.path.join(year_dir, file_name)
-
-        # Download the file if it doesn't already exist
-        if not os.path.exists(zip_path):
-            self.logger.info(f"Downloading {file_name}...")
-            success = self._download_file(file_url, zip_path, allow_fail=True)
-            if success:
-                self._extract_bil_and_hdr(zip_path, year_dir, year)
-            else:
-                # The all_bil file is not available, so we need to download the monthly files
-                for month in range(1, 13):
-                    self.download_by_month(year, month)
-                    time.sleep(self.delay)
-        else:
-            self.logger.info(f"{file_name} already exists. Skipping download.")
-
-    def consolidate_bil_files(self, year: int):
-        """Consolidate all .bil files into a flat directory."""
+    def consolidate_raster_files(self, year: int):
+        """Consolidate monthly PRISM raster files into a flat directory."""
         year_dir = os.path.join(self.raw_dir, str(year))
         if not os.path.exists(year_dir):
             self.logger.info(f"Year directory {year_dir} does not exist. Skipping.")
@@ -168,35 +150,62 @@ class PrismAWSDataPipeline:
         self.logger.info(f"Processing year {year}...")
         for root, _, files in os.walk(year_dir):
             for file in files:
-                # Make sure filename matches PRISM_ppt_stable_4kmM3_198501_bil.bil
-                if self.allow_provisional:
-                    # Allow either stable or provisional data
-                    matches = re.match(r"PRISM_ppt_(stable|provisional)_4kmM3_(\d{6})_bil.[a-z]{3,3}", file)
-                else:
-                    matches = re.match(r"PRISM_ppt_stable_4kmM3_(\d{6})_bil.[a-z]{3,3}", file)
-                if not matches:
+                if not self._is_supported_prism_file(file):
+                    continue
+
+                try:
+                    self._parse_year_month_from_filename(file)
+                except ValueError:
                     self.logger.info(f"Skipping {file} - wrong filename format")
                     continue
 
-                if file.endswith(".bil") or file.endswith(".hdr"):
-                    source_path = os.path.join(root, file)
-                    os.makedirs(self.monthly_dir, exist_ok=True)
-                    target_path = os.path.join(self.monthly_dir, file)
+                source_path = os.path.join(root, file)
+                os.makedirs(self.monthly_dir, exist_ok=True)
+                target_path = os.path.join(self.monthly_dir, file)
 
-                    # If already exists, skip
-                    if os.path.exists(target_path):
-                        self.logger.info(f"Skipping {source_path} - already exists")
-                        continue
+                # If already exists, skip
+                if os.path.exists(target_path):
+                    self.logger.info(f"Skipping {source_path} - already exists")
+                    continue
 
-                    shutil.copy(source_path, target_path)
-                    self.logger.info(f"Copied {source_path} to {target_path}")
+                shutil.copy(source_path, target_path)
+                self.logger.info(f"Copied {source_path} to {target_path}")
+
+    def consolidate_bil_files(self, year: int):
+        """Backward-compatible wrapper for older notebook calls."""
+        self.consolidate_raster_files(year)
+
+    def _is_supported_prism_file(self, filename):
+        """Return True for raster files needed by rasterio."""
+        lower_filename = filename.lower()
+        return lower_filename.endswith((".tif", ".tiff", ".bil", ".hdr"))
+
+    def _is_supported_raster(self, filename):
+        """Return True for raster datasets that should be tiled."""
+        lower_filename = filename.lower()
+        return lower_filename.endswith((".tif", ".tiff", ".bil"))
+
+    def _parse_year_month_from_filename(self, filename):
+        """Parse YYYYMM from current COG or legacy BIL PRISM filenames."""
+        basename = os.path.basename(filename)
+
+        cog_match = re.match(r"prism_ppt_us_30s_(\d{6})(?:\.[^.]+)?$", basename, flags=re.IGNORECASE)
+        if cog_match:
+            return cog_match.group(1)
+
+        legacy_pattern = r"PRISM_ppt_(stable|provisional)_4kmM3_(\d{6})_bil\.[a-z]{3}"
+        legacy_match = re.match(legacy_pattern, basename)
+        if legacy_match:
+            status, year_month = legacy_match.groups()
+            if status == "provisional" and not self.allow_provisional:
+                raise ValueError(f"Unexpected provisional filename: {filename}")
+            return year_month
+
+        raise ValueError(f"Unexpected filename format: {filename}")
 
     def _parse_date_from_filename(self, filename):
         """Parse start and end dates from the filename."""
-        parts = filename.split("_")
-        if len(parts) < 5:
-            raise ValueError(f"Unexpected filename format: {filename}")
-        date_str = parts[4]  # YYYYMM
+        date_str = self._parse_year_month_from_filename(filename)
         start_date = datetime.strptime(date_str, "%Y%m")
         end_date = (start_date.replace(day=28) + timedelta(days=4)).replace(day=1)
         return start_date.strftime("%Y%m01"), end_date.strftime("%Y%m01")
@@ -209,22 +218,40 @@ class PrismAWSDataPipeline:
         bottom = top + transform.e * height
         return left, bottom, right, top
 
-    def _reproject_raster(self, src_crs, data, transform):
+    def _reproject_raster(self, src_crs, data, transform, nodata=None):
         """Reproject raster data to the target CRS."""
+        src_crs = CRS.from_user_input(src_crs)
+        target_crs = CRS.from_user_input(self.target_crs)
+        if src_crs == target_crs:
+            metadata = {
+                "crs": target_crs,
+                "transform": transform,
+                "width": data.shape[2],
+                "height": data.shape[1],
+                "count": data.shape[0],
+                "dtype": data.dtype.name,
+                "driver": "GTiff",
+            }
+            if nodata is not None:
+                metadata["nodata"] = nodata
+            return data, metadata
+
         bounds = self._calculate_bounds(transform, data.shape[2], data.shape[1])
-        transform, width, height = calculate_default_transform(
-            src_crs, self.target_crs, data.shape[2], data.shape[1], *bounds
+        dst_transform, width, height = calculate_default_transform(
+            src_crs, target_crs, data.shape[2], data.shape[1], *bounds
         )
         dest_data = np.empty((data.shape[0], height, width), dtype=data.dtype)
         dest_meta = {
-            "crs": self.target_crs,
-            "transform": transform,
+            "crs": target_crs,
+            "transform": dst_transform,
             "width": width,
             "height": height,
             "count": data.shape[0],
             "dtype": data.dtype.name,
             "driver": "GTiff",
         }
+        if nodata is not None:
+            dest_meta["nodata"] = nodata
 
         for i in range(data.shape[0]):
             reproject(
@@ -232,41 +259,50 @@ class PrismAWSDataPipeline:
                 destination=dest_data[i],
                 src_transform=transform,
                 src_crs=src_crs,
-                dst_transform=transform,
-                dst_crs=self.target_crs,
+                dst_transform=dst_transform,
+                dst_crs=target_crs,
+                src_nodata=nodata,
+                dst_nodata=nodata,
                 resampling=Resampling.nearest,
             )
 
         return dest_data, dest_meta
 
     def process_tiles(self):
-        """Chop each .bil file into tiles and save them in the specified format."""
+        """Chop each monthly PRISM raster into tiles and save them in the specified format."""
         # Load GeoJSON
         tiles_gdf = gpd.read_file(self.tiles_geojson)
 
-        # Loop through all .bil files
-        for bil_file in os.listdir(self.monthly_dir):
-            if bil_file.endswith(".bil"):
-                bil_path = os.path.join(self.monthly_dir, bil_file)
-                self.logger.info(f"Processing {bil_file}...")
+        # Loop through all monthly raster files
+        for raster_file in os.listdir(self.monthly_dir):
+            if self._is_supported_raster(raster_file):
+                raster_path = os.path.join(self.monthly_dir, raster_file)
+                self.logger.info(f"Processing {raster_file}...")
 
                 # Parse dates from filename
                 try:
-                    start_date, end_date = self._parse_date_from_filename(bil_file)
+                    start_date, end_date = self._parse_date_from_filename(raster_file)
                 except ValueError as e:
                     self.logger.error(e)
                     continue
 
-                # Open the .bil file
-                with rasterio.open(bil_path) as src:
+                # Open the monthly raster file
+                with rasterio.open(raster_path) as src:
                     # Manually assign CRS if missing
                     if src.crs is None:
                         src_crs = self.source_crs
                     else:
                         src_crs = src.crs
 
+                    raster_tiles_gdf = tiles_gdf
+                    if (
+                        tiles_gdf.crs is not None
+                        and CRS.from_user_input(tiles_gdf.crs) != CRS.from_user_input(src_crs)
+                    ):
+                        raster_tiles_gdf = tiles_gdf.to_crs(src_crs)
+
                     # Loop through each feature in the GeoJSON
-                    for _, feature in tiles_gdf.iterrows():
+                    for _, feature in raster_tiles_gdf.iterrows():
                         hv = feature["hv"]
                         geometry = [feature["geometry"]]
 
@@ -274,7 +310,9 @@ class PrismAWSDataPipeline:
                         try:
                             out_image, out_transform = mask(src, geometry, crop=True)
                             # Reproject the raster data to WGS84
-                            reprojected_data, reprojected_meta = self._reproject_raster(src_crs, out_image, out_transform)
+                            reprojected_data, reprojected_meta = self._reproject_raster(
+                                src_crs, out_image, out_transform, src.nodata
+                            )
 
                             os.makedirs(self.output_dir, exist_ok=True)
                             # Generate output filename
@@ -348,7 +386,7 @@ class PrismAWSDataPipeline:
             upload (bool, optional): Whether to upload the files to the aws bucket [default: False]
         """
         self.download_by_year(year)
-        self.consolidate_bil_files(year)
+        self.consolidate_raster_files(year)
         self.process_tiles()
         if upload:
             self.upload_local_folder_to_aws()

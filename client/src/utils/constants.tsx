@@ -19,7 +19,7 @@ export const ROLES = {
 };
 
 export const OPENET_TRANSITION_DATE = 1985;
-export const DATA_END_YEAR = 2024;
+export const DATA_END_YEAR = 2025;
 
 export const ET_COLORMAP = ["#f6e8c3", "#d8b365", "#99974a", "#53792d", "#6bdfd2", "#1839c5"];
 export const DIFF_COLORMAP = ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641"];
@@ -27,6 +27,13 @@ export const DIFF_COLORMAP = ["#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a96
 export const ALL_VARIABLE_OPTIONS = ["ET", "ET_MIN", "ET_MAX", "PET", "PPT"];
 export const PRE_OPENET_VARIABLE_OPTIONS = ["ET", "PET", "PPT"];
 export const POST_OPENET_VARIABLE_OPTIONS = ["ET", "PET", "PPT", "ET_MIN", "ET_MAX"];
+export const VARIABLE_DISPLAY_NAMES = {
+  ET: "ET",
+  ET_MIN: "ET MIN",
+  ET_MAX: "ET MAX",
+  PET: "ETO",
+  PPT: "PPT",
+};
 
 export const REFERENCE_GEOJSONS = {
   "New Mexico (State Boundary)": {

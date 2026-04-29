@@ -9,7 +9,7 @@ dotenv.config();
 // Load .env.keys
 dotenv.config({ path: path.join(__dirname, "..", ".env.secrets") });
 
-const port = 5000;
+const port = process.env.API_PORT || 5000;
 const server_directory = __dirname;
 const project_directory = path.dirname(__dirname);
 // const run_directory_base = '~/data/water_rights_runs';
