@@ -16,6 +16,10 @@ import psutil
 
 from datetime import datetime
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class TERM_COLORS:
     NOTIFICATION = "\033[94m"

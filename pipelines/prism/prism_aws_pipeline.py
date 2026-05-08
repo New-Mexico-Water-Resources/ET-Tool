@@ -268,13 +268,22 @@ class PrismAWSDataPipeline:
 
         return dest_data, dest_meta
 
-    def process_tiles(self):
+    def _get_year_from_filename(self, filename: str) -> int | None:
+        """Get the year from the filename."""
+        file_year_match = re.match(r"prism_ppt_us_30s_(\d{4})([0-9]{2})(?:\.[^.]+)?$", filename, flags=re.IGNORECASE)
+        file_year = file_year_match.group(1) if file_year_match else None
+        return int(file_year) if file_year is not None else None
+
+    def process_tiles(self, year: int | None = None):
         """Chop each monthly PRISM raster into tiles and save them in the specified format."""
         # Load GeoJSON
         tiles_gdf = gpd.read_file(self.tiles_geojson)
 
         # Loop through all monthly raster files
         for raster_file in os.listdir(self.monthly_dir):
+            file_year = self._get_year_from_filename(raster_file)
+            if year is not None and file_year is not None and file_year != year:
+                continue
             if self._is_supported_raster(raster_file):
                 raster_path = os.path.join(self.monthly_dir, raster_file)
                 self.logger.info(f"Processing {raster_file}...")
@@ -358,7 +367,7 @@ class PrismAWSDataPipeline:
         self.logger.info(f"Uploaded file {file_name} to aws bucket {self.aws_bucket}")
         return file_name
 
-    def upload_local_folder_to_aws(self, output_dir: str | None = None, overwrite: bool = False):
+    def upload_local_folder_to_aws(self, output_dir: str | None = None, year: int | None = None, overwrite: bool = False):
         """
         Upload all the files to the aws bucket
         Args:
@@ -371,22 +380,41 @@ class PrismAWSDataPipeline:
             output_dir = self.output_dir
 
         files = []
-        pbar = tqdm(os.listdir(output_dir), desc=f"Uploading files to aws bucket {self.aws_bucket}", leave=False)
+
+        all_files = []
+        if year is not None:
+            all_files = [file for file in os.listdir(output_dir) if self._get_year_from_filename(file) == year]
+        else:
+            all_files = os.listdir(output_dir)
+
+        pbar = tqdm(all_files, desc=f"Uploading files to aws bucket {self.aws_bucket}", leave=False)
         for file in pbar:
             file_path = os.path.join(output_dir, file)
             files.append(self.upload_to_aws(file_path, overwrite))
             pbar.set_description(f"Uploading file: {file}")
         return files
 
-    def process_year(self, year: int, upload: bool = False):
+    def process_year(self, year: int, upload: bool = False, overwrite: bool = False):
         """
         Process the year
         Args:
             year (int): The year to process
             upload (bool, optional): Whether to upload the files to the aws bucket [default: False]
+            overwrite (bool, optional): Whether to overwrite the files if they already exist [default: False]
         """
         self.download_by_year(year)
         self.consolidate_raster_files(year)
-        self.process_tiles()
+        self.process_tiles(year=year)
         if upload:
-            self.upload_local_folder_to_aws()
+            self.upload_local_folder_to_aws(year=year, overwrite=overwrite)
+    def process_year_range(self, start_year: int, end_year: int, upload: bool = False, overwrite: bool = False):
+        """
+        Process the year range
+        Args:
+            start_year (int): The start year to process
+            end_year (int): The end year to process
+            upload (bool, optional): Whether to upload the files to the aws bucket [default: False]
+            overwrite (bool, optional): Whether to overwrite the files if they already exist [default: False]
+        """
+        for year in range(start_year, end_year + 1):
+            self.process_year(year, upload, overwrite)

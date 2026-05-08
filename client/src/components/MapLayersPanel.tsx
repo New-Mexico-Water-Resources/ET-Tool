@@ -31,6 +31,7 @@ import useStore, { MapLayer } from "../utils/store";
 
 import "../scss/MapLayersPanel.scss";
 import { MAP_LAYER_OPTIONS, REFERENCE_GEOJSONS } from "../utils/constants";
+import { parseGibsDescribeDomainsXml } from "../utils/gibsDomainDates";
 import dayjs from "dayjs";
 import { useSetAtom } from "jotai";
 import { modisCountyStatsAtom, CountyStat } from "../utils/atoms";
@@ -185,21 +186,64 @@ const MapLayersPanel: FC = () => {
 
   const [availableDates, setAvailableDates] = useState<string[]>([]);
 
+  const usesDateAllowlist = useMemo(
+    () => !!(selectedMapLayer?.availableDatesURL || selectedMapLayer?.gibsDescribeDomains),
+    [selectedMapLayer]
+  );
+
+  const availableDateSet = useMemo(() => new Set(availableDates), [availableDates]);
+
   useEffect(() => {
+    let cancelled = false;
+    setAvailableDates([]);
+
     if (selectedMapLayer?.availableDatesURL) {
       axios
-        .get(selectedMapLayer.availableDatesURL)
+        .get<string[]>(selectedMapLayer.availableDatesURL)
         .then((response) => {
+          if (cancelled) return;
           const sortedDates = [...response.data].sort((a, b) => dayjs(a).diff(dayjs(b)));
           setAvailableDates(sortedDates);
         })
         .catch((error) => {
-          console.error("Error fetching available dates", error);
-          setAvailableDates([]);
+          if (!cancelled) {
+            console.error("Error fetching available dates", error);
+            setAvailableDates([]);
+          }
         });
-    } else {
-      setAvailableDates([]);
+      return () => {
+        cancelled = true;
+      };
     }
+
+    if (selectedMapLayer?.gibsDescribeDomains) {
+      const { layerId, tileMatrixSet } = selectedMapLayer.gibsDescribeDomains;
+      const url =
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?SERVICE=WMTS&REQUEST=DescribeDomains&VERSION=1.0.0&layer=${encodeURIComponent(
+          layerId
+        )}&tilematrixset=${encodeURIComponent(tileMatrixSet)}&TIME=all`;
+
+      axios
+        .get<string>(url, { responseType: "text", transformResponse: (r) => r })
+        .then((response) => {
+          if (cancelled) return;
+          const sortedDates = parseGibsDescribeDomainsXml(response.data).sort((a, b) =>
+            dayjs(a).diff(dayjs(b))
+          );
+          setAvailableDates(sortedDates);
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.error("Error fetching GIBS available dates", error);
+            setAvailableDates([]);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    return undefined;
   }, [selectedMapLayer]);
 
   const latestAvailableDate = useMemo(() => {
@@ -211,11 +255,21 @@ const MapLayersPanel: FC = () => {
   }, [availableDates]);
 
   useEffect(() => {
-    if ((!tileDate || !tempTileDate) && latestAvailableDate) {
-      setTileDate(latestAvailableDate);
-      setTempTileDate(latestAvailableDate);
+    if (availableDates.length === 0) {
+      return;
     }
-  }, [latestAvailableDate, setTileDate, tileDate, setTempTileDate, tempTileDate]);
+    const latest = availableDates[availableDates.length - 1];
+
+    if (!tileDate || !availableDates.includes(tileDate)) {
+      setTileDate(latest);
+      setTempTileDate(latest);
+      return;
+    }
+
+    if (!tempTileDate || !availableDates.includes(tempTileDate)) {
+      setTempTileDate(tileDate);
+    }
+  }, [availableDates, tileDate, tempTileDate, setTileDate, setTempTileDate]);
 
   const [focusedJobIndex, setFocusedJobIndex] = useState<number>(0);
 
@@ -331,9 +385,8 @@ const MapLayersPanel: FC = () => {
             {showAllCompletedJobs && allGeoJSONs.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "auto" }}>
                 <Tooltip
-                  title={`Previous job: ${
-                    allGeoJSONs[focusedJobIndex > 0 ? focusedJobIndex - 1 : allGeoJSONs.length - 1]?.name
-                  }`}
+                  title={`Previous job: ${allGeoJSONs[focusedJobIndex > 0 ? focusedJobIndex - 1 : allGeoJSONs.length - 1]?.name
+                    }`}
                 >
                   <IconButton
                     size="small"
@@ -376,9 +429,8 @@ const MapLayersPanel: FC = () => {
                   {(focusedJobIndex < allGeoJSONs.length && allGeoJSONs[focusedJobIndex]?.name) || "No job selected"}
                 </Typography>
                 <Tooltip
-                  title={`Next job: ${
-                    allGeoJSONs[focusedJobIndex < allGeoJSONs.length - 1 ? focusedJobIndex + 1 : 0]?.name
-                  }`}
+                  title={`Next job: ${allGeoJSONs[focusedJobIndex < allGeoJSONs.length - 1 ? focusedJobIndex + 1 : 0]?.name
+                    }`}
                 >
                   <IconButton
                     size="small"
@@ -615,7 +667,8 @@ const MapLayersPanel: FC = () => {
                                   sx={{ marginTop: "0", padding: 0 }}
                                   className="date-picker"
                                   defaultValue={dayjs(!option.refresh ? undefined : latestAvailableDate)}
-                                  value={dayjs(tempTileDate)}
+                                  value={tempTileDate || tileDate ? dayjs(tempTileDate || tileDate) : null}
+                                  disabled={usesDateAllowlist && availableDates.length === 0}
                                   disableFuture={true}
                                   minDate={availableDates.length === 0 ? undefined : dayjs(availableDates[0])}
                                   maxDate={
@@ -624,9 +677,10 @@ const MapLayersPanel: FC = () => {
                                       : dayjs(availableDates[availableDates.length - 1])
                                   }
                                   shouldDisableDate={(date) => {
-                                    return (
-                                      availableDates.length !== 0 && !availableDates.includes(date.format("YYYY-MM-DD"))
-                                    );
+                                    const key = date.format("YYYY-MM-DD");
+                                    if (usesDateAllowlist && availableDates.length === 0) return true;
+                                    if (availableDates.length !== 0 && !availableDateSet.has(key)) return true;
+                                    return false;
                                   }}
                                   showDaysOutsideCurrentMonth={true}
                                   onChange={(selectedDate) => {

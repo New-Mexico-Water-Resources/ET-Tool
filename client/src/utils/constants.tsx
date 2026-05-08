@@ -1,6 +1,13 @@
 import nm_geojson from "../assets/geojsons/nm.json";
 import nm_counties_geojson from "../assets/geojsons/nm_counties.json";
 
+/** Optional production same-origin proxy for CDL WMS (enables canvas identify on hover). Dev defaults to Vite `/cdl-wms`. */
+const NASS_CDL_WMS_URL =
+  import.meta.env.VITE_CDL_WMS_URL ||
+  (import.meta.env.DEV
+    ? "/cdl-wms/CropScapeService/wms_cdlall.cgi"
+    : "https://nassgeodata.gmu.edu/CropScapeService/wms_cdlall.cgi");
+
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
 export const TILE_SERVER_URL = import.meta.env.VITE_TILE_SERVER_URL || "/ts_v1/tiles";
 
@@ -73,11 +80,28 @@ export const MAP_LAYER_OPTIONS = {
     maxZoom: 20,
     subdomains: ["mt0", "mt1", "mt2", "mt3"],
   },
+  "Google Hybrid": {
+    name: "Google Hybrid",
+    attribution: 'Imagery <a href="https://www.google.com/">Google</a>',
+    url: "http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&hl=en",
+    maxZoom: 20,
+    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+  },
   "USGS US Imagery Topo": {
     name: "USGS US Imagery Topo",
     attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>',
     url: "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}",
     maxZoom: 16,
+  },
+  "USDA Cropland Data Layer": {
+    name: "USDA Cropland Data Layer",
+    attribution:
+      '<a href="https://www.nass.usda.gov/Research_and_Science/Cropland/">USDA NASS Cropland Data Layer</a> via <a href="https://nassgeodata.gmu.edu/CropScape/">CropScape</a> (George Mason University).',
+    url: NASS_CDL_WMS_URL,
+    maxZoom: 16,
+    subdomains: [],
+    wmsLayers: "cdl_latest",
+    wmsLegend: true,
   },
   "MODIS Terra True Color CR": {
     name: "MODIS Terra True Color CR",
@@ -86,6 +110,23 @@ export const MAP_LAYER_OPTIONS = {
     url: "https://map1.vis.earthdata.nasa.gov/wmts-webmerc/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/GoogleMapsCompatible_Level{maxZoom}/{z}/{y}/{x}.jpg",
     maxZoom: 9,
     time: "2023-01-01",
+    gibsDescribeDomains: {
+      layerId: "MODIS_Terra_CorrectedReflectance_TrueColor",
+      tileMatrixSet: "GoogleMapsCompatible_Level9",
+    },
+  },
+  "VIIRS SNPP NDVI 8-Day": {
+    name: "VIIRS SNPP NDVI 8-Day",
+    attribution:
+      'Imagery provided by services from the Global Imagery Browse Services (GIBS), operated by the NASA/GSFC/Earth Science Data and Information System (<a href="https://earthdata.nasa.gov">ESDIS</a>) with funding provided by NASA/HQ. Rolling 8-day composite: {compositePeriod}.',
+    url: "https://map1.vis.earthdata.nasa.gov/wmts-webmerc/VIIRS_SNPP_NDVI_8Day/default/{time}/GoogleMapsCompatible_Level{maxZoom}/{z}/{y}/{x}.png",
+    maxZoom: 8,
+    time: "2026-05-06",
+    compositePeriodDays: 8,
+    gibsDescribeDomains: {
+      layerId: "VIIRS_SNPP_NDVI_8Day",
+      tileMatrixSet: "GoogleMapsCompatible_Level8",
+    },
   },
   "MODIS ET 500": {
     name: "MODIS ET 500",

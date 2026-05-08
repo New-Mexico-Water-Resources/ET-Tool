@@ -48,6 +48,13 @@ const DrawControls = () => {
     return activeMapLayer?.refresh;
   }, [activeMapLayer?.refresh]);
 
+  const showWmsLegend = useMemo(
+    () => !!(activeMapLayer?.wmsLegend && activeMapLayer?.wmsLayers),
+    [activeMapLayer?.wmsLegend, activeMapLayer?.wmsLayers]
+  );
+
+  const legendNeedsRightOffset = !!(showColorScale || showWmsLegend);
+
   const updateDrawControls = useCallback(() => {
     if (isRightPanelOpen) {
       const controls = document.querySelectorAll(".leaflet-right .leaflet-control");
@@ -58,7 +65,7 @@ const DrawControls = () => {
           const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
           drawActions.forEach((action) => {
             if (action instanceof HTMLElement && action) {
-              action.style.right = showColorScale ? "78px" : "38px";
+              action.style.right = legendNeedsRightOffset ? "78px" : "38px";
             }
           });
         }
@@ -72,13 +79,13 @@ const DrawControls = () => {
           const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
           drawActions.forEach((action) => {
             if (action instanceof HTMLElement && action) {
-              action.style.right = showColorScale ? "78px" : "38px";
+              action.style.right = legendNeedsRightOffset ? "78px" : "38px";
             }
           });
         }
       });
     }
-  }, [isRightPanelOpen, showColorScale]);
+  }, [isRightPanelOpen, legendNeedsRightOffset]);
 
   const map = useMap();
 

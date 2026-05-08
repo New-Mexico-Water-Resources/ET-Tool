@@ -83,11 +83,15 @@ export type MapLayer = {
   url: string;
   maxZoom: number;
   subdomains: string[];
+  wmsLayers?: string;
+  wmsLegend?: boolean;
+  compositePeriodDays?: number;
   time?: string;
   backgroundProvider?: string;
   labelsProvider?: string;
   tms?: boolean;
   availableDatesURL?: string;
+  gibsDescribeDomains?: { layerId: string; tileMatrixSet: string };
   hidden?: boolean;
   refresh?: "static" | "dynamic";
   units?: string;
@@ -104,7 +108,6 @@ interface Store {
   setTileDate: (tileDate: string) => void;
   mapLayerKey: string;
   setMapLayerKey: (mapLayerKey: string) => void;
-  // fetchMapStats: (mapLayerKey: string, time: string, comparisonMode: string) => void;
   isRightPanelOpen: boolean;
   activeTab: ActiveTabType;
   setActiveTab: (tab: ActiveTabType) => void;
