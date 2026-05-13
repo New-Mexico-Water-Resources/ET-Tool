@@ -36,6 +36,21 @@ export const formatElapsedTime = (elapsedTime: number): string => {
   return formattedTimeRemaining;
 };
 
+const SQ_METERS_PER_ACRE = 4046.86;
+
+export const JOB_SUBMIT_MINUTES_PER_YEAR = 7.5;
+
+export function squareMetersToAcres(sqMeters: number): number {
+  if (!(sqMeters > 0)) {
+    return 0;
+  }
+  return Math.round((sqMeters / SQ_METERS_PER_ACRE) * 100) / 100;
+}
+
+export function estimateSubmitDurationMsFromYearRuns(yearRunCount: number): number {
+  return Math.max(0, yearRunCount) * JOB_SUBMIT_MINUTES_PER_YEAR * 60 * 1000;
+}
+
 export const formJobForQueue = (jobName: string, startYear: number, endYear: number, geojson: any): any => {
   let strippedName = jobName.replace(/[^a-zA-Z0-9]/g, "_");
   let jobKey = `${strippedName}_${startYear}_${endYear}_${Date.now()}`;

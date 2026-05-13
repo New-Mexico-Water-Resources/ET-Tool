@@ -26,7 +26,12 @@ import React, { ChangeEvent, useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import useStore, { PolygonLocation } from "../utils/store";
 import { useConfirm } from "material-ui-confirm";
-import { formatElapsedTime, formJobForQueue } from "../utils/helpers";
+import {
+  estimateSubmitDurationMsFromYearRuns,
+  formatElapsedTime,
+  formJobForQueue,
+  squareMetersToAcres,
+} from "../utils/helpers";
 import { area as turfArea } from "@turf/turf";
 
 const UploadDialog = () => {
@@ -387,25 +392,60 @@ const UploadDialog = () => {
               border: canSubmitJob || canSubmitBulkJob ? "1px solid #1E40AF" : "1px solid transparent",
             }}
             onClick={() => {
-              if (canSubmitJob) {
-                submitJob();
-              } else if (canSubmitBulkJob) {
-                const jobs = prepareMultipolygonJob();
-                const totalNumberOfYears = jobs.reduce((acc, job) => acc + job.end_year - job.start_year + 1, 0);
+              const confirmSx = {
+                titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+                contentProps: {
+                  sx: {
+                    backgroundColor: "var(--st-gray-90)",
+                    color: "var(--st-gray-10)",
+                    whiteSpace: "pre-line",
+                  },
+                },
+                dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
+                confirmationButtonProps: { color: "primary", variant: "contained" },
+                cancellationButtonProps: { color: "secondary", variant: "contained" },
+              } as const;
 
-                // Rough estimate of 5 minutes per year
-                const estimatedTimePerYear = 5;
-                const estimatedTimeMS = totalNumberOfYears * estimatedTimePerYear * 60 * 1000;
-                const estimatedTime = formatElapsedTime(estimatedTimeMS).trim();
+              if (canSubmitJob) {
+                const yearCount = endYear - startYear + 1;
+                const areaSqM = loadedGeoJSON ? turfArea(loadedGeoJSON) : 0;
+                const acres = squareMetersToAcres(areaSqM);
+                const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(yearCount)).trim();
 
                 confirm({
-                  title: "Submit Bulk Job",
-                  description: `Are you sure you want to submit ${jobs.length} jobs (ETA: ${estimatedTime})?`,
-                  confirmationButtonProps: { color: "primary", variant: "contained" },
-                  cancellationButtonProps: { color: "secondary", variant: "contained" },
-                  titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
+                  title: "Submit job?",
+                  description: [
+                    `Years requested: ${yearCount} (${startYear}–${endYear})`,
+                    `Area: ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
+                    `Estimated processing time: ~${estimatedTime}`,
+                  ].join("\n"),
+                  ...confirmSx,
+                }).then(() => {
+                  submitJob();
+                });
+              } else if (canSubmitBulkJob) {
+                const jobs = prepareMultipolygonJob();
+                if (jobs.length === 0) {
+                  return;
+                }
+
+                const yearsPerJob = endYear - startYear + 1;
+                const totalYearRuns = jobs.reduce((acc, job) => acc + (job.end_year - job.start_year + 1), 0);
+                const areaSqM = visibleRows.reduce((acc, row) => acc + turfArea(multipolygons[row.id]), 0);
+                const acres = squareMetersToAcres(areaSqM);
+                const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(totalYearRuns)).trim();
+
+                confirm({
+                  title: "Submit bulk jobs?",
+                  description: [
+                    `Jobs: ${jobs.length}`,
+                    `Years: ${yearsPerJob} per job (${startYear}–${endYear}), ${totalYearRuns} total year-runs`,
+                    `Combined area (visible layers): ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
+                    `Estimated processing time: ~${estimatedTime}`,
+                    "",
+                    `Submit ${jobs.length} job${jobs.length === 1 ? "" : "s"}?`,
+                  ].join("\n"),
+                  ...confirmSx,
                 }).then(() => {
                   submitMultipolygonJob(jobs);
                 });
