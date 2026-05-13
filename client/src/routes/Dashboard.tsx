@@ -19,6 +19,7 @@ import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } fro
 import ActiveMapLayer from "../components/ActiveMapLayer";
 import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
+import MapSearchControl from "../components/MapSearchControl";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
 import ColorScale from "../components/ColorScale";
 import { CdlHoverIdentify, CdlLegendFab } from "../components/CdlMapExtras";
@@ -397,6 +398,7 @@ const Dashboard = () => {
           {showWmsLegend && <CdlHoverIdentify />}
           <ZoomControl position="topright" />
           <DrawControls />
+          <MapSearchControl />
           <ScaleControl position="bottomleft" />
 
           {showColorScale && (
