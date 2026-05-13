@@ -1,7 +1,19 @@
+import CloseIcon from "@mui/icons-material/Close";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Tooltip, Typography } from "@mui/material";
+import SearchIcon from "@mui/icons-material/Search";
+import {
+  Box,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  InputAdornment,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import L from "leaflet";
-import { FC, useCallback, useRef, useState } from "react";
+import { FC, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap, useMapEvent } from "react-leaflet";
 import { cdlPaletteRows, lookupCdlRgb } from "../utils/cdlCropRgbLookup";
@@ -133,6 +145,11 @@ const legendDlgPaperSx = {
   borderRadius: 1,
   maxWidth: 440,
   width: "100%",
+  maxHeight: "90vh",
+  height: "min(72vh, 620px)",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
   backgroundImage: "none",
   boxShadow: "0 24px 64px rgba(0,0,0,0.55)",
   "&::before": { display: "none" },
@@ -141,12 +158,30 @@ const legendDlgPaperSx = {
 
 export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    setSearch("");
+  }, []);
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) {
+      return cdlPaletteRows;
+    }
+
+    return cdlPaletteRows.filter((row) => row.name.toLowerCase().includes(q));
+  }, [search]);
 
   return (
     <>
       <Tooltip title="View Legend">
         <IconButton
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setSearch("");
+            setOpen(true);
+          }}
           aria-label="Open cropland legend"
           sx={{
             position: "absolute",
@@ -164,7 +199,7 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
       </Tooltip>
       <Dialog
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={handleClose}
         scroll="paper"
         slotProps={{
           paper: { elevation: 0, sx: legendDlgPaperSx },
@@ -172,31 +207,86 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
       >
         <DialogTitle
           sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "stretch",
+            gap: 1.25,
+            pr: 1,
+            pb: 1.25,
+            flexShrink: 0,
             borderBottom: "1px solid var(--st-gray-70)",
             color: "var(--st-gray-20)",
             fontWeight: 600,
           }}
         >
-          {title}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.25 }}>
+              <Typography component="span" sx={{ lineHeight: 1.3 }}>
+                {title}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "var(--st-gray-40)", fontWeight: 400, lineHeight: 1.35 }}>
+                Some crops share the same color.
+              </Typography>
+            </Box>
+            <IconButton
+              onClick={handleClose}
+              aria-label="Close legend"
+              size="small"
+              sx={{ flexShrink: 0, color: "var(--st-gray-30)" }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          <TextField
+            fullWidth
+            size="small"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search crops…"
+            aria-label="Search legend crops"
+            autoComplete="off"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                backgroundColor: "var(--st-gray-80)",
+                color: "var(--st-gray-20)",
+                fontSize: "0.8125rem",
+                "& fieldset": { borderColor: "var(--st-gray-60)" },
+                "&:hover fieldset": { borderColor: "var(--st-gray-50)" },
+                "&.Mui-focused fieldset": { borderColor: "var(--st-gray-40)" },
+              },
+            }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: "var(--st-gray-40)", fontSize: 20 }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
         </DialogTitle>
         <DialogContent
           onWheel={(ev) => ev.stopPropagation()}
           sx={{
+            flex: 1,
+            minHeight: 0,
             overscrollBehavior: "contain",
-            maxHeight: "78vh",
-            overflow: "auto",
-            py: 1.5,
+            overflowY: "auto",
+            py: 1,
             px: 0,
             touchAction: "pan-y",
             color: "var(--st-gray-20)",
             borderColor: "var(--st-gray-70)",
           }}
         >
-          <Typography variant="caption" sx={{ display: "block", px: 2, pb: 1.5, color: "var(--st-gray-40)" }}>
-            Some crops share the same color.
-          </Typography>
           <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
-            {cdlPaletteRows.map((row, i) => (
+            {filteredRows.length === 0 ? (
+              <Typography variant="body2" sx={{ px: 2, py: 2, color: "var(--st-gray-40)" }}>
+                No crops match “{search.trim()}”.
+              </Typography>
+            ) : (
+              filteredRows.map((row, i) => (
               <Box
                 key={`${row.r}-${row.g}-${row.b}-${row.name}-${i}`}
                 component="li"
@@ -232,14 +322,10 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
                   {row.name}
                 </Typography>
               </Box>
-            ))}
+              ))
+            )}
           </Box>
         </DialogContent>
-        <DialogActions sx={{ borderTop: "1px solid var(--st-gray-70)", px: 2, py: 1 }}>
-          <Button onClick={() => setOpen(false)} sx={{ color: "var(--st-gray-30)" }}>
-            Close
-          </Button>
-        </DialogActions>
       </Dialog>
     </>
   );

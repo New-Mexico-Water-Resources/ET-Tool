@@ -25,7 +25,6 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Add CSS for crossfade effect
 const styleCrossfade = document.createElement("style");
 styleCrossfade.textContent = `
   .active-monthly-map-layer {
@@ -33,9 +32,6 @@ styleCrossfade.textContent = `
   }
   .active-monthly-map-layer.fade-out {
     opacity: 0 !important;
-  }
-  .active-monthly-map-layer.fade-in {
-    opacity: 1 !important;
   }
 `;
 document.head.appendChild(styleCrossfade);
@@ -45,10 +41,10 @@ const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
     ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16),
-      }
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16),
+    }
     : null;
 };
 
@@ -165,6 +161,8 @@ const ActiveMonthlyMapLayer: FC = () => {
     state.previewMax,
     state.setPreviewMax,
   ]);
+  const previewOpacity = useCurrentJobStore((state) => state.previewOpacity);
+  const setPreviewOpacity = useCurrentJobStore((state) => state.setPreviewOpacity);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayerHasColorScale = useMemo(() => {
@@ -206,7 +204,13 @@ const ActiveMonthlyMapLayer: FC = () => {
   }, [map]);
 
   // Function to create a new layer with crossfade
-  const createLayerWithCrossfade = async (georaster: GeoRaster, minValue: number, maxValue: number, colormap: string[]) => {
+  const createLayerWithCrossfade = async (
+    georaster: GeoRaster,
+    minValue: number,
+    maxValue: number,
+    colormap: string[],
+    layerOpacity: number
+  ) => {
     // Create the new layer
     const newLayer = new GeoRasterLayer({
       georaster: georaster,
@@ -224,7 +228,7 @@ const ActiveMonthlyMapLayer: FC = () => {
       updateWhenIdle: false,
       updateWhenZooming: false,
       updateWhenMoving: false,
-      className: "active-monthly-map-layer fade-in",
+      className: "active-monthly-map-layer",
     }) as unknown as GeoRasterLayer;
 
     // Add the new layer to the map
@@ -251,7 +255,7 @@ const ActiveMonthlyMapLayer: FC = () => {
 
     // Fade in the new layer
     setTimeout(() => {
-      newLayer.setOpacity(1);
+      newLayer.setOpacity(layerOpacity);
     }, 10);
 
     return newLayer;
@@ -267,6 +271,7 @@ const ActiveMonthlyMapLayer: FC = () => {
       setActivePreviewMinValue(0);
       setActivePreviewMaxValue(0);
       setDynamicPreviewColorScale(true);
+      setPreviewOpacity(1);
       cleanupLayers();
       setAvailableDays([]);
     }
@@ -281,6 +286,7 @@ const ActiveMonthlyMapLayer: FC = () => {
     setDynamicPreviewColorScale,
     setActivePreviewMinValue,
     setActivePreviewMaxValue,
+    setPreviewOpacity,
   ]);
 
   useEffect(() => {
@@ -388,7 +394,7 @@ const ActiveMonthlyMapLayer: FC = () => {
         }
 
         // Create the new layer with crossfade
-        const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap);
+        const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap, previewOpacity);
 
         let currentTooltip = tooltip;
 
@@ -489,6 +495,12 @@ const ActiveMonthlyMapLayer: FC = () => {
     activePreviewMaxValue,
     dynamicPreviewColorScale,
   ]);
+
+  useEffect(() => {
+    if (layerRef.current) {
+      layerRef.current.setOpacity(previewOpacity);
+    }
+  }, [previewOpacity]);
 
   return (
     activePreviewMinValue !== null &&

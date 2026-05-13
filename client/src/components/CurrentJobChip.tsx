@@ -15,6 +15,8 @@ import PaletteIcon from "@mui/icons-material/Palette";
 import CloseIcon from "@mui/icons-material/Close";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import useStore, { JobStatus } from "../utils/store";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 
@@ -66,6 +68,7 @@ const CurrentJobChip = () => {
   ]);
   const [previewMinValue, setPreviewMinValue] = useCurrentJobStore((state) => [state.previewMin, state.setPreviewMin]);
   const [previewMaxValue, setPreviewMaxValue] = useCurrentJobStore((state) => [state.previewMax, state.setPreviewMax]);
+  const [previewOpacity, setPreviewOpacity] = useCurrentJobStore((state) => [state.previewOpacity, state.setPreviewOpacity]);
 
   const tooltip = useAtomValue(tooltipAtom);
 
@@ -203,8 +206,20 @@ const CurrentJobChip = () => {
     }
   }, [monthYearFromSlider, setPreviewYear, setPreviewMonth]);
 
+  // Keep timeline slider aligned when month/year are changed from the dropdowns
+  useEffect(() => {
+    if (!activeJob?.start_year || !previewYear || !previewMonth || totalMonths <= 0) {
+      return;
+    }
+    const idx = (Number(previewYear) - Number(activeJob.start_year)) * 12 + (Number(previewMonth) - 1);
+    const clamped = Math.max(0, Math.min(totalMonths - 1, idx));
+    setSliderValue((prev) => (prev === clamped ? prev : clamped));
+  }, [previewMonth, previewYear, activeJob?.start_year, totalMonths]);
+
   const handleSliderChange = (_: Event, newValue: number | number[]) => {
-    if (typeof newValue !== "number") return;
+    if (typeof newValue !== "number") {
+      return;
+    }
     setSliderValue(newValue);
   };
 
@@ -242,6 +257,27 @@ const CurrentJobChip = () => {
       }
     };
   }, [isPlaying, totalMonths]);
+
+  const stepPreviewMonth = useCallback(
+    (delta: number) => {
+      if (totalMonths <= 0) {
+        return;
+      }
+      setIsPlaying(false);
+      setShowPreview(true);
+      setSliderValue((prev) => {
+        const next = prev + delta;
+        if (next < 0) {
+          return 0;
+        }
+        if (next >= totalMonths) {
+          return totalMonths - 1;
+        }
+        return next;
+      });
+    },
+    [totalMonths, setShowPreview]
+  );
 
   return (
     <>
@@ -539,8 +575,20 @@ const CurrentJobChip = () => {
                     )}
                   </div>
                   {canPreview && (
-                    <div style={{ padding: "0 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <Tooltip title="Previous month">
+                          <span>
+                            <IconButton
+                              onClick={() => stepPreviewMonth(-1)}
+                              size="small"
+                              disabled={totalMonths <= 1 || sliderValue <= 0}
+                              sx={{ color: "primary.main", padding: 0 }}
+                            >
+                              <ChevronLeftIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                         <IconButton
                           onClick={() => {
                             if (!isPlaying) {
@@ -553,19 +601,55 @@ const CurrentJobChip = () => {
                             }
                           }}
                           size="small"
-                          sx={{ color: "primary.main" }}
+                          sx={{ color: "primary.main", padding: 0 }}
                         >
                           {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
                         </IconButton>
+                        <Tooltip title="Next month">
+                          <span>
+                            <IconButton
+                              onClick={() => stepPreviewMonth(1)}
+                              size="small"
+                              disabled={totalMonths <= 1 || sliderValue >= totalMonths - 1}
+                              sx={{ color: "primary.main", padding: 0 }}
+                            >
+                              <ChevronRightIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                         <Slider
                           value={sliderValue}
                           min={0}
-                          max={totalMonths - 1}
+                          max={Math.max(0, totalMonths - 1)}
                           onChange={handleSliderChange}
                           valueLabelDisplay="auto"
                           valueLabelFormat={valueLabelFormat}
                           marks
-                          sx={{ color: "primary", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
+                          sx={{
+                            flex: 1,
+                            color: "primary",
+                            "& .MuiSlider-valueLabel": { backgroundColor: "#334155" },
+                            marginLeft: "8px",
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px", paddingLeft: "4px" }}>
+                        <Typography variant="caption" sx={{ color: "var(--st-gray-40)", minWidth: "52px" }}>
+                          Opacity
+                        </Typography>
+                        <Slider
+                          size="small"
+                          value={Math.round(previewOpacity * 100)}
+                          min={0}
+                          max={100}
+                          onChange={(_, v) => setPreviewOpacity((typeof v === "number" ? v : v[0]) / 100)}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={(v) => `${v}%`}
+                          sx={{
+                            flex: 1,
+                            color: "primary",
+                            "& .MuiSlider-valueLabel": { backgroundColor: "#334155" },
+                          }}
                         />
                       </div>
                     </div>

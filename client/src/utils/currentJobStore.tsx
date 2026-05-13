@@ -34,6 +34,7 @@ interface Store {
   previewMin: number | string | null;
   previewMax: number | string | null;
   dynamicPreviewColorScale: boolean;
+  previewOpacity: number;
 
   monthlyGeojsonCache: Record<string, ArrayBuffer>;
 }
@@ -49,6 +50,7 @@ interface Setters {
   setPreviewMin: (min: number | string | null) => void;
   setPreviewMax: (max: number | string | null) => void;
   setDynamicPreviewColorScale: (scale: boolean) => void;
+  setPreviewOpacity: (opacity: number) => void;
 }
 
 interface Actions {
@@ -79,6 +81,9 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   setPreviewMax: (max) => set({ previewMax: max }),
   dynamicPreviewColorScale: true,
   setDynamicPreviewColorScale: (scale) => set({ dynamicPreviewColorScale: scale }),
+  previewOpacity: 1,
+  setPreviewOpacity: (opacity) =>
+    set({ previewOpacity: Math.max(0, Math.min(1, opacity)) }),
 
   monthlyGeojsonCache: {},
   fetchMonthlyGeojson: async () => {
