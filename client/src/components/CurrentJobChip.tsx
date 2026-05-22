@@ -33,6 +33,8 @@ import {
 } from "../utils/previewCalculations";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import { useAtomValue } from "jotai";
 import { tooltipAtom } from "../utils/atoms";
 
@@ -284,6 +286,19 @@ const CurrentJobChip = () => {
     },
     [totalMonths, setShowPreview]
   );
+
+  const toggleShowPreview = useCallback(() => {
+    tooltip?.close();
+    if (isPlaying) {
+      setIsPlaying(false);
+      setTimeout(() => {
+        setShowPreview(false);
+        tooltip?.close();
+      }, 500);
+    } else {
+      setShowPreview(!showPreview);
+    }
+  }, [isPlaying, showPreview, setShowPreview, tooltip]);
 
   return (
     <>
@@ -639,17 +654,24 @@ const CurrentJobChip = () => {
                           }}
                         />
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px", paddingLeft: "4px" }}>
-                        <Typography variant="caption" sx={{ color: "var(--st-gray-40)", minWidth: "52px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingLeft: "4px" }}>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: showPreview ? "var(--st-gray-40)" : "var(--st-gray-60)",
+                            minWidth: "52px",
+                          }}
+                        >
                           Opacity
                         </Typography>
                         <Slider
                           size="small"
+                          disabled={!showPreview}
                           value={Math.round(previewOpacity * 100)}
                           min={0}
                           max={100}
                           onChange={(_, v) => setPreviewOpacity((typeof v === "number" ? v : v[0]) / 100)}
-                          valueLabelDisplay="auto"
+                          valueLabelDisplay={showPreview ? "auto" : "off"}
                           valueLabelFormat={(v) => `${v}%`}
                           sx={{
                             flex: 1,
@@ -657,34 +679,20 @@ const CurrentJobChip = () => {
                             "& .MuiSlider-valueLabel": { backgroundColor: "#334155" },
                           }}
                         />
+                        <Tooltip title={showPreview ? "Hide preview" : "Show preview"}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={toggleShowPreview}
+                              sx={{ color: showPreview ? "primary.main" : "var(--st-gray-50)", padding: "4px" }}
+                            >
+                              {showPreview ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                       </div>
                     </div>
                   )}
-                  <Tooltip title={!canPreview ? `Select a variable and month/year to preview` : ""}>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <Button
-                        variant="contained"
-                        color="secondary"
-                        size="small"
-                        sx={{ flex: 1 }}
-                        onClick={() => {
-                          tooltip?.close();
-                          if (isPlaying) {
-                            setIsPlaying(false);
-                            setTimeout(() => {
-                              setShowPreview(false);
-                              tooltip?.close();
-                            }, 500);
-                          } else {
-                            setShowPreview(!showPreview);
-                          }
-                        }}
-                        disabled={!canPreview}
-                      >
-                        {showPreview ? "Hide" : "Show"} Preview
-                      </Button>
-                    </div>
-                  </Tooltip>
                 </div>
               )}
             </div>
