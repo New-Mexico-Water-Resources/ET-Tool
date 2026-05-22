@@ -1,11 +1,10 @@
 import { FC, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useMap } from "react-leaflet";
 // @ts-expect-error - No type definitions available
-import parseGeoraster from "georaster";
-// @ts-expect-error - No type definitions available
 import GeoRasterLayer from "georaster-layer-for-leaflet";
 import useCurrentJobStore from "../utils/currentJobStore";
 import { ET_COLORMAP, MAP_LAYER_OPTIONS } from "../utils/constants";
+import { getPreviewColormap, getPreviewDisplayName } from "../utils/previewCalculations";
 import { Tooltip, LeafletMouseEvent } from "leaflet";
 import useStore, { MapLayer } from "../utils/store";
 
@@ -86,6 +85,8 @@ interface GeoRaster {
   width: number;
   height: number;
   values: number[][][];
+  mins: number[];
+  maxs: number[];
 }
 
 // Helper function to get value at lat/lng from georaster
@@ -142,7 +143,7 @@ const ActiveMonthlyMapLayer: FC = () => {
   const setPreviewYear = useCurrentJobStore((state) => state.setPreviewYear);
   const previewVariable = useCurrentJobStore((state) => state.previewVariable);
   const setPreviewVariable = useCurrentJobStore((state) => state.setPreviewVariable);
-  const fetchMonthlyGeojson = useCurrentJobStore((state) => state.fetchMonthlyGeojson);
+  const fetchPreviewGeoraster = useCurrentJobStore((state) => state.fetchPreviewGeoraster);
   const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
 
   const isSidebarOpen = useStore((state) => state.isRightPanelOpen);
@@ -357,20 +358,15 @@ const ActiveMonthlyMapLayer: FC = () => {
       }
 
       try {
-        // Fetch the GeoTIFF data
-        const arrayBuffer = await fetchMonthlyGeojson();
+        const georaster = (await fetchPreviewGeoraster()) as GeoRaster | null;
 
-        if (!arrayBuffer) {
-          console.error("Failed to fetch GeoTIFF data");
+        if (!georaster) {
+          console.error("Failed to load preview data");
           setIsLoading(false);
           return;
         }
 
-        // Parse the GeoTIFF data
-        const georaster = await parseGeoraster(arrayBuffer);
-
-        // Determine colormap based on variable type
-        const colormap = ET_COLORMAP;
+        const colormap = getPreviewColormap(previewVariable);
 
         let minValue = georaster.mins[0];
         let maxValue = georaster.maxs[0];
@@ -420,7 +416,7 @@ const ActiveMonthlyMapLayer: FC = () => {
 
           const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
 
-          let variableName: string = previewVariable;
+          let variableName = getPreviewDisplayName(previewVariable);
           if (previewVariable === "PET" && previewYear && Number(previewYear) >= OPENET_TRANSITION_DATE) {
             variableName = "ETo (Unadjusted)";
           }
@@ -490,7 +486,7 @@ const ActiveMonthlyMapLayer: FC = () => {
     previewYear,
     previewVariable,
     map,
-    fetchMonthlyGeojson,
+    fetchPreviewGeoraster,
     activePreviewMinValue,
     activePreviewMaxValue,
     dynamicPreviewColorScale,
@@ -512,7 +508,7 @@ const ActiveMonthlyMapLayer: FC = () => {
         })} ${previewYear})`}
         minValue={Number(activePreviewMinValue)}
         maxValue={Number(activePreviewMaxValue)}
-        colorScale={ET_COLORMAP}
+        colorScale={previewVariable ? getPreviewColormap(previewVariable) : ET_COLORMAP}
         style={{
           right: isSidebarOpen ? (mapLayerHasColorScale ? "400px" : "350px") : mapLayerHasColorScale ? "100px" : "50px",
           transition: "right 0.1s ease",

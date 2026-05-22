@@ -24,7 +24,13 @@ import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
 import useCurrentJobStore, { PreviewUnitsType, PreviewVariableType } from "../utils/currentJobStore";
-import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS, VARIABLE_DISPLAY_NAMES } from "../utils/constants";
+import { OPENET_TRANSITION_DATE } from "../utils/constants";
+import {
+  isCalculatedPreviewVariable,
+  POST_OPENET_VARIABLE_OPTIONS,
+  PRE_OPENET_VARIABLE_OPTIONS,
+  VARIABLE_DISPLAY_NAMES,
+} from "../utils/previewCalculations";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 import { useAtomValue } from "jotai";
@@ -746,7 +752,7 @@ const CurrentJobChip = () => {
                 GeoJSON
               </MenuItem>
 
-              {canPreview && previewMonth && previewYear && (
+              {canPreview && previewMonth && previewYear && !isCalculatedPreviewVariable(previewVariable) && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
@@ -759,7 +765,9 @@ const CurrentJobChip = () => {
                     downloadGeotiff(activeJob.key, previewVariable, Number(previewMonth), Number(previewYear));
                   }}
                 >
-                  {formattedPreviewDate} {previewVariable} GeoTIFF
+                  {formattedPreviewDate}{" "}
+                  {VARIABLE_DISPLAY_NAMES[previewVariable as keyof typeof VARIABLE_DISPLAY_NAMES] || previewVariable}{" "}
+                  GeoTIFF
                 </MenuItem>
               )}
 
