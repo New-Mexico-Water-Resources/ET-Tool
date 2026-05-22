@@ -1,27 +1,12 @@
-import {
-  Box,
-  Button,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Modal,
-  Select,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import useStore, { JobStatus } from "../utils/store";
+import { Button, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import useStore from "../utils/store";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LazyLog } from "@melloware/react-logviewer";
-import FileDownloadSharpIcon from "@mui/icons-material/FileDownloadSharp";
-import FileDownloadOffSharpIcon from "@mui/icons-material/FileDownloadOffSharp";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 
 import "../scss/JobQueue.scss";
 import JobQueueItem from "./JobQueueItem";
+import JobLogViewer from "./JobLogViewer";
 import { useConfirm } from "material-ui-confirm";
 
 import { FixedSizeList as List, ListChildComponentProps } from "react-window";
@@ -34,7 +19,6 @@ const JobQueue = () => {
   const isBacklogOpen = useStore((state) => state.isBacklogOpen);
   const isQueueOpen = useStore((state) => state.isQueueOpen);
   const clearPendingJobs = useStore((state) => state.clearPendingJobs);
-  const fetchJobLogs = useStore((state) => state.fetchJobLogs);
 
   const [activeStatusFilters, setActiveStatusFilters] = useState<string[]>([]);
   const [activeAuthorFilters, setActiveAuthorFilters] = useState<string[]>([]);
@@ -62,33 +46,10 @@ const JobQueue = () => {
     }
   }, [backlogDateFilter]);
 
-  const [jobLogs, setJobLogs] = useState<Record<string, { timestamp: number; logs: string }>>({});
   const [activeJobLogKey, setActiveJobLogKey] = useState("");
   const [jobLogsOpen, setJobLogsOpen] = useState(false);
 
-  const [pauseLogs, setPauseLogs] = useState(false);
-
   const [sortAscending, setSortAscending] = useStore((state) => [state.sortAscending, state.setSortAscending]);
-
-  const [jobStatuses, fetchJobStatus] = useStore((state) => [state.jobStatuses, state.fetchJobStatus]);
-  const jobStatus = useMemo(() => {
-    let jobStatus: JobStatus = jobStatuses[activeJobLogKey];
-    if (!jobStatus) {
-      jobStatus = {
-        status: "",
-        found: true,
-        paused: false,
-        currentYear: 0,
-        latestDate: "",
-        totalYears: 0,
-        fileCount: 0,
-        estimatedPercentComplete: 0,
-        timeRemaining: 0,
-      };
-    }
-
-    return jobStatus;
-  }, [activeJobLogKey, jobStatuses]);
 
   const confirm = useConfirm();
 
@@ -109,70 +70,6 @@ const JobQueue = () => {
 
     return job;
   }, [queue, backlog, activeJobLogKey]);
-
-  const [lastFetchedLogs, setLastFetchedLogs] = useState(0);
-  useEffect(() => {
-    const fetchLogs = async () => {
-      if (activeJobLogKey && jobLogsOpen && Date.now() - lastFetchedLogs > 2000) {
-        if (viewingJob?.name) {
-          const jobStatusRequest = fetchJobStatus(activeJobLogKey, viewingJob.name);
-          if (!jobStatusRequest) {
-            return;
-          }
-
-          jobStatusRequest
-            .then(() => {
-              setLastFetchedLogs(Date.now());
-            })
-            .catch((error) => {
-              console.error("Error fetching job status", error);
-            });
-        }
-
-        const jobLogsRequest = fetchJobLogs(activeJobLogKey);
-        if (!jobLogsRequest) {
-          return;
-        }
-
-        jobLogsRequest.then((logs) => {
-          const existingLog = jobLogs[activeJobLogKey];
-          if (existingLog && existingLog.logs === logs.logs) {
-            return;
-          }
-
-          const currentLog = { timestamp: 0, logs: "No Logs Available" };
-          if (logs?.logs) {
-            currentLog.logs = logs.logs;
-          }
-
-          currentLog.timestamp = Date.now();
-
-          setJobLogs({ ...jobLogs, [activeJobLogKey]: currentLog });
-        });
-      }
-    };
-
-    fetchLogs();
-    const interval = setInterval(() => {
-      if (!pauseLogs) {
-        fetchLogs();
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [
-    activeJobLogKey,
-    jobLogsOpen,
-    lastFetchedLogs,
-    pauseLogs,
-    viewingJob,
-    fetchJobStatus,
-    fetchJobLogs,
-    jobStatuses,
-    queue,
-    backlog,
-    sortAscending,
-    jobLogs,
-  ]);
 
   const [searchField, setSearchField] = useState("");
 
@@ -277,100 +174,15 @@ const JobQueue = () => {
   );
   return (
     <div className={`queue-container ${isQueueOpen || isBacklogOpen ? "open" : "closed"}`}>
-      <Modal
+      <JobLogViewer
         open={jobLogsOpen}
+        jobKey={activeJobLogKey}
+        jobName={viewingJob?.name}
         onClose={() => {
+          setActiveJobLogKey("");
           setJobLogsOpen(false);
         }}
-      >
-        <Box
-          sx={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "50vw",
-            maxWidth: "1000px",
-            height: "50vh",
-            maxHeight: "500px",
-            bgcolor: "var(--st-gray-90)",
-            boxShadow: 24,
-            padding: "8px 16px",
-            borderRadius: "4px",
-          }}
-        >
-          <Typography variant="h6" component="h2" sx={{ display: "flex", alignItems: "center" }}>
-            {viewingJob?.name || "Job"} Logs
-            <IconButton
-              onClick={() => {
-                setActiveJobLogKey("");
-                setJobLogsOpen(false);
-              }}
-              sx={{ marginLeft: "auto" }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Typography>
-          <div style={{ height: "calc(100% - 64px)" }}>
-            <LazyLog
-              follow={!pauseLogs}
-              style={{
-                backgroundColor: "var(--st-gray-100)",
-                color: "var(--st-gray-10)",
-              }}
-              text={jobLogs[activeJobLogKey]?.logs || "Loading logs..."}
-              enableHotKeys={true}
-              enableSearch={true}
-              extraLines={1}
-            />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", marginTop: "5px", gap: "8px" }}>
-            {!pauseLogs && (
-              <FileDownloadSharpIcon
-                style={{
-                  color: "var(--st-gray-50)",
-                  fontSize: "16px",
-                  display: "flex",
-                  alignItems: "center",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  setPauseLogs(!pauseLogs);
-                }}
-              />
-            )}
-            {pauseLogs && (
-              <FileDownloadOffSharpIcon
-                style={{
-                  color: "var(--st-gray-50)",
-                  fontSize: "16px",
-                  display: "flex",
-                  alignItems: "center",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  setPauseLogs(!pauseLogs);
-                }}
-              />
-            )}
-
-            <div style={{ color: "var(--st-gray-50)", fontSize: "14px" }}>Files Generated: {jobStatus.fileCount}</div>
-            <div
-              style={{
-                display: "flex",
-                marginLeft: "auto",
-                color: "var(--st-gray-50)",
-                fontSize: "14px",
-              }}
-            >
-              Last Updated:{" "}
-              {jobLogs[activeJobLogKey]?.timestamp
-                ? new Date(jobLogs[activeJobLogKey].timestamp).toLocaleTimeString()
-                : "Never"}
-            </div>
-          </div>
-        </Box>
-      </Modal>
+      />
       <Typography
         variant="h5"
         style={{ color: "var(--st-gray-30)", padding: "8px 16px", display: "flex", alignItems: "center" }}

@@ -222,7 +222,9 @@ path.leaflet-interactive:focus {
 
 .map-search-leaflet-control {
   clear: both;
-  margin-right: 12px !important;
+  border-top: 0;
+  border-bottom: 0;
+  border: 2px solid transparent;
 }
 
 .map-search-root {
