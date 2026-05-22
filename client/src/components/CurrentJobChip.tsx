@@ -10,6 +10,8 @@ import {
   Menu,
   Slider,
   TextField,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import PaletteIcon from "@mui/icons-material/Palette";
 import CloseIcon from "@mui/icons-material/Close";
@@ -77,6 +79,7 @@ const CurrentJobChip = () => {
   const [previewMinValue, setPreviewMinValue] = useCurrentJobStore((state) => [state.previewMin, state.setPreviewMin]);
   const [previewMaxValue, setPreviewMaxValue] = useCurrentJobStore((state) => [state.previewMax, state.setPreviewMax]);
   const [previewOpacity, setPreviewOpacity] = useCurrentJobStore((state) => [state.previewOpacity, state.setPreviewOpacity]);
+  const [clipToPolygon, setClipToPolygon] = useCurrentJobStore((state) => [state.clipToPolygon, state.setClipToPolygon]);
 
   const tooltip = useAtomValue(tooltipAtom);
 
@@ -538,6 +541,24 @@ const CurrentJobChip = () => {
                         </Select>
                       </FormControl>
                     </div>
+                    {activeJob?.loaded_geo_json && (
+                      <FormControlLabel
+                        sx={{ margin: 0, marginLeft: "-4px" }}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={clipToPolygon}
+                            onChange={(e) => setClipToPolygon(e.target.checked)}
+                            sx={{ color: "var(--st-gray-40)", "&.Mui-checked": { color: "primary.main" } }}
+                          />
+                        }
+                        label={
+                          <Typography variant="caption" sx={{ color: "var(--st-gray-40)" }}>
+                            Clip to polygon
+                          </Typography>
+                        }
+                      />
+                    )}
                   </div>
                   {availableDays &&
                     availableDays.length > 0 &&

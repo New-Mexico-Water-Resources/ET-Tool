@@ -1,4 +1,56 @@
+import { booleanPointInPolygon } from "@turf/turf";
+import type { Feature, FeatureCollection, GeoJsonObject, Geometry, MultiPolygon, Polygon } from "geojson";
+
 export const NODATA_THRESHOLD = 32700;
+
+export type PreviewClipMask = Feature | FeatureCollection | Polygon | MultiPolygon;
+
+export const toPreviewClipMask = (geojson: unknown): PreviewClipMask | null => {
+  if (!geojson || typeof geojson !== "object") {
+    return null;
+  }
+
+  const typed = geojson as GeoJsonObject;
+
+  if (
+    typed.type === "Feature" ||
+    typed.type === "FeatureCollection" ||
+    typed.type === "Polygon" ||
+    typed.type === "MultiPolygon"
+  ) {
+    return typed as PreviewClipMask;
+  }
+
+  if ("geometry" in typed && typed.geometry) {
+    return {
+      type: "Feature",
+      properties: {},
+      geometry: typed.geometry as Geometry,
+    };
+  }
+
+  return null;
+};
+
+export const isPointInPreviewClip = (lng: number, lat: number, geojson: unknown): boolean => {
+  const mask = toPreviewClipMask(geojson);
+  if (!mask) {
+    return true;
+  }
+
+  const point: [number, number] = [lng, lat];
+
+  if (mask.type === "FeatureCollection") {
+    return mask.features.some((feature) =>
+      booleanPointInPolygon(point, feature as Feature<Polygon | MultiPolygon>)
+    );
+  }
+
+  return booleanPointInPolygon(
+    point,
+    mask as Feature<Polygon | MultiPolygon> | Polygon | MultiPolygon
+  );
+};
 
 export interface PreviewGeoRaster {
   xmin: number;

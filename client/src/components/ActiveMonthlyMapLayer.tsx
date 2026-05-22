@@ -5,6 +5,8 @@ import GeoRasterLayer from "georaster-layer-for-leaflet";
 import useCurrentJobStore from "../utils/currentJobStore";
 import { ET_COLORMAP, MAP_LAYER_OPTIONS } from "../utils/constants";
 import { getPreviewColormap, getPreviewDisplayName } from "../utils/previewCalculations";
+import { isNoData } from "../utils/previewGeoraster";
+import { applyPreviewPolygonClip, isPreviewLocationVisible } from "../utils/previewPolygonClip";
 import { Tooltip, LeafletMouseEvent } from "leaflet";
 import useStore, { MapLayer } from "../utils/store";
 
@@ -13,7 +15,6 @@ import ColorScale from "./ColorScale";
 import { useAtom } from "jotai";
 import { tooltipAtom } from "../utils/atoms";
 
-// Add CSS to disable transitions on Leaflet layers
 const style = document.createElement("style");
 style.textContent = `
   .active-monthly-map-layer .leaflet-tile {
@@ -35,7 +36,6 @@ styleCrossfade.textContent = `
 `;
 document.head.appendChild(styleCrossfade);
 
-// Helper function to convert hex to RGB
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
@@ -131,7 +131,6 @@ const ActiveMonthlyMapLayer: FC = () => {
   const mousemoveHandlerRef = useRef<((e: LeafletMouseEvent) => void) | null>(null);
   const mouseoutHandlerRef = useRef<(() => void) | null>(null);
   const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const [tooltip, setTooltip] = useAtom(tooltipAtom);
 
   // Get preview state from currentJobStore
@@ -164,6 +163,8 @@ const ActiveMonthlyMapLayer: FC = () => {
   ]);
   const previewOpacity = useCurrentJobStore((state) => state.previewOpacity);
   const setPreviewOpacity = useCurrentJobStore((state) => state.setPreviewOpacity);
+  const clipToPolygon = useCurrentJobStore((state) => state.clipToPolygon);
+  const setClipToPolygon = useCurrentJobStore((state) => state.setClipToPolygon);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayerHasColorScale = useMemo(() => {
@@ -212,15 +213,20 @@ const ActiveMonthlyMapLayer: FC = () => {
     colormap: string[],
     layerOpacity: number
   ) => {
-    // Create the new layer
-    const newLayer = new GeoRasterLayer({
+    const pixelValuesToColorFn = (value: number | number[]) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      if (isNoData(raw)) {
+        return undefined;
+      }
+      const normalizedValue = (raw - minValue) / (maxValue - minValue);
+      return getInterpolatedColor(normalizedValue, colormap);
+    };
+
+    const layerOptions: Record<string, unknown> = {
       georaster: georaster,
       opacity: 0,
       resolution: 256,
-      pixelValuesToColorFn: (value: number) => {
-        const normalizedValue = (value - minValue) / (maxValue - minValue);
-        return getInterpolatedColor(normalizedValue, colormap);
-      },
+      pixelValuesToColorFn,
       debugLevel: 1,
       transition: false,
       noWrap: true,
@@ -230,7 +236,10 @@ const ActiveMonthlyMapLayer: FC = () => {
       updateWhenZooming: false,
       updateWhenMoving: false,
       className: "active-monthly-map-layer",
-    }) as unknown as GeoRasterLayer;
+    };
+
+    // Create the new layer
+    const newLayer = new GeoRasterLayer(layerOptions) as unknown as GeoRasterLayer;
 
     // Add the new layer to the map
     newLayer.addTo(map);
@@ -273,6 +282,7 @@ const ActiveMonthlyMapLayer: FC = () => {
       setActivePreviewMaxValue(0);
       setDynamicPreviewColorScale(true);
       setPreviewOpacity(1);
+      setClipToPolygon(false);
       cleanupLayers();
       setAvailableDays([]);
     }
@@ -288,6 +298,7 @@ const ActiveMonthlyMapLayer: FC = () => {
     setActivePreviewMinValue,
     setActivePreviewMaxValue,
     setPreviewOpacity,
+    setClipToPolygon,
   ]);
 
   useEffect(() => {
@@ -368,8 +379,13 @@ const ActiveMonthlyMapLayer: FC = () => {
 
         const colormap = getPreviewColormap(previewVariable);
 
-        let minValue = georaster.mins[0];
-        let maxValue = georaster.maxs[0];
+        const displayGeoraster =
+          clipToPolygon && activeJob?.loaded_geo_json
+            ? applyPreviewPolygonClip(georaster, activeJob.loaded_geo_json)
+            : georaster;
+
+        let minValue = displayGeoraster.mins[0];
+        let maxValue = displayGeoraster.maxs[0];
 
         if (
           dynamicPreviewColorScale ||
@@ -390,7 +406,13 @@ const ActiveMonthlyMapLayer: FC = () => {
         }
 
         // Create the new layer with crossfade
-        const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap, previewOpacity);
+        const layer = await createLayerWithCrossfade(
+          displayGeoraster,
+          minValue,
+          maxValue,
+          colormap,
+          previewOpacity
+        );
 
         let currentTooltip = tooltip;
 
@@ -414,14 +436,23 @@ const ActiveMonthlyMapLayer: FC = () => {
             tooltipRef.current = null;
           }
 
-          const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
+          const value = getValueAtLatLng(displayGeoraster, e.latlng.lat, e.latlng.lng);
+          const insideClip =
+            !clipToPolygon ||
+            !activeJob?.loaded_geo_json ||
+            isPreviewLocationVisible(
+              e.latlng.lng,
+              e.latlng.lat,
+              displayGeoraster,
+              activeJob.loaded_geo_json
+            );
 
           let variableName = getPreviewDisplayName(previewVariable);
           if (previewVariable === "PET" && previewYear && Number(previewYear) >= OPENET_TRANSITION_DATE) {
             variableName = "ETo (Unadjusted)";
           }
 
-          if (value !== null && value !== undefined) {
+          if (insideClip && value !== null && value !== undefined && !isNoData(value)) {
             const formattedValue = formatPreviewValue(value);
             currentTooltip
               ?.setLatLng(e.latlng)
@@ -490,6 +521,9 @@ const ActiveMonthlyMapLayer: FC = () => {
     activePreviewMinValue,
     activePreviewMaxValue,
     dynamicPreviewColorScale,
+    clipToPolygon,
+    activeJob?.loaded_geo_json,
+    activeJob?.key,
   ]);
 
   useEffect(() => {

@@ -47,6 +47,7 @@ interface Store {
   previewMax: number | string | null;
   dynamicPreviewColorScale: boolean;
   previewOpacity: number;
+  clipToPolygon: boolean;
 
   monthlyGeojsonCache: Record<string, ArrayBuffer>;
   calculatedPreviewCache: Record<string, PreviewGeoRaster>;
@@ -64,6 +65,7 @@ interface Setters {
   setPreviewMax: (max: number | string | null) => void;
   setDynamicPreviewColorScale: (scale: boolean) => void;
   setPreviewOpacity: (opacity: number) => void;
+  setClipToPolygon: (clip: boolean) => void;
 }
 
 interface Actions {
@@ -100,6 +102,8 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   previewOpacity: 1,
   setPreviewOpacity: (opacity) =>
     set({ previewOpacity: Math.max(0, Math.min(1, opacity)) }),
+  clipToPolygon: false,
+  setClipToPolygon: (clip) => set({ clipToPolygon: clip }),
 
   monthlyGeojsonCache: {},
   calculatedPreviewCache: {},
