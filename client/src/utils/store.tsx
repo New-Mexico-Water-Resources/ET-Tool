@@ -163,6 +163,7 @@ interface Store {
   setLocations: (locations: PolygonLocation[]) => void;
   prepareMultipolygonJob: () => any[];
   submitMultipolygonJob: (jobs: any[]) => void;
+  jobLocateGeneration: number;
   loadJob: (job: any) => void;
   downloadJob: (jobKey: string, units?: "metric" | "imperial" | "acre-feet") => void;
   restartJob: (jobKey: string) => void;
@@ -294,6 +295,7 @@ const useStore = create<Store>()(
       setShowUploadDialog: (showUploadDialog) => set({ showUploadDialog }),
       activeJob: null,
       setActiveJob: (activeJob) => set({ activeJob }),
+      jobLocateGeneration: 0,
       successMessage: "",
       setSuccessMessage: (successMessage) => set({ successMessage }),
       errorMessage: "",
@@ -573,6 +575,17 @@ const useStore = create<Store>()(
         }
       },
       loadJob: (job) => {
+        set({ activeJob: job, showUploadDialog: false, previewMode: false });
+
+        if (job.loaded_geo_json) {
+          set({
+            loadedGeoJSON: job.loaded_geo_json,
+            multipolygons: [],
+            jobLocateGeneration: get().jobLocateGeneration + 1,
+          });
+          return;
+        }
+
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
@@ -592,12 +605,15 @@ const useStore = create<Store>()(
               job.loaded_geo_json = response.data;
             }
 
-            set({ loadedGeoJSON, multipolygons, showUploadDialog: false, previewMode: false });
+            set({
+              loadedGeoJSON,
+              multipolygons,
+              jobLocateGeneration: get().jobLocateGeneration + 1,
+            });
           })
           .catch((error) => {
             set({ loadedGeoJSON: null, multipolygons: [], errorMessage: error?.message || "Error loading job" });
           });
-        set({ activeJob: job });
       },
       downloadJob: (jobKey, units = "metric") => {
         const axiosInstance = get().authAxios();

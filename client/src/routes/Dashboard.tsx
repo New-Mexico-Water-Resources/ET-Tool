@@ -99,6 +99,7 @@ const Dashboard = () => {
   const comparisonMode = useStore((state) => state.comparisonMode);
 
   const showPreview = useCurrentJobStore((state) => state.showPreview);
+  const jobLocateGeneration = useStore((state) => state.jobLocateGeneration);
 
   const minColor = useMemo(() => {
     if (refreshType === "static") {
@@ -478,6 +479,7 @@ const Dashboard = () => {
             showAreaLabel={!showPreview}
             outline={showPreview}
             fitToBounds={!showPreview}
+            locateGeneration={jobLocateGeneration}
           />
           <MultiGeoJSONLayer data={multipolygons} locations={locations} />
         </MapContainer>

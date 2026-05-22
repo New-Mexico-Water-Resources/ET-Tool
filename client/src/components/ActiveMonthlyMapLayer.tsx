@@ -135,7 +135,6 @@ const ActiveMonthlyMapLayer: FC = () => {
 
   // Get preview state from currentJobStore
   const showPreview = useCurrentJobStore((state) => state.showPreview);
-  const setShowPreview = useCurrentJobStore((state) => state.setShowPreview);
   const previewMonth = useCurrentJobStore((state) => state.previewMonth);
   const setPreviewMonth = useCurrentJobStore((state) => state.setPreviewMonth);
   const previewYear = useCurrentJobStore((state) => state.previewYear);
@@ -164,7 +163,6 @@ const ActiveMonthlyMapLayer: FC = () => {
   const previewOpacity = useCurrentJobStore((state) => state.previewOpacity);
   const setPreviewOpacity = useCurrentJobStore((state) => state.setPreviewOpacity);
   const clipToPolygon = useCurrentJobStore((state) => state.clipToPolygon);
-  const setClipToPolygon = useCurrentJobStore((state) => state.setClipToPolygon);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayerHasColorScale = useMemo(() => {
@@ -277,12 +275,10 @@ const ActiveMonthlyMapLayer: FC = () => {
       setPreviewMonth(1);
       setPreviewYear(activeJob?.start_year || null);
       setPreviewVariable("ET");
-      setShowPreview(false);
       setActivePreviewMinValue(0);
       setActivePreviewMaxValue(0);
       setDynamicPreviewColorScale(true);
       setPreviewOpacity(1);
-      setClipToPolygon(false);
       cleanupLayers();
       setAvailableDays([]);
     }
@@ -292,13 +288,11 @@ const ActiveMonthlyMapLayer: FC = () => {
     setPreviewMonth,
     setPreviewYear,
     setPreviewVariable,
-    setShowPreview,
     setAvailableDays,
     setDynamicPreviewColorScale,
     setActivePreviewMinValue,
     setActivePreviewMaxValue,
     setPreviewOpacity,
-    setClipToPolygon,
   ]);
 
   useEffect(() => {

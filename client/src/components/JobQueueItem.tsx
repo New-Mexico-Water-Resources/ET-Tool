@@ -44,7 +44,6 @@ const JobProgressBar = ({ status }: { status: JobStatus }) => {
 const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void }) => {
   const confirm = useConfirm();
 
-  const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
   const activeJob = useStore((state) => state.activeJob);
   const setActiveJob = useStore((state) => state.setActiveJob);
 
@@ -68,7 +67,6 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
   const canRestartJobs = useMemo(() => currentUserInfo?.permissions?.includes("write:jobs"), [currentUserInfo]);
   const canPauseJobs = useMemo(() => currentUserInfo?.permissions?.includes("write:jobs"), [currentUserInfo]);
   const isAdmin = useMemo(() => currentUserInfo?.permissions?.includes("write:admin"), [currentUserInfo]);
-  const setShowUploadDialog = useStore((state) => state.setShowUploadDialog);
 
   const isDownloadDisabled = useMemo(() => {
     return ["Pending", "In Progress", "WaitingApproval"].includes(job.status);
@@ -306,14 +304,7 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
           color="secondary"
           size="small"
           onClick={() => {
-            if (job.loaded_geo_json) {
-              setLoadedGeoJSON(job.loaded_geo_json);
-              setActiveJob(job);
-            } else {
-              loadJob(job);
-            }
-
-            setShowUploadDialog(false);
+            loadJob(job);
           }}
         >
           Locate

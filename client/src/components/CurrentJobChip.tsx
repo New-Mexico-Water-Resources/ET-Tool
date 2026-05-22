@@ -72,6 +72,12 @@ const CurrentJobChip = () => {
   const [showJobControls, setShowJobControls] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
 
+  useEffect(() => {
+    if (activeJob && showPreview) {
+      setShowJobControls(true);
+    }
+  }, [activeJob?.key, showPreview]);
+
   const [dynamicPreviewColorScale, setDynamicPreviewColorScale] = useCurrentJobStore((state) => [
     state.dynamicPreviewColorScale,
     state.setDynamicPreviewColorScale,
@@ -420,15 +426,7 @@ const CurrentJobChip = () => {
           {activeJob && (
             <div
               className="job-controls-header"
-              onClick={() => {
-                if (showJobControls) {
-                  setShowJobControls(false);
-                  setShowPreview(false);
-                } else {
-                  setShowJobControls(true);
-                  setShowPreview(true);
-                }
-              }}
+              onClick={() => setShowJobControls(!showJobControls)}
               style={{
                 cursor: "pointer",
                 display: "flex",
