@@ -1,16 +1,49 @@
-import { bboxPolygon, booleanIntersects } from "@turf/turf";
-import type { ClipToPolygonMode } from "./currentJobStore";
-import {
-  isNoData,
-  isPointInPreviewClip,
-  NODATA_THRESHOLD,
-  PreviewGeoRaster,
-  toPreviewClipMask,
-} from "./previewGeoraster";
+const { bboxPolygon, booleanIntersects, booleanPointInPolygon } = require("@turf/turf");
 
-type ClipGeometry = Parameters<typeof booleanIntersects>[1];
+const NODATA_THRESHOLD = 32700;
 
-const getRasterCellBounds = (georaster: PreviewGeoRaster, x: number, y: number) => {
+const toPreviewClipMask = (geojson) => {
+  if (!geojson || typeof geojson !== "object") {
+    return null;
+  }
+
+  if (
+    geojson.type === "Feature" ||
+    geojson.type === "FeatureCollection" ||
+    geojson.type === "Polygon" ||
+    geojson.type === "MultiPolygon"
+  ) {
+    return geojson;
+  }
+
+  if (geojson.geometry) {
+    return {
+      type: "Feature",
+      properties: {},
+      geometry: geojson.geometry,
+    };
+  }
+
+  return null;
+};
+
+const isPointInPreviewClip = (lng, lat, mask) => {
+  if (!mask) {
+    return true;
+  }
+
+  const point = [lng, lat];
+
+  if (mask.type === "FeatureCollection") {
+    return mask.features.some((feature) => booleanPointInPolygon(point, feature));
+  }
+
+  return booleanPointInPolygon(point, mask);
+};
+
+const isNoData = (value) => value == null || Number.isNaN(value) || value >= NODATA_THRESHOLD;
+
+const getRasterCellBounds = (georaster, x, y) => {
   const west = georaster.xmin + x * georaster.pixelWidth;
   const east = west + georaster.pixelWidth;
   const north = georaster.ymax - y * georaster.pixelHeight;
@@ -18,17 +51,12 @@ const getRasterCellBounds = (georaster: PreviewGeoRaster, x: number, y: number) 
   return { west, south, east, north };
 };
 
-const getRasterCellPolygon = (georaster: PreviewGeoRaster, x: number, y: number) => {
+const getRasterCellPolygon = (georaster, x, y) => {
   const { west, south, east, north } = getRasterCellBounds(georaster, x, y);
   return bboxPolygon([west, south, east, north]);
 };
 
-export const isRasterCellTouchedByClip = (
-  georaster: PreviewGeoRaster,
-  x: number,
-  y: number,
-  geojson: unknown
-): boolean => {
+const isRasterCellTouchedByClip = (georaster, x, y, geojson) => {
   const mask = toPreviewClipMask(geojson);
   if (!mask) {
     return true;
@@ -36,13 +64,14 @@ export const isRasterCellTouchedByClip = (
 
   const cell = getRasterCellPolygon(georaster, x, y);
 
-  if (booleanIntersects(cell, mask as ClipGeometry)) {
+  if (booleanIntersects(cell, mask)) {
     return true;
   }
 
   const { west, south, east, north } = getRasterCellBounds(georaster, x, y);
   const centerLng = (west + east) / 2;
   const centerLat = (south + north) / 2;
+
   if (isPointInPreviewClip(centerLng, centerLat, mask)) {
     return true;
   }
@@ -55,20 +84,14 @@ export const isRasterCellTouchedByClip = (
   ].some(([lng, lat]) => isPointInPreviewClip(lng, lat, mask));
 };
 
-/** Entire cell lies within the polygon (all corners and center). */
-export const isRasterCellFullyInsideClip = (
-  georaster: PreviewGeoRaster,
-  x: number,
-  y: number,
-  geojson: unknown
-): boolean => {
+const isRasterCellFullyInsideClip = (georaster, x, y, geojson) => {
   const mask = toPreviewClipMask(geojson);
   if (!mask) {
     return true;
   }
 
   const { west, south, east, north } = getRasterCellBounds(georaster, x, y);
-  const samplePoints: [number, number][] = [
+  const samplePoints = [
     [west, north],
     [east, north],
     [east, south],
@@ -79,13 +102,7 @@ export const isRasterCellFullyInsideClip = (
   return samplePoints.every(([lng, lat]) => isPointInPreviewClip(lng, lat, mask));
 };
 
-export const isRasterCellIncludedByClip = (
-  georaster: PreviewGeoRaster,
-  x: number,
-  y: number,
-  geojson: unknown,
-  mode: ClipToPolygonMode
-): boolean => {
+const isRasterCellIncludedByClip = (georaster, x, y, geojson, mode = "inclusive") => {
   switch (mode) {
     case "inclusive":
       return isRasterCellTouchedByClip(georaster, x, y, geojson);
@@ -98,11 +115,7 @@ export const isRasterCellIncludedByClip = (
   }
 };
 
-export const applyPreviewPolygonClip = (
-  georaster: PreviewGeoRaster,
-  geojson: unknown,
-  mode: ClipToPolygonMode = "inclusive"
-): PreviewGeoRaster => {
+const applyPreviewPolygonClip = (georaster, geojson, mode = "inclusive") => {
   const mask = toPreviewClipMask(geojson);
   if (!mask) {
     return georaster;
@@ -139,19 +152,8 @@ export const applyPreviewPolygonClip = (
   };
 };
 
-export const isPreviewLocationVisible = (
-  lng: number,
-  lat: number,
-  georaster: PreviewGeoRaster,
-  geojson: unknown,
-  mode: ClipToPolygonMode = "inclusive"
-): boolean => {
-  const x = Math.floor((lng - georaster.xmin) / georaster.pixelWidth);
-  const y = Math.floor((georaster.ymax - lat) / georaster.pixelHeight);
-
-  if (x < 0 || x >= georaster.width || y < 0 || y >= georaster.height) {
-    return false;
-  }
-
-  return isRasterCellIncludedByClip(georaster, x, y, geojson, mode);
+module.exports = {
+  NODATA_THRESHOLD,
+  isNoData,
+  applyPreviewPolygonClip,
 };

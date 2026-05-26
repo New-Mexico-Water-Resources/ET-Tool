@@ -1,4 +1,4 @@
-import { Box, Button, IconButton, LinearProgress, Tooltip, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, IconButton, LinearProgress, Tooltip, Typography } from "@mui/material";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import CloseIcon from "@mui/icons-material/Close";
 import PauseIcon from "@mui/icons-material/Pause";
@@ -19,9 +19,8 @@ import useCurrentJobStore from "../utils/currentJobStore";
 const JobProgressBar = ({ status }: { status: JobStatus }) => {
   const estimatedPercentComplete = Math.max(Math.min(Math.round(status.estimatedPercentComplete * 1000) / 10, 100), 0);
 
-  let tooltipText = `Status: ${status.status || "N/A"}\nYears Processed: ${status.currentYear}/${
-    status.totalYears
-  }\nEstimated Percent Complete: ${estimatedPercentComplete}%`;
+  let tooltipText = `Status: ${status.status || "N/A"}\nYears Processed: ${status.currentYear}/${status.totalYears
+    }\nEstimated Percent Complete: ${estimatedPercentComplete}%`;
 
   if (status.timeRemaining > 0) {
     tooltipText += `\nEstimated Time Remaining: ${formatElapsedTime(status.timeRemaining)}`;
@@ -51,6 +50,8 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
   const loadJob = useStore((state) => state.loadJob);
   const downloadJob = useStore((state) => state.downloadJob);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
+  const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
+  const isBulkGeotiffDownloading = bulkGeotiffDownloadJobId === job.key;
   const downloadGeojson = useCurrentJobStore((state) => state.downloadGeojson);
   const restartJob = useStore((state) => state.restartJob);
   const pauseJob = useStore((state) => state.pauseJob);
@@ -418,6 +419,18 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
               disableRipple
             >
               All GeoTIFFs
+            </MenuItem>
+            <MenuItem
+              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              onClick={() => {
+                downloadAllGeotiffs(job.key, { clipped: true });
+                setDownloadMenuOpen(false);
+              }}
+              disabled={isBulkGeotiffDownloading}
+              disableRipple
+            >
+              {isBulkGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+              All GeoTIFFs (clipped)
             </MenuItem>
           </Menu>
         </span>

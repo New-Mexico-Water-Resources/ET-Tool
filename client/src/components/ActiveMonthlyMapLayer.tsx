@@ -163,6 +163,7 @@ const ActiveMonthlyMapLayer: FC = () => {
   const previewOpacity = useCurrentJobStore((state) => state.previewOpacity);
   const setPreviewOpacity = useCurrentJobStore((state) => state.setPreviewOpacity);
   const clipToPolygon = useCurrentJobStore((state) => state.clipToPolygon);
+  const clipToPolygonMode = useCurrentJobStore((state) => state.clipToPolygonMode);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayerHasColorScale = useMemo(() => {
@@ -170,9 +171,7 @@ const ActiveMonthlyMapLayer: FC = () => {
     return !!mapLayer?.showColorScale;
   }, [mapLayerKey]);
 
-  // Clean up function to remove all layers and event listeners
   const cleanupLayers = useCallback(() => {
-    // Clear any pending fade timeouts
     if (fadeTimeoutRef.current) {
       clearTimeout(fadeTimeoutRef.current);
       fadeTimeoutRef.current = null;
@@ -203,7 +202,6 @@ const ActiveMonthlyMapLayer: FC = () => {
     }
   }, [map]);
 
-  // Function to create a new layer with crossfade
   const createLayerWithCrossfade = async (
     georaster: GeoRaster,
     minValue: number,
@@ -236,32 +234,25 @@ const ActiveMonthlyMapLayer: FC = () => {
       className: "active-monthly-map-layer",
     };
 
-    // Create the new layer
     const newLayer = new GeoRasterLayer(layerOptions) as unknown as GeoRasterLayer;
 
-    // Add the new layer to the map
     newLayer.addTo(map);
 
-    // If there's an existing layer, fade it out
     if (layerRef.current) {
       const oldLayer = layerRef.current;
       const oldLayerElement = oldLayer.getContainer();
 
       if (oldLayerElement) {
-        // Add fade-out class to old layer
         oldLayerElement.classList.add("fade-out");
 
-        // After fade-out completes, remove the old layer
         fadeTimeoutRef.current = setTimeout(() => {
           map.removeLayer(oldLayer);
         }, 300);
       } else {
-        // If no element found, just remove the layer
         map.removeLayer(oldLayer);
       }
     }
 
-    // Fade in the new layer
     setTimeout(() => {
       newLayer.setOpacity(layerOpacity);
     }, 10);
@@ -296,11 +287,9 @@ const ActiveMonthlyMapLayer: FC = () => {
   ]);
 
   useEffect(() => {
-    // Clean up when component unmounts
     return () => {
       cleanupLayers();
 
-      // Clean up any pending operations
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
@@ -313,7 +302,6 @@ const ActiveMonthlyMapLayer: FC = () => {
     };
   }, [map, cleanupLayers]);
 
-  // Add a new useEffect to handle tooltip visibility when showPreview changes
   useEffect(() => {
     if (!showPreview) {
       cleanupLayers();
@@ -324,7 +312,6 @@ const ActiveMonthlyMapLayer: FC = () => {
 
   useEffect(() => {
     const loadGeoTiff = async () => {
-      // If already loading, cancel the previous request
       if (isLoading) {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
@@ -334,13 +321,10 @@ const ActiveMonthlyMapLayer: FC = () => {
         }
       }
 
-      // Create a new abort controller for this request
       abortControllerRef.current = new AbortController();
 
-      // Set loading state
       setIsLoading(true);
 
-      // Clean up existing tooltips and event listeners before loading new data
       if (tooltipRef.current) {
         map.removeLayer(tooltipRef.current);
         tooltipRef.current = null;
@@ -356,7 +340,6 @@ const ActiveMonthlyMapLayer: FC = () => {
         mouseoutHandlerRef.current = null;
       }
 
-      // Only proceed if preview is enabled and we have all required data
       if (!showPreview || !previewMonth || !previewYear || !previewVariable) {
         setIsLoading(false);
         return;
@@ -375,7 +358,7 @@ const ActiveMonthlyMapLayer: FC = () => {
 
         const displayGeoraster =
           clipToPolygon && activeJob?.loaded_geo_json
-            ? applyPreviewPolygonClip(georaster, activeJob.loaded_geo_json)
+            ? applyPreviewPolygonClip(georaster, activeJob.loaded_geo_json, clipToPolygonMode)
             : georaster;
 
         let minValue = displayGeoraster.mins[0];
@@ -399,7 +382,6 @@ const ActiveMonthlyMapLayer: FC = () => {
           maxValue = Number(activePreviewMaxValue);
         }
 
-        // Create the new layer with crossfade
         const layer = await createLayerWithCrossfade(
           displayGeoraster,
           minValue,
@@ -410,7 +392,6 @@ const ActiveMonthlyMapLayer: FC = () => {
 
         let currentTooltip = tooltip;
 
-        // Create tooltip
         if (!currentTooltip) {
           currentTooltip = new Tooltip({
             permanent: false,
@@ -422,9 +403,7 @@ const ActiveMonthlyMapLayer: FC = () => {
           setTooltip(currentTooltip);
         }
 
-        // Add mouse move handler to update tooltip
         const mousemoveHandler = (e: LeafletMouseEvent) => {
-          // Close any existing tooltips first
           if (tooltipRef.current) {
             map.removeLayer(tooltipRef.current);
             tooltipRef.current = null;
@@ -438,7 +417,8 @@ const ActiveMonthlyMapLayer: FC = () => {
               e.latlng.lng,
               e.latlng.lat,
               displayGeoraster,
-              activeJob.loaded_geo_json
+              activeJob.loaded_geo_json,
+              clipToPolygonMode
             );
 
           let variableName = getPreviewDisplayName(previewVariable);
@@ -464,17 +444,14 @@ const ActiveMonthlyMapLayer: FC = () => {
           }
         };
 
-        // Add mouse move handler
         map.on("mousemove", mousemoveHandler);
 
-        // Close tooltip on mouse out
         const mouseoutHandler = () => {
           currentTooltip?.close();
         };
 
         map.on("mouseout", mouseoutHandler);
 
-        // Store references to the current layer and handlers
         layerRef.current = layer;
         tooltipRef.current = tooltip;
         mousemoveHandlerRef.current = mousemoveHandler;
@@ -491,7 +468,6 @@ const ActiveMonthlyMapLayer: FC = () => {
       }
     };
 
-    // Debounce the loadGeoTiff function to prevent rapid consecutive calls
     loadTimeoutRef.current = setTimeout(() => {
       loadGeoTiff();
     }, 20);
@@ -499,7 +475,6 @@ const ActiveMonthlyMapLayer: FC = () => {
     return () => {
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
-        // Clear any tooltips or old layers
         if (tooltipRef.current) {
           tooltipRef.current.close();
         }
@@ -516,6 +491,7 @@ const ActiveMonthlyMapLayer: FC = () => {
     activePreviewMaxValue,
     dynamicPreviewColorScale,
     clipToPolygon,
+    clipToPolygonMode,
     activeJob?.loaded_geo_json,
     activeJob?.key,
   ]);

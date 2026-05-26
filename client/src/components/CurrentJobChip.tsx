@@ -12,6 +12,7 @@ import {
   TextField,
   Checkbox,
   FormControlLabel,
+  CircularProgress,
 } from "@mui/material";
 import PaletteIcon from "@mui/icons-material/Palette";
 import CloseIcon from "@mui/icons-material/Close";
@@ -25,10 +26,13 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
-import useCurrentJobStore, { PreviewUnitsType, PreviewVariableType } from "../utils/currentJobStore";
+import useCurrentJobStore, {
+  ClipToPolygonMode,
+  PreviewUnitsType,
+  PreviewVariableType,
+} from "../utils/currentJobStore";
 import { OPENET_TRANSITION_DATE } from "../utils/constants";
 import {
-  isCalculatedPreviewVariable,
   POST_OPENET_VARIABLE_OPTIONS,
   PRE_OPENET_VARIABLE_OPTIONS,
   VARIABLE_DISPLAY_NAMES,
@@ -50,6 +54,12 @@ const CurrentJobChip = () => {
   const downloadJob = useStore((state) => state.downloadJob);
   const downloadGeotiff = useCurrentJobStore((state) => state.downloadGeotiff);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
+  const previewGeotiffDownloadJobId = useCurrentJobStore((state) => state.previewGeotiffDownloadJobId);
+  const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
+  const isPreviewGeotiffDownloading =
+    previewGeotiffDownloadJobId !== null && previewGeotiffDownloadJobId === activeJob?.key;
+  const isBulkGeotiffDownloading =
+    bulkGeotiffDownloadJobId !== null && bulkGeotiffDownloadJobId === activeJob?.key;
   const queue = useStore((state) => state.queue);
   const backlog = useStore((state) => state.backlog);
 
@@ -86,6 +96,10 @@ const CurrentJobChip = () => {
   const [previewMaxValue, setPreviewMaxValue] = useCurrentJobStore((state) => [state.previewMax, state.setPreviewMax]);
   const [previewOpacity, setPreviewOpacity] = useCurrentJobStore((state) => [state.previewOpacity, state.setPreviewOpacity]);
   const [clipToPolygon, setClipToPolygon] = useCurrentJobStore((state) => [state.clipToPolygon, state.setClipToPolygon]);
+  const [clipToPolygonMode, setClipToPolygonMode] = useCurrentJobStore((state) => [
+    state.clipToPolygonMode,
+    state.setClipToPolygonMode,
+  ]);
 
   const tooltip = useAtomValue(tooltipAtom);
 
@@ -100,12 +114,6 @@ const CurrentJobChip = () => {
 
     return POST_OPENET_VARIABLE_OPTIONS;
   }, [activeJob?.start_year]);
-
-  const formattedPreviewDate = useMemo(() => {
-    return `${new Date(Number(previewYear), Number(previewMonth) - 1).toLocaleString("default", {
-      month: "short",
-    })} ${previewYear}`;
-  }, [previewMonth, previewYear]);
 
   const liveJob = useMemo(() => {
     let job = queue.find((job) => job.key === activeJob?.key);
@@ -426,7 +434,13 @@ const CurrentJobChip = () => {
           {activeJob && (
             <div
               className="job-controls-header"
-              onClick={() => setShowJobControls(!showJobControls)}
+              onClick={() => {
+                if (!showJobControls) {
+                  setShowPreview(true);
+                }
+
+                setShowJobControls(!showJobControls)
+              }}
               style={{
                 cursor: "pointer",
                 display: "flex",
@@ -540,22 +554,40 @@ const CurrentJobChip = () => {
                       </FormControl>
                     </div>
                     {activeJob?.loaded_geo_json && (
-                      <FormControlLabel
-                        sx={{ margin: 0, marginLeft: "-4px" }}
-                        control={
-                          <Checkbox
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <FormControlLabel
+                          sx={{ margin: 0, marginLeft: "-4px" }}
+                          control={
+                            <Checkbox
+                              size="small"
+                              checked={clipToPolygon}
+                              onChange={(e) => setClipToPolygon(e.target.checked)}
+                              sx={{ color: "var(--st-gray-40)", "&.Mui-checked": { color: "primary.main" } }}
+                            />
+                          }
+                          label={
+                            <Typography variant="caption" sx={{ color: "var(--st-gray-40)" }}>
+                              Clip to polygon
+                            </Typography>
+                          }
+                        />
+                        <FormControl size="small" disabled={!clipToPolygon} sx={{ minWidth: "110px", flex: 1 }}>
+                          <Select
                             size="small"
-                            checked={clipToPolygon}
-                            onChange={(e) => setClipToPolygon(e.target.checked)}
-                            sx={{ color: "var(--st-gray-40)", "&.Mui-checked": { color: "primary.main" } }}
-                          />
-                        }
-                        label={
-                          <Typography variant="caption" sx={{ color: "var(--st-gray-40)" }}>
-                            Clip to polygon
-                          </Typography>
-                        }
-                      />
+                            value={clipToPolygonMode}
+                            disabled={!clipToPolygon}
+                            onChange={(e) => setClipToPolygonMode(e.target.value as ClipToPolygonMode)}
+                            sx={{
+                              "& .MuiSelect-select": { fontSize: "12px", py: "4px" },
+                              color: clipToPolygon ? "var(--st-gray-30)" : "var(--st-gray-60)",
+                            }}
+                          >
+                            <MenuItem value="inclusive">Inclusive</MenuItem>
+                            <MenuItem value="exclusive">Exclusive</MenuItem>
+                            <MenuItem value="inverse">Inverse</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </div>
                     )}
                   </div>
                   {availableDays &&
@@ -779,22 +811,17 @@ const CurrentJobChip = () => {
                 GeoJSON
               </MenuItem>
 
-              {canPreview && previewMonth && previewYear && !isCalculatedPreviewVariable(previewVariable) && (
+              {canPreview && previewMonth && previewYear && previewVariable && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
+                  disabled={isPreviewGeotiffDownloading}
                   onClick={() => {
-                    if (!previewVariable || !previewMonth || !previewYear) {
-                      console.error("Missing preview variable, month, or year");
-                      return;
-                    }
-
-                    downloadGeotiff(activeJob.key, previewVariable, Number(previewMonth), Number(previewYear));
+                    downloadGeotiff(activeJob.key);
                   }}
                 >
-                  {formattedPreviewDate}{" "}
-                  {VARIABLE_DISPLAY_NAMES[previewVariable as keyof typeof VARIABLE_DISPLAY_NAMES] || previewVariable}{" "}
-                  GeoTIFF
+                  {isPreviewGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                  Interactive Preview GeoTIFF
                 </MenuItem>
               )}
 
@@ -811,6 +838,18 @@ const CurrentJobChip = () => {
                 }}
               >
                 All GeoTIFFs
+              </MenuItem>
+
+              <MenuItem
+                sx={{ backgroundColor: "var(--st-gray-80)" }}
+                disableRipple
+                disabled={isBulkGeotiffDownloading}
+                onClick={() => {
+                  downloadAllGeotiffs(activeJob.key, { clipped: true });
+                }}
+              >
+                {isBulkGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                All GeoTIFFs (clipped)
               </MenuItem>
 
               <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
