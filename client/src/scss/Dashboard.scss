@@ -212,6 +212,10 @@ path.leaflet-interactive:focus {
   outline: none;
 }
 
+.leaflet-top.leaflet-right {
+  z-index: 1001;
+}
+
 .map-container.sidebar-open .leaflet-right .leaflet-control {
   transition: margin-right 0.1s ease;
 }
