@@ -70,9 +70,8 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
 
         const style: Record<string, any> = {};
         if (!location.visible) {
-          style.fillOpacity = 0.5;
-          style.color = "black";
-          style.fillColor = "black";
+          style.opacity = 0;
+          style.fillOpacity = 0;
         }
 
         if (!isValidArea && location.visible) {

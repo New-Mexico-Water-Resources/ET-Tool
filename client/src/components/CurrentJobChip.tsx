@@ -1,4 +1,7 @@
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Button,
   FormControl,
   InputLabel,
@@ -41,6 +44,7 @@ import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useAtomValue } from "jotai";
 import { tooltipAtom } from "../utils/atoms";
 
@@ -390,37 +394,93 @@ const CurrentJobChip = () => {
 
         {isGroupMode && locations.length > 0 && (
           <div
+            className="group-layers-panel"
             style={{
               maxHeight: "140px",
-              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
               border: "1px solid var(--st-gray-80)",
               borderRadius: "6px",
-              padding: "4px 8px",
               marginTop: "4px",
             }}
           >
-            <Typography variant="caption" sx={{ color: "var(--st-gray-40)", display: "block", mb: 0.5 }}>
-              Visible on map
-            </Typography>
-            {locations.map((location) => (
-              <FormControlLabel
-                key={location.id}
-                sx={{ color: "var(--st-gray-20)", ml: 0, display: "flex" }}
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={location.visible}
-                    onChange={(event) => {
-                      const nextLocations = locations.map((row) =>
-                        row.id === location.id ? { ...row, visible: event.target.checked } : row
-                      );
-                      setLocations(nextLocations);
-                    }}
+            <Accordion
+              defaultExpanded
+              disableGutters
+              elevation={0}
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                backgroundColor: "transparent",
+                color: "var(--st-gray-20)",
+                "&:before": { display: "none" },
+                "&.Mui-focusVisible": { outline: "none", boxShadow: "none" },
+                "&:focus": { outline: "none" },
+                "&:focus-visible": { outline: "none", boxShadow: "none" },
+                overflow: "hidden",
+                "& .MuiCollapse-root.MuiCollapse-entered": {
+                  overflow: "auto",
+                  minHeight: 0,
+                  flex: "1 1 auto",
+                },
+              }}
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon sx={{ color: "var(--st-gray-40)" }} />}
+                sx={{
+                  flexShrink: 0,
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                  minHeight: "32px",
+                  px: 1,
+                  backgroundColor: "var(--st-gray-90)",
+                  "& .MuiAccordionSummary-content": { my: 0.5 },
+                  "&.Mui-focusVisible": {
+                    outline: "none",
+                    boxShadow: "none",
+                    backgroundColor: "var(--st-gray-90)",
+                  },
+                  "&:focus": { outline: "none" },
+                  "&:focus-visible": { outline: "none", boxShadow: "none" },
+                  "& .MuiAccordionSummary-expandIconWrapper": { color: "var(--st-gray-40)" },
+                }}
+              >
+                <Typography variant="caption" sx={{ color: "var(--st-gray-40)" }}>
+                  Layers
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails
+                sx={{
+                  pt: 0,
+                  pb: 0.5,
+                  px: 1,
+                }}
+              >
+                {locations.map((location) => (
+                  <FormControlLabel
+                    key={location.id}
+                    sx={{ color: "var(--st-gray-20)", ml: 0, display: "flex" }}
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={location.visible}
+                        onChange={(event) => {
+                          const nextLocations = locations.map((row) =>
+                            row.id === location.id ? { ...row, visible: event.target.checked } : row
+                          );
+                          setLocations(nextLocations);
+                        }}
+                      />
+                    }
+                    label={location.name}
                   />
-                }
-                label={location.name}
-              />
-            ))}
+                ))}
+              </AccordionDetails>
+            </Accordion>
           </div>
         )}
 

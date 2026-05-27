@@ -13,6 +13,9 @@
     - Adds new USDA Cropland Data Layer, Google Hybrid imagery, and NDVI basemaps
     - USDA Cropland Data Layer includes searchable legend and allows hovering over an area to view the crop type
   - Renames All jobs to "Previously Run Jobs"
+  - **Job Groups**
+    - When submitting a multi-polygon job, they can now optionally be kept together in a group
+    - Job groups can be previewed together simultaneously, downloaded together, and deleted together
   - Changes PET in interactive preview to ETo
   - New Search button to quickly zoom to locations via address or lat/lon coordinate
   - Adds confirmation dialog before submitting a new job along with an ETA
