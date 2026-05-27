@@ -9,6 +9,7 @@ import os
 import json
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+from google.oauth2 import service_account
 
 
 class GEEAWSDataPipeline:
@@ -41,6 +42,9 @@ class GEEAWSDataPipeline:
         gdrive_client_secrets_filename=None,
         monthly_sum: bool = False,
         error_log_filename: str = "error.log",
+        service_account_credentials: str | None = None,
+        gcs_bucket: str | None = None,
+        use_gcs: bool = False,
     ):
         """
         Initialize the GEEAWSDataPipeline
@@ -69,7 +73,7 @@ class GEEAWSDataPipeline:
         self.aws_region = aws_region
         self.aws_profile = aws_profile
         self.authenticate(
-            project, gdrive_key_filename, gdrive_client_secrets_filename, aws_access_key_id, aws_secret_access_key
+            project, gdrive_key_filename, gdrive_client_secrets_filename, aws_access_key_id, aws_secret_access_key, service_account_credentials
         )
 
         # Default to ARD_tiles.geojson
@@ -93,7 +97,8 @@ class GEEAWSDataPipeline:
         self.temp_local_folder = temp_local_folder
         self.monthly_sum = monthly_sum
         self.manifest = set()
-
+        self.gcs_bucket = gcs_bucket
+        self.use_gcs = use_gcs
         self.update_task_list()
 
         self._configure_error_log()
@@ -141,6 +146,7 @@ class GEEAWSDataPipeline:
         gdrive_client_secrets_filename: str,
         aws_access_key_id: str,
         aws_secret_access_key: str,
+        service_account_credentials: str | None = None,
     ):
         """
         Authenticate with the GEE API and Google Drive
@@ -151,8 +157,19 @@ class GEEAWSDataPipeline:
             aws_access_key_id (str): aws access key id
             aws_secret_access_key (str): aws secret access key
         """
-        ee.Authenticate()
-        ee.Initialize(project=project)
+        if service_account_credentials:
+            credentials = service_account.Credentials.from_service_account_file(
+                service_account_credentials,
+                scopes=[
+                    'https://www.googleapis.com/auth/earthengine',
+                    'https://www.googleapis.com/auth/cloud-platform'
+                ]
+            )
+            ee.Initialize(credentials=credentials, project=project)
+        else:
+            ee.Authenticate()
+            ee.Initialize(project=project)
+
         self.drive = google_drive_login(
             key_filename=gdrive_key_filename, client_secrets_filename=gdrive_client_secrets_filename
         )
@@ -263,6 +280,31 @@ class GEEAWSDataPipeline:
         self.update_task_list()
         return layer_name in self.job_names
 
+    def export_to_gcs(self, image: ee.Image, layer_name: str, tile_geometry: ee.Geometry):
+        """
+        Export the image to the gcs bucket
+        Args:
+            image (ee.Image): image to export
+            layer_name (str): name of the layer
+            tile_geometry (ee.Geometry): geometry of the tile
+        """
+        if self.check_if_task_exists(layer_name):
+            self.logger.info(f"Task {layer_name} already exists, skipping export")
+            return
+
+        task = ee.batch.Export.image.toCloudStorage(
+            image=image,
+            description=layer_name,
+            bucket=self.gcs_bucket,
+            region=tile_geometry,
+            crs="EPSG:4326",
+            scale=30,
+            maxPixels=1e12,
+            fileFormat="GeoTIFF",
+        )
+        task.start()
+        self.logger.info(f"Started GCS export for {layer_name}")
+
     def export_to_gdrive(self, image: ee.Image, layer_name: str, tile_geometry: ee.Geometry):
         """
         Export the image to the gdrive folder
@@ -285,7 +327,7 @@ class GEEAWSDataPipeline:
             maxPixels=1e12,
         )
         task.start()
-        self.logger.info(f"Started export for {layer_name}")
+        self.logger.info(f"Started GDrive export for {layer_name}")
 
     def visualize_tile(
         self, image: ee.Image, layer_name: str, map_object: geemap.Map, visualization_config: dict | str = "default"
@@ -318,6 +360,7 @@ class GEEAWSDataPipeline:
         map_object=None,
         visualization_config: dict | str = "default",
         limit: int | None = None,
+        tile_ids: list[str] = None,
     ):
         """
         Process the tile images for the given date and bands
@@ -328,6 +371,7 @@ class GEEAWSDataPipeline:
             map_object (geemap.Map, optional): geemap.Map object to visualize the tiles. Creates one with geemap.Map() if not provided.
             visualization_config (dict | str, optional): visualization configuration to use for map styling [default: "default"]
             limit (int | None, optional): limit the number of tiles to process per band [default: None]
+            tile_ids (list[str], optional): list of tile ids to filter by [default: None]
         Returns:
             geemap.Map: geemap.Map object with the layer added if visualize is True, otherwise None
         """
@@ -341,6 +385,8 @@ class GEEAWSDataPipeline:
             date = ee.Date(date) if isinstance(date, str) else date
             mosaic, date, next_month = self.generate_mosaic_for_month(date, band)
             tile_features = self.tiles.getInfo()["features"]
+            if tile_ids is not None:
+                tile_features = [tile for tile in tile_features if tile["properties"]["hv"] in tile_ids]
             new_pbar = tqdm(tile_features, desc="Processing tiles", leave=False)
             tile_count = 0
             for tile in new_pbar:
@@ -358,8 +404,11 @@ class GEEAWSDataPipeline:
                 new_pbar.set_description(f"Processing layer: {layer_name}")
 
                 if export:
-                    self.export_to_gdrive(clipped_image, layer_name, tile_geometry)
-                    pbar.set_description(f"Started export for layer: {layer_name}")
+                    if self.use_gcs:
+                        self.export_to_gcs(clipped_image, layer_name, tile_geometry)
+                    else:
+                        self.export_to_gdrive(clipped_image, layer_name, tile_geometry)
+                    pbar.set_description(f"Started {self.use_gcs and 'GCS' or 'GDrive'} export for layer: {layer_name}")
 
                 if visualize:
                     map_object = self.visualize_tile(clipped_image, layer_name, map_object, visualization_config)
@@ -410,6 +459,7 @@ class GEEAWSDataPipeline:
         visualize: bool = False,
         map_object=None,
         visualization_config: dict | str = "default",
+        tile_ids: list[str] = None,
     ):
         """
         Process the tile images for the given date list and bands
@@ -419,11 +469,12 @@ class GEEAWSDataPipeline:
             visualize (bool, optional): whether to visualize the tiles on a map [default: False].
             map_object (geemap.Map, optional): geemap.Map object to visualize the tiles. Creates one with geemap.Map() if not provided.
             visualization_config (dict | str, optional): visualization configuration to use for map styling [default: "default"]
+            tile_ids (list[str], optional): list of tile ids to filter by [default: None]
         """
         pbar = tqdm(date_list, desc="Processing dates", leave=False)
         for date in pbar:
             pbar.set_description(f"Processing date: {date}")
-            self.generate_tiles_for_month(date, export, visualize, map_object, visualization_config)
+            self.generate_tiles_for_month(date, export, visualize, map_object, visualization_config, tile_ids=tile_ids)
 
     def generate_tiles_for_date_range(
         self,
@@ -433,6 +484,7 @@ class GEEAWSDataPipeline:
         visualize: bool = False,
         map_object=None,
         visualization_config: dict | str = "default",
+        tile_ids: list[str] = None,
     ):
         """
         Process the tile images for the given date range and bands
@@ -443,9 +495,11 @@ class GEEAWSDataPipeline:
             visualize (bool, optional): whether to visualize the tiles on a map [default: False].
             map_object (geemap.Map, optional): geemap.Map object to visualize the tiles. Creates one with geemap.Map() if not provided.
             visualization_config (dict | str, optional): visualization configuration to use for map styling [default: "default"]
+            tile_ids (list[str], optional): list of tile ids to filter by [default: None]
         """
+        self.last_task_list_update = None
         date_list = self.generate_date_list(start_date, end_date)
-        self.generate_tiles_for_date_list(date_list, export, visualize, map_object, visualization_config)
+        self.generate_tiles_for_date_list(date_list, export, visualize, map_object, visualization_config, tile_ids=tile_ids)
 
     def get_gdrive_folder_id(self, folder_name: str | None = None) -> str:
         """

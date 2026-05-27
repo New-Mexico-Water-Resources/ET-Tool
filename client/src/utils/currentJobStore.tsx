@@ -1,6 +1,23 @@
 import { create } from "zustand";
+// @ts-expect-error - No type definitions available
+import parseGeoraster from "georaster";
 import { API_URL } from "./constants";
 import useStore from "./store";
+import { PreviewGeoRaster } from "./previewGeoraster";
+import {
+  CalculatedPreviewVariable,
+  computeCalculatedPreview,
+  getPreviewCalculation,
+  isCalculatedPreviewVariable,
+  isSourcePreviewVariable,
+  PreviewVariableType,
+  SourcePreviewVariable,
+} from "./previewCalculations";
+
+const hasPreviewBuffer = (data: ArrayBuffer | null | undefined): data is ArrayBuffer =>
+  !!data && data.byteLength > 0;
+
+const parseGeorasterFromBuffer = (buffer: ArrayBuffer) => parseGeoraster(buffer.slice(0));
 
 export interface Job {
   key: string;
@@ -13,7 +30,9 @@ export interface Job {
   [key: string]: any;
 }
 
-export type PreviewVariableType = "ET" | "PET" | "ET_MIN" | "COUNT";
+export type { PreviewVariableType, SourcePreviewVariable, CalculatedPreviewVariable };
+export type PreviewUnitsType = "mm" | "inches";
+export type ClipToPolygonMode = "inclusive" | "exclusive" | "inverse";
 
 export type AvailableDay = {
   year: number;
@@ -26,32 +45,51 @@ interface Store {
   previewMonth: number | string | null;
   previewYear: number | string | null;
   previewVariable: PreviewVariableType | null;
+  previewUnits: PreviewUnitsType;
   showPreview: boolean;
   previewDay: number | string | null;
   availableDays: AvailableDay[];
   previewMin: number | string | null;
   previewMax: number | string | null;
   dynamicPreviewColorScale: boolean;
+  previewOpacity: number;
+  clipToPolygon: boolean;
+  clipToPolygonMode: ClipToPolygonMode;
 
   monthlyGeojsonCache: Record<string, ArrayBuffer>;
+  calculatedPreviewCache: Record<string, PreviewGeoRaster>;
+  previewGeotiffDownloadJobId: string | null;
+  bulkGeotiffDownloadJobId: string | null;
 }
 
 interface Setters {
   setPreviewMonth: (month: number | string | null) => void;
   setPreviewYear: (year: number | string | null) => void;
   setPreviewVariable: (variable: PreviewVariableType | null) => void;
+  setPreviewUnits: (units: PreviewUnitsType) => void;
   setShowPreview: (show: boolean) => void;
   setPreviewDay: (day: number | string | null) => void;
   setAvailableDays: (days: AvailableDay[]) => void;
   setPreviewMin: (min: number | string | null) => void;
   setPreviewMax: (max: number | string | null) => void;
   setDynamicPreviewColorScale: (scale: boolean) => void;
+  setPreviewOpacity: (opacity: number) => void;
+  setClipToPolygon: (clip: boolean) => void;
+  setClipToPolygonMode: (mode: ClipToPolygonMode) => void;
 }
 
 interface Actions {
+  fetchVariableArrayBuffer: (variable: SourcePreviewVariable) => Promise<ArrayBuffer | null>;
   fetchMonthlyGeojson: () => Promise<ArrayBuffer | null>;
-  downloadGeotiff: (jobId: string, variable: PreviewVariableType, month: number, year: number) => Promise<void>;
-  downloadAllGeotiffs: (jobId: string) => Promise<void>;
+  fetchCalculatedPreviewGeoraster: (variable: CalculatedPreviewVariable) => Promise<PreviewGeoRaster | null>;
+  fetchPreviewGeoraster: () => Promise<PreviewGeoRaster | null>;
+  fetchPreviewGeorasterForJob: (
+    jobKey: string,
+    startYear: number,
+    endYear: number
+  ) => Promise<PreviewGeoRaster | null>;
+  downloadGeotiff: (jobId: string) => Promise<void>;
+  downloadAllGeotiffs: (jobId: string, options?: { clipped?: boolean }) => Promise<void>;
   downloadGeojson: (jobId: string, name: string) => Promise<void>;
 }
 
@@ -62,6 +100,8 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   setPreviewYear: (year) => set({ previewYear: year }),
   previewVariable: "ET",
   setPreviewVariable: (variable) => set({ previewVariable: variable }),
+  previewUnits: "mm",
+  setPreviewUnits: (units) => set({ previewUnits: units }),
   showPreview: false,
   setShowPreview: (show) => set({ showPreview: show }),
   previewDay: null,
@@ -74,98 +114,252 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
   setPreviewMax: (max) => set({ previewMax: max }),
   dynamicPreviewColorScale: true,
   setDynamicPreviewColorScale: (scale) => set({ dynamicPreviewColorScale: scale }),
+  previewOpacity: 1,
+  setPreviewOpacity: (opacity) =>
+    set({ previewOpacity: Math.max(0, Math.min(1, opacity)) }),
+  clipToPolygon: false,
+  setClipToPolygon: (clip) => set({ clipToPolygon: clip }),
+  clipToPolygonMode: "inclusive",
+  setClipToPolygonMode: (mode) => set({ clipToPolygonMode: mode }),
 
   monthlyGeojsonCache: {},
-  fetchMonthlyGeojson: async () => {
-    const { previewMonth, previewYear, previewVariable } = get();
+  calculatedPreviewCache: {},
+  previewGeotiffDownloadJobId: null,
+  bulkGeotiffDownloadJobId: null,
 
+  fetchVariableArrayBuffer: async (variable: SourcePreviewVariable): Promise<ArrayBuffer | null> => {
+    const { previewMonth, previewYear } = get();
     const { activeJob, authAxios } = useStore.getState();
 
-    if (!activeJob || !activeJob.key) {
-      console.error("No current job selected");
+    if (!activeJob?.key || !previewMonth || !previewYear) {
       return null;
-    }
-
-    if (!previewMonth || !previewYear) {
-      console.error("No preview month or year selected");
-      return null;
-    }
-
-    const cache = get().monthlyGeojsonCache;
-    const cacheKey = `${previewMonth}-${previewYear}-${previewVariable}-${activeJob?.key}`;
-
-    if (cache[cacheKey]) {
-      return cache[cacheKey];
     }
 
     const month = parseInt(previewMonth as string);
     const year = parseInt(previewYear as string);
 
-    // Make sure year is between start and end year
-    if (year < activeJob.start_year || year > activeJob.end_year) {
-      console.error("Invalid preview year");
+    if (year < activeJob.start_year || year > activeJob.end_year || isNaN(month) || isNaN(year)) {
       return null;
     }
 
-    if (isNaN(month) || isNaN(year)) {
-      console.error("Invalid preview month or year");
-      return null;
+    const cache = get().monthlyGeojsonCache;
+    const cacheKey = `${previewMonth}-${previewYear}-${variable}-${activeJob.key}`;
+
+    if (cache[cacheKey]) {
+      return cache[cacheKey];
     }
 
     try {
       const axiosInstance = authAxios();
       if (!axiosInstance) {
-        console.error("No authAxios instance found");
         return null;
       }
 
       const response = await axiosInstance.get(
-        `${API_URL}/historical/monthly?key=${activeJob.key}&month=${month}&year=${year}&variable=${previewVariable}`,
+        `${API_URL}/historical/monthly?key=${activeJob.key}&month=${month}&year=${year}&variable=${variable}`,
         { responseType: "arraybuffer" }
       );
 
-      if (cache && cacheKey && response.data && response.data.length > 0) {
+      if (hasPreviewBuffer(response.data)) {
         cache[cacheKey] = response.data;
         set({ monthlyGeojsonCache: cache });
       }
 
       return response.data;
     } catch (error) {
-      console.error("Error fetching monthly geojson:", error);
+      console.error(`Error fetching ${variable} GeoTIFF:`, error);
       return null;
     }
   },
 
-  downloadGeotiff: async (jobId: string, variable: PreviewVariableType, month: number, year: number) => {
-    const { authAxios } = useStore.getState();
+  fetchMonthlyGeojson: async () => {
+    const { previewVariable } = get();
 
-    const axiosInstance = authAxios();
-
-    if (!axiosInstance) {
-      console.error("No authAxios instance found");
-      return;
+    if (!previewVariable || !isSourcePreviewVariable(previewVariable)) {
+      console.error("Calculated preview variables must be fetched via fetchPreviewGeoraster");
+      return null;
     }
 
-    const response = await axiosInstance.get(
-      `${API_URL}/historical/monthly?key=${jobId}&month=${month}&year=${year}&variable=${variable}`,
-      { responseType: "arraybuffer" }
-    );
+    return get().fetchVariableArrayBuffer(previewVariable);
+  },
 
-    if (response.data) {
-      const blob = new Blob([response.data], { type: "image/tiff" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${jobId}-${month}-${year}-${variable}.tif`;
-      a.click();
-    } else {
-      console.error("No response data from downloadGeotiff");
+  fetchCalculatedPreviewGeoraster: async (variable: CalculatedPreviewVariable) => {
+    const { previewMonth, previewYear } = get();
+    const { activeJob } = useStore.getState();
+
+    if (!activeJob?.key || !previewMonth || !previewYear) {
+      return null;
+    }
+
+    const cacheKey = `${previewMonth}-${previewYear}-${variable}-${activeJob.key}`;
+    const cache = get().calculatedPreviewCache;
+
+    if (cache[cacheKey]) {
+      return cache[cacheKey];
+    }
+
+    try {
+      const calculation = getPreviewCalculation(variable);
+      const buffers = await Promise.all(
+        calculation.sources.map((source) => get().fetchVariableArrayBuffer(source))
+      );
+
+      if (buffers.some((buffer) => !buffer)) {
+        return null;
+      }
+
+      const rasters = await Promise.all(buffers.map((buffer) => parseGeorasterFromBuffer(buffer!)));
+      const sources = Object.fromEntries(
+        calculation.sources.map((source, index) => [source, rasters[index]])
+      ) as Record<SourcePreviewVariable, PreviewGeoRaster>;
+
+      const result = computeCalculatedPreview(variable, sources);
+
+      cache[cacheKey] = result;
+      set({ calculatedPreviewCache: cache });
+
+      return result;
+    } catch (error) {
+      console.error(`Error computing ${getPreviewCalculation(variable).label} preview:`, error);
+      return null;
     }
   },
 
-  downloadAllGeotiffs: async (jobId: string) => {
+  fetchPreviewGeoraster: async () => {
+    const { activeJob, activeJobGroup } = useStore.getState();
+    if (activeJobGroup) {
+      return null;
+    }
+    if (!activeJob?.key || activeJob.start_year == null || activeJob.end_year == null) {
+      return null;
+    }
+
+    return get().fetchPreviewGeorasterForJob(
+      activeJob.key,
+      Number(activeJob.start_year),
+      Number(activeJob.end_year)
+    );
+  },
+
+  fetchPreviewGeorasterForJob: async (jobKey, startYear, endYear) => {
+    const { previewMonth, previewYear, previewVariable } = get();
     const { authAxios } = useStore.getState();
 
+    if (!jobKey || !previewMonth || !previewYear || !previewVariable) {
+      return null;
+    }
+
+    const month = parseInt(previewMonth as string, 10);
+    const year = parseInt(previewYear as string, 10);
+    const start = Number(startYear);
+    const end = Number(endYear);
+
+    if (isNaN(month) || isNaN(year) || isNaN(start) || isNaN(end) || year < start || year > end) {
+      return null;
+    }
+
+    if (isCalculatedPreviewVariable(previewVariable)) {
+      const calculation = getPreviewCalculation(previewVariable);
+      const cacheKey = `${previewMonth}-${previewYear}-${previewVariable}-${jobKey}`;
+      const cache = get().calculatedPreviewCache;
+
+      if (cache[cacheKey]) {
+        return cache[cacheKey];
+      }
+
+      try {
+        const axiosInstance = authAxios();
+        if (!axiosInstance) {
+          return null;
+        }
+
+        const buffers = await Promise.all(
+          calculation.sources.map(async (source) => {
+            const sourceCacheKey = `${previewMonth}-${previewYear}-${source}-${jobKey}`;
+            const monthlyCache = get().monthlyGeojsonCache;
+            if (monthlyCache[sourceCacheKey]) {
+              return monthlyCache[sourceCacheKey];
+            }
+
+            const response = await axiosInstance.get(
+              `${API_URL}/historical/monthly?key=${jobKey}&month=${month}&year=${year}&variable=${source}`,
+              { responseType: "arraybuffer" }
+            );
+
+            if (hasPreviewBuffer(response.data)) {
+              monthlyCache[sourceCacheKey] = response.data;
+              set({ monthlyGeojsonCache: monthlyCache });
+            }
+
+            return response.data;
+          })
+        );
+
+        if (buffers.some((buffer) => !hasPreviewBuffer(buffer))) {
+          return null;
+        }
+
+        const rasters = await Promise.all(buffers.map((buffer) => parseGeorasterFromBuffer(buffer!)));
+        const sources = Object.fromEntries(
+          calculation.sources.map((source, index) => [source, rasters[index]])
+        ) as Record<SourcePreviewVariable, PreviewGeoRaster>;
+
+        const result = computeCalculatedPreview(previewVariable, sources);
+        cache[cacheKey] = result;
+        set({ calculatedPreviewCache: cache });
+        return result;
+      } catch (error) {
+        console.error(`Error computing group preview for ${jobKey}:`, error);
+        return null;
+      }
+    }
+
+    const cache = get().monthlyGeojsonCache;
+    const cacheKey = `${previewMonth}-${previewYear}-${previewVariable}-${jobKey}`;
+
+    if (cache[cacheKey]) {
+      return parseGeorasterFromBuffer(cache[cacheKey]);
+    }
+
+    try {
+      const axiosInstance = authAxios();
+      if (!axiosInstance) {
+        return null;
+      }
+
+      const response = await axiosInstance.get(
+        `${API_URL}/historical/monthly?key=${jobKey}&month=${month}&year=${year}&variable=${previewVariable}`,
+        { responseType: "arraybuffer" }
+      );
+
+      if (hasPreviewBuffer(response.data)) {
+        cache[cacheKey] = response.data;
+        set({ monthlyGeojsonCache: cache });
+        return parseGeorasterFromBuffer(response.data);
+      }
+    } catch (error) {
+      console.error(`Error fetching preview for ${jobKey}:`, error);
+    }
+
+    return null;
+  },
+
+  downloadGeotiff: async (jobId: string) => {
+    const {
+      previewMonth,
+      previewYear,
+      previewVariable,
+      clipToPolygon,
+      clipToPolygonMode,
+      previewUnits,
+    } = get();
+
+    if (!previewMonth || !previewYear || !previewVariable) {
+      console.error("Missing preview month, year, or variable");
+      return;
+    }
+
+    const { authAxios } = useStore.getState();
     const axiosInstance = authAxios();
 
     if (!axiosInstance) {
@@ -173,20 +367,91 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
       return;
     }
 
-    const escapedKey = encodeURIComponent(jobId);
-    const response = await axiosInstance.get(`${API_URL}/historical/download?key=${escapedKey}`, {
-      responseType: "arraybuffer",
+    if (get().previewGeotiffDownloadJobId || get().bulkGeotiffDownloadJobId) {
+      return;
+    }
+
+    const params = new URLSearchParams({
+      key: jobId,
+      month: String(previewMonth),
+      year: String(previewYear),
+      variable: previewVariable,
+      clip: String(clipToPolygon),
+      clipMode: clipToPolygonMode,
+      units: previewUnits,
     });
 
-    if (response.data) {
-      const blob = new Blob([response.data], { type: "application/zip" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${jobId}-all-geotiffs.zip`;
-      a.click();
-    } else {
-      console.error("No response data from downloadAllGeotiffs");
+    set({ previewGeotiffDownloadJobId: jobId });
+
+    try {
+      const response = await axiosInstance.get(
+        `${API_URL}/historical/monthly?${params.toString()}`,
+        { responseType: "arraybuffer" }
+      );
+
+      if (response.data) {
+        const blob = new Blob([response.data], { type: "image/tiff" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${jobId}-${previewYear}-${previewMonth}-${previewVariable}.tif`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error("No response data from downloadGeotiff");
+      }
+    } catch (error) {
+      console.error("Error downloading geotiff:", error);
+      useStore.getState().setErrorMessage("Error downloading GeoTIFF");
+    } finally {
+      set({ previewGeotiffDownloadJobId: null });
+    }
+  },
+
+  downloadAllGeotiffs: async (jobId: string, options?: { clipped?: boolean }) => {
+    const { authAxios } = useStore.getState();
+    const axiosInstance = authAxios();
+
+    if (!axiosInstance) {
+      console.error("No authAxios instance found");
+      return;
+    }
+
+    if (get().previewGeotiffDownloadJobId || get().bulkGeotiffDownloadJobId) {
+      return;
+    }
+
+    const params = new URLSearchParams({ key: jobId });
+    if (options?.clipped) {
+      params.set("clipped", "true");
+    }
+
+    set({ bulkGeotiffDownloadJobId: jobId });
+
+    try {
+      const response = await axiosInstance.get(
+        `${API_URL}/historical/download?${params.toString()}`,
+        { responseType: "arraybuffer" }
+      );
+
+      if (response.data) {
+        const blob = new Blob([response.data], { type: "application/zip" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = options?.clipped ? `${jobId}-all-geotiffs-clipped.zip` : `${jobId}-all-geotiffs.zip`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error("No response data from downloadAllGeotiffs");
+      }
+    } catch (error) {
+      console.error("Error downloading geotiffs:", error);
+      useStore.getState().setErrorMessage(
+        options?.clipped ? "Error downloading clipped GeoTIFFs" : "Error downloading GeoTIFFs"
+      );
+    } finally {
+      set({ bulkGeotiffDownloadJobId: null });
     }
   },
 

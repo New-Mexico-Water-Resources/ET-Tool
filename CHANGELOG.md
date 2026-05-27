@@ -1,3 +1,33 @@
+## 1.37.0 (2026-05-27)
+
+### Features
+  - **Updated Data Sources**
+    - Fetches new OpenET Ensemble ET, PRISM PPT, and gridMET ETo data for 2025
+    - Updates resolution of PRISM PPT for full data range from 2 km to 500 m
+    - Adds 2 new tiles for full data range to fully cover the bottom southwest corner of the state
+  - **Improved Interactive Preview**
+    - Interactive preview now includes opacity slider, single month stepping, unit selection, and optional polygon clipping
+    - New geotiff exporting options to export the exact interactive preview geotiff and export a clipped version of all geotiffs
+    - If viewing previously run jobs (under Map Layers) and you have the interactive preview visible, you can now click on other areas and immediately see the preview for faster comparison
+  - **New Map Layers**
+    - Adds new USDA Cropland Data Layer, Google Hybrid imagery, and NDVI basemaps
+    - USDA Cropland Data Layer includes searchable legend and allows hovering over an area to view the crop type
+  - Renames All jobs to "Previously Run Jobs"
+  - **Job Groups**
+    - When submitting a multi-polygon job, they can now optionally be kept together in a group
+    - Job groups can be previewed together simultaneously, downloaded together, and deleted together
+  - Adds ability to add polygons one at a time to create your own job group
+    - Job groups can be created either via upload or by drawing multiple polygons on the map
+  - Changes PET in interactive preview to ETo
+  - New Search button to quickly zoom to locations via address or lat/lon coordinate
+  - Adds confirmation dialog before submitting a new job along with an ETA
+  - Moves per-year report files into an annual subfolder in the job output
+
+### Bug Fixes
+  - Fixes issue with locate button not always zooming to location
+  - Fixes tile layer flickering when switching basemaps
+  - Fixes log viewer auto-scroll bug causing the logs to always jump to the bottom when new data came in
+
 ## 1.36.0 (2026-01-14)
 
 ### Data Output Changes

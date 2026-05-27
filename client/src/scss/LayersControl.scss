@@ -1,6 +1,8 @@
 .layers-control {
   display: flex;
   flex-direction: column;
+  width: 334px;
+  box-sizing: border-box;
 
   position: absolute;
   top: 49px;
@@ -14,9 +16,66 @@
   padding: 4px 8px;
   border-radius: 8px;
 
+  .dropzone-container {
+    padding: 0;
+    margin-bottom: 8px;
+  }
+
+  .bulk-job-group-options {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .dropzone-container--compact {
+    height: 88px !important;
+
+    .dropzone-area {
+      min-height: 0;
+      padding: 6px 8px !important;
+    }
+
+    .loaded-file--stacked {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      padding: 0 4px;
+      gap: 2px;
+
+      .loaded-file-name {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        min-width: 0;
+
+        p {
+          margin: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--st-gray-20);
+        }
+      }
+
+      .loaded-file-area {
+        margin: 0;
+        font-size: 12px;
+        color: var(--st-gray-50);
+        text-align: center;
+      }
+    }
+  }
+
   .metaline {
     display: flex;
     align-items: center;
+  }
+
+  .add-shapes-dropzone-container {
+    height: 72px !important;
+    margin-bottom: 8px;
   }
 }
 

@@ -18,6 +18,7 @@ class GridMETPipeline:
     def __init__(
         self,
         bands: list[str] = ["pet"],
+        tile_ids: list[str] = [],
         aws_profile: str = "ose-nmw",
         aws_bucket: str = "ose-dev-inputs",
         aws_region: str = "us-west-2",
@@ -28,6 +29,7 @@ class GridMETPipeline:
         output_dir: str = "output_data",
     ):
         self.bands = bands
+        self.tile_ids = tile_ids
         self.aws_profile = aws_profile
         self.aws_bucket = aws_bucket
         self.aws_region = aws_region
@@ -276,6 +278,8 @@ class GridMETPipeline:
 
         with rasterio.open(geotiff_path) as src:
             for tile in tile_data["features"]:
+                if self.tile_ids and len(self.tile_ids) > 0 and tile["properties"]["hv"] not in self.tile_ids:
+                    continue
                 tile_geometry = tile["geometry"]
                 clipped, clipped_transform, nodata_value = self.clip_geotiff(geotiff_path, tile_geometry)
                 filename = (

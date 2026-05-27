@@ -8,3 +8,35 @@
   padding: 4px 8px;
   border-radius: 8px;
 }
+
+.group-layers-panel {
+  .MuiAccordion-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+
+    &:focus,
+    &:focus-visible,
+    &.Mui-focusVisible {
+      outline: none;
+      box-shadow: none;
+    }
+  }
+
+  .MuiAccordionSummary-root {
+    flex-shrink: 0;
+
+    &:focus,
+    &:focus-visible,
+    &.Mui-focusVisible {
+      outline: none;
+      box-shadow: none;
+    }
+  }
+
+  .MuiCollapse-root.MuiCollapse-entered {
+    overflow: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+}

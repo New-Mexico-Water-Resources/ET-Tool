@@ -1,32 +1,24 @@
-import {
-  Box,
-  Button,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Modal,
-  Select,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import useStore, { JobStatus } from "../utils/store";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { LazyLog } from "@melloware/react-logviewer";
-import FileDownloadSharpIcon from "@mui/icons-material/FileDownloadSharp";
-import FileDownloadOffSharpIcon from "@mui/icons-material/FileDownloadOffSharp";
+import { Button, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import useStore from "../utils/store";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 
 import "../scss/JobQueue.scss";
 import JobQueueItem from "./JobQueueItem";
+import JobQueueGroup from "./JobQueueGroup";
+import JobLogViewer from "./JobLogViewer";
 import { useConfirm } from "material-ui-confirm";
 
-import { FixedSizeList as List, ListChildComponentProps } from "react-window";
+import { VariableSizeList as List, ListChildComponentProps } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import dayjs from "dayjs";
+import {
+  QueueDisplayItem,
+  QueueJob,
+  buildQueueDisplayItems,
+  getQueueDisplayItemHeight,
+} from "../utils/jobGroups";
 
 const JobQueue = () => {
   const queue = useStore((state) => state.queue);
@@ -34,10 +26,10 @@ const JobQueue = () => {
   const isBacklogOpen = useStore((state) => state.isBacklogOpen);
   const isQueueOpen = useStore((state) => state.isQueueOpen);
   const clearPendingJobs = useStore((state) => state.clearPendingJobs);
-  const fetchJobLogs = useStore((state) => state.fetchJobLogs);
 
   const [activeStatusFilters, setActiveStatusFilters] = useState<string[]>([]);
   const [activeAuthorFilters, setActiveAuthorFilters] = useState<string[]>([]);
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
 
   const backlogDateFilterOptions = ["Last Day", "Last Week", "Last Month", "Last Year", "All Time"];
 
@@ -62,35 +54,13 @@ const JobQueue = () => {
     }
   }, [backlogDateFilter]);
 
-  const [jobLogs, setJobLogs] = useState<Record<string, { timestamp: number; logs: string }>>({});
   const [activeJobLogKey, setActiveJobLogKey] = useState("");
   const [jobLogsOpen, setJobLogsOpen] = useState(false);
 
-  const [pauseLogs, setPauseLogs] = useState(false);
-
   const [sortAscending, setSortAscending] = useStore((state) => [state.sortAscending, state.setSortAscending]);
 
-  const [jobStatuses, fetchJobStatus] = useStore((state) => [state.jobStatuses, state.fetchJobStatus]);
-  const jobStatus = useMemo(() => {
-    let jobStatus: JobStatus = jobStatuses[activeJobLogKey];
-    if (!jobStatus) {
-      jobStatus = {
-        status: "",
-        found: true,
-        paused: false,
-        currentYear: 0,
-        latestDate: "",
-        totalYears: 0,
-        fileCount: 0,
-        estimatedPercentComplete: 0,
-        timeRemaining: 0,
-      };
-    }
-
-    return jobStatus;
-  }, [activeJobLogKey, jobStatuses]);
-
   const confirm = useConfirm();
+  const listRef = useRef<List>(null);
 
   const canDeleteJobs = useStore((state) => state.userInfo?.permissions.includes("write:jobs"));
 
@@ -110,80 +80,17 @@ const JobQueue = () => {
     return job;
   }, [queue, backlog, activeJobLogKey]);
 
-  const [lastFetchedLogs, setLastFetchedLogs] = useState(0);
-  useEffect(() => {
-    const fetchLogs = async () => {
-      if (activeJobLogKey && jobLogsOpen && Date.now() - lastFetchedLogs > 2000) {
-        if (viewingJob?.name) {
-          const jobStatusRequest = fetchJobStatus(activeJobLogKey, viewingJob.name);
-          if (!jobStatusRequest) {
-            return;
-          }
-
-          jobStatusRequest
-            .then(() => {
-              setLastFetchedLogs(Date.now());
-            })
-            .catch((error) => {
-              console.error("Error fetching job status", error);
-            });
-        }
-
-        const jobLogsRequest = fetchJobLogs(activeJobLogKey);
-        if (!jobLogsRequest) {
-          return;
-        }
-
-        jobLogsRequest.then((logs) => {
-          const existingLog = jobLogs[activeJobLogKey];
-          if (existingLog && existingLog.logs === logs.logs) {
-            return;
-          }
-
-          const currentLog = { timestamp: 0, logs: "No Logs Available" };
-          if (logs?.logs) {
-            currentLog.logs = logs.logs;
-          }
-
-          currentLog.timestamp = Date.now();
-
-          setJobLogs({ ...jobLogs, [activeJobLogKey]: currentLog });
-        });
-      }
-    };
-
-    fetchLogs();
-    const interval = setInterval(() => {
-      if (!pauseLogs) {
-        fetchLogs();
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [
-    activeJobLogKey,
-    jobLogsOpen,
-    lastFetchedLogs,
-    pauseLogs,
-    viewingJob,
-    fetchJobStatus,
-    fetchJobLogs,
-    jobStatuses,
-    queue,
-    backlog,
-    sortAscending,
-    jobLogs,
-  ]);
-
   const [searchField, setSearchField] = useState("");
 
   useEffect(() => {
     setSearchField("");
     setActiveAuthorFilters([]);
     setActiveStatusFilters([]);
-  }, [isQueueOpen]);
+    setExpandedGroupIds(new Set());
+  }, [isQueueOpen, isBacklogOpen]);
 
   const filteredItemList = useMemo(() => {
-    let items = isBacklogOpen ? backlog : queue;
+    let items: QueueJob[] = isBacklogOpen ? backlog : queue;
     if (isBacklogOpen && backlogCutoffDate) {
       items = items.filter(
         (item) => new Date(item?.started || 0) > backlogCutoffDate || new Date(item?.finished || 0) > backlogCutoffDate
@@ -193,7 +100,7 @@ const JobQueue = () => {
     const searchTerm = searchField?.toLowerCase() || "";
 
     if (activeAuthorFilters.length) {
-      items = items.filter((item) => activeAuthorFilters.includes(item.user?.name));
+      items = items.filter((item) => item.user?.name && activeAuthorFilters.includes(item.user.name));
     }
 
     if (activeStatusFilters.length) {
@@ -203,20 +110,20 @@ const JobQueue = () => {
     const filteredItems = items.filter((item) => {
       const fields = [
         item?.name?.toLowerCase() || "",
+        item?.group_name?.toLowerCase() || "",
         `${item?.start_year}`,
         `${item?.end_year}`,
         item.user?.name?.toLowerCase(),
         item.user?.email?.toLowerCase(),
         item?.status.toLowerCase(),
-      ].filter((field) => field);
+      ].filter((field): field is string => Boolean(field));
 
-      // Name, Start Year, End Year, Creator Name, Creator Email
       return !searchField || fields.some((field) => field.includes(searchTerm));
     });
 
     filteredItems.sort((a, b) => {
-      const aStartedDate = new Date(a.started);
-      const bStartedDate = new Date(b.started);
+      const aStartedDate = new Date(a.started || 0);
+      const bStartedDate = new Date(b.started || 0);
       if (sortAscending) {
         return aStartedDate.getTime() - bStartedDate.getTime();
       } else {
@@ -235,6 +142,8 @@ const JobQueue = () => {
     activeStatusFilters,
     backlogCutoffDate,
   ]);
+
+  const displayItems = useMemo(() => buildQueueDisplayItems(filteredItemList), [filteredItemList]);
 
   const authors = useMemo(() => {
     const authors = new Set<string>();
@@ -256,121 +165,70 @@ const JobQueue = () => {
     return Array.from(statuses);
   }, [queue, backlog, isBacklogOpen]);
 
-  const handleOpenLogs = useCallback(
-    (key: string) => {
-      setActiveJobLogKey(key);
-      setJobLogsOpen(true);
-    },
-    [setActiveJobLogKey, setJobLogsOpen]
+  const handleOpenLogs = useCallback((key: string) => {
+    setActiveJobLogKey(key);
+    setJobLogsOpen(true);
+  }, []);
+
+  const toggleGroupExpanded = useCallback((groupId: string) => {
+    setExpandedGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }, []);
+
+  const getItemSize = useCallback(
+    (index: number) => getQueueDisplayItemHeight(displayItems[index], expandedGroupIds),
+    [displayItems, expandedGroupIds]
   );
+
+  useEffect(() => {
+    listRef.current?.resetAfterIndex(0);
+  }, [displayItems, expandedGroupIds]);
 
   const Row = useCallback(
     ({ index, style }: ListChildComponentProps) => {
-      const job = filteredItemList[index];
+      const item: QueueDisplayItem = displayItems[index];
+
+      if (item.type === "group") {
+        return (
+          <div style={style}>
+            <JobQueueGroup
+              jobs={item.jobs}
+              groupName={item.groupName}
+              expanded={expandedGroupIds.has(item.groupId)}
+              onToggle={() => toggleGroupExpanded(item.groupId)}
+              onOpenLogs={handleOpenLogs}
+            />
+          </div>
+        );
+      }
+
       return (
         <div style={style}>
-          <JobQueueItem job={job} onOpenLogs={() => handleOpenLogs(job.key)} />
+          <JobQueueItem job={item.job} onOpenLogs={() => handleOpenLogs(item.job.key)} />
         </div>
       );
     },
-    [filteredItemList, handleOpenLogs]
+    [displayItems, expandedGroupIds, handleOpenLogs, toggleGroupExpanded]
   );
+
   return (
     <div className={`queue-container ${isQueueOpen || isBacklogOpen ? "open" : "closed"}`}>
-      <Modal
+      <JobLogViewer
         open={jobLogsOpen}
+        jobKey={activeJobLogKey}
+        jobName={viewingJob?.name}
         onClose={() => {
+          setActiveJobLogKey("");
           setJobLogsOpen(false);
         }}
-      >
-        <Box
-          sx={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "50vw",
-            maxWidth: "1000px",
-            height: "50vh",
-            maxHeight: "500px",
-            bgcolor: "var(--st-gray-90)",
-            boxShadow: 24,
-            padding: "8px 16px",
-            borderRadius: "4px",
-          }}
-        >
-          <Typography variant="h6" component="h2" sx={{ display: "flex", alignItems: "center" }}>
-            {viewingJob?.name || "Job"} Logs
-            <IconButton
-              onClick={() => {
-                setActiveJobLogKey("");
-                setJobLogsOpen(false);
-              }}
-              sx={{ marginLeft: "auto" }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Typography>
-          <div style={{ height: "calc(100% - 64px)" }}>
-            <LazyLog
-              follow={!pauseLogs}
-              style={{
-                backgroundColor: "var(--st-gray-100)",
-                color: "var(--st-gray-10)",
-              }}
-              text={jobLogs[activeJobLogKey]?.logs || "Loading logs..."}
-              enableHotKeys={true}
-              enableSearch={true}
-              extraLines={1}
-            />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", marginTop: "5px", gap: "8px" }}>
-            {!pauseLogs && (
-              <FileDownloadSharpIcon
-                style={{
-                  color: "var(--st-gray-50)",
-                  fontSize: "16px",
-                  display: "flex",
-                  alignItems: "center",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  setPauseLogs(!pauseLogs);
-                }}
-              />
-            )}
-            {pauseLogs && (
-              <FileDownloadOffSharpIcon
-                style={{
-                  color: "var(--st-gray-50)",
-                  fontSize: "16px",
-                  display: "flex",
-                  alignItems: "center",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  setPauseLogs(!pauseLogs);
-                }}
-              />
-            )}
-
-            <div style={{ color: "var(--st-gray-50)", fontSize: "14px" }}>Files Generated: {jobStatus.fileCount}</div>
-            <div
-              style={{
-                display: "flex",
-                marginLeft: "auto",
-                color: "var(--st-gray-50)",
-                fontSize: "14px",
-              }}
-            >
-              Last Updated:{" "}
-              {jobLogs[activeJobLogKey]?.timestamp
-                ? new Date(jobLogs[activeJobLogKey].timestamp).toLocaleTimeString()
-                : "Never"}
-            </div>
-          </div>
-        </Box>
-      </Modal>
+      />
       <Typography
         variant="h5"
         style={{ color: "var(--st-gray-30)", padding: "8px 16px", display: "flex", alignItems: "center" }}
@@ -533,7 +391,13 @@ const JobQueue = () => {
       <div className="queue-list">
         <AutoSizer>
           {({ height, width }) => (
-            <List height={height} itemCount={filteredItemList.length} itemSize={300} width={width}>
+            <List
+              ref={listRef}
+              height={height}
+              itemCount={displayItems.length}
+              itemSize={getItemSize}
+              width={width}
+            >
               {Row}
             </List>
           )}

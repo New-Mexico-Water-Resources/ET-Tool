@@ -17,6 +17,7 @@ const GeoJSONLayer = ({
   data,
   validateBounds = true,
   fitToBounds = true,
+  locateGeneration = 0,
   showLabels = false,
   isDroughtMonitor = false,
   showAreaLabel = false,
@@ -27,6 +28,7 @@ const GeoJSONLayer = ({
   data?: any;
   validateBounds?: boolean;
   fitToBounds?: boolean;
+  locateGeneration?: number;
   showLabels?: boolean;
   isDroughtMonitor?: boolean;
   showAreaLabel?: boolean;
@@ -43,6 +45,7 @@ const GeoJSONLayer = ({
   const mapLayer = useMemo(() => (MAP_LAYER_OPTIONS as any)[mapLayerKey] as MapLayer, [mapLayerKey]);
 
   const showPreview = useCurrentJobStore((state) => state.showPreview);
+  const lastLocateGenerationRef = useRef(0);
 
   const modisCountyStats = useAtomValue(modisCountyStatsAtom);
 
@@ -154,11 +157,16 @@ const GeoJSONLayer = ({
       }
 
       geoJsonLayer.addTo(map);
-      if (fitToBounds) {
+      const locateTriggered =
+        locateGeneration > 0 && locateGeneration !== lastLocateGenerationRef.current;
+      if (fitToBounds || locateTriggered) {
         if (mapLayer?.maxZoom) {
           map.setMaxZoom(mapLayer.maxZoom);
         }
         map.fitBounds(geoJsonLayer.getBounds(), { maxZoom: mapLayer.maxZoom });
+        if (locateTriggered) {
+          lastLocateGenerationRef.current = locateGeneration;
+        }
       }
       layerRef.current = geoJsonLayer;
     }
@@ -168,7 +176,23 @@ const GeoJSONLayer = ({
         map.removeLayer(layerRef.current);
       }
     };
-  }, [data, map, minimumValidArea, mapLayerKey, showLabels, isDroughtMonitor, modisCountyStats, mapLayer]);
+  }, [
+    layerData,
+    map,
+    minimumValidArea,
+    maximumValidArea,
+    mapLayerKey,
+    showLabels,
+    isDroughtMonitor,
+    modisCountyStats,
+    mapLayer,
+    fitToBounds,
+    locateGeneration,
+    outline,
+    showAreaLabel,
+    showPreview,
+    tooltipText,
+  ]);
 
   return null;
 };

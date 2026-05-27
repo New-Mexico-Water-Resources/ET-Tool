@@ -23,26 +23,39 @@ import CloseIcon from "@mui/icons-material/Close";
 import { TableVirtuoso, TableComponents } from "react-virtuoso";
 
 import React, { ChangeEvent, useCallback, useMemo, useState } from "react";
+import { createBulkSubmitConfirmOptions } from "./BulkJobSubmitConfirm";
+import BulkJobGroupOptions from "./BulkJobGroupOptions";
+import AddUploadShapes from "./AddUploadShapes";
 import { useDropzone } from "react-dropzone";
 import useStore, { PolygonLocation } from "../utils/store";
 import { useConfirm } from "material-ui-confirm";
-import { formatElapsedTime, formJobForQueue } from "../utils/helpers";
+import {
+  estimateSubmitDurationMsFromYearRuns,
+  formatElapsedTime,
+  formJobForQueue,
+  squareMetersToAcres,
+  submitJobConfirmSx,
+} from "../utils/helpers";
 import { area as turfArea } from "@turf/turf";
 
 const UploadDialog = () => {
-  const [jobName, setJobName] = useStore((state) => [state.jobName, state.setJobName]);
+  const [jobName, setJobName, groupJobsTogether, bulkGroupName] = useStore((state) => [
+    state.jobName,
+    state.setJobName,
+    state.groupJobsTogether,
+    state.bulkGroupName,
+  ]);
   const [minYear, maxYear] = useStore((state) => [state.minYear, state.maxYear]);
   const [startYear, setStartYear] = useStore((state) => [state.startYear, state.setStartYear]);
   const [endYear, setEndYear] = useStore((state) => [state.endYear, state.setEndYear]);
   const [loadedFile, setLoadedFile] = useStore((state) => [state.loadedFile, state.setLoadedFile]);
   const [loadedGeoJSON, setLoadedGeoJSON] = useStore((state) => [state.loadedGeoJSON, state.setLoadedGeoJSON]);
-  const [multipolygons, setMultipolygons] = useStore((state) => [state.multipolygons, state.setMultipolygons]);
-  const setActiveJob = useStore((state) => state.setActiveJob);
+  const multipolygons = useStore((state) => state.multipolygons);
   const submitJob = useStore((state) => state.submitJob);
   const prepareMultipolygonJob = useStore((state) => state.prepareMultipolygonJob);
   const submitMultipolygonJob = useStore((state) => state.submitMultipolygonJob);
   const closeNewJob = useStore((state) => state.closeNewJob);
-  const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
+  const ingestUploadFile = useStore((state) => state.ingestUploadFile);
   const previewJob = useStore((state) => state.previewJob);
   const previewMultipolygonJob = useStore((state) => state.previewMultipolygonJob);
 
@@ -64,43 +77,16 @@ const UploadDialog = () => {
 
   const userInfo = useStore((state) => state.userInfo);
   const canWriteJobs = useMemo(() => userInfo?.permissions.includes("write:jobs"), [userInfo?.permissions]);
+  const showBulkGroupOptions = Boolean(canSubmitBulkJob && multipolygons.length > 1);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    acceptedFiles.forEach((file) => {
-      const reader = new FileReader();
-
-      reader.onabort = () => console.log("file reading was aborted");
-      reader.onerror = () => console.log("file reading has failed");
-      reader.onload = () => {
-        setLoadedFile(file);
-        if (!jobName) {
-          const fileName = file.name.replace(/\.[^/.]+$/, "");
-          setJobName(fileName);
-        }
-
-        const prepareRequest = prepareGeoJSON(file);
-        if (!prepareRequest) {
-          // User not authenticated
-          console.error("User not authenticated, cannot prepare GeoJSON.");
-          return;
-        }
-
-        prepareRequest.then((geojson) => {
-          if (geojson.data && !geojson?.data?.multipolygon) {
-            setLoadedGeoJSON(geojson.data);
-            setMultipolygons([]);
-            setRows([]);
-            setActiveJob(null);
-          } else if (geojson?.data?.multipolygon && geojson?.data?.geojsons?.length > 0) {
-            setMultipolygons(geojson.data.geojsons);
-            generateRows(geojson.data.geojsons);
-            setActiveJob(null);
-          }
-        });
-      };
-      reader.readAsText(file);
-    });
-  }, []);
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      acceptedFiles.forEach((file) => {
+        void ingestUploadFile(file);
+      });
+    },
+    [ingestUploadFile]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -131,45 +117,8 @@ const UploadDialog = () => {
     { width: 200, label: "Comments", dataKey: "comments" },
   ];
 
-  const [rows, setRows] = useStore((state) => [state.locations, state.setLocations]);
+  const rows = useStore((state) => state.locations);
   const visibleRows = useMemo(() => rows.filter((row) => row.visible), [rows]);
-
-  const generateRows = useCallback((multipolygons: any[]) => {
-    const rows: PolygonLocation[] = multipolygons.map((geojson, index) => {
-      const defaultName = `${geojson?.county || ""} ${index + 1}`;
-      const name = geojson?.features[0]?.properties?.name || defaultName;
-
-      let lat = geojson?.geometry?.coordinates[0][0][0];
-      let long = geojson?.geometry?.coordinates[0][0][1];
-
-      if (!lat || !long) {
-        // Get from first point in polygon
-        lat = geojson?.features[0]?.geometry?.coordinates[0][0][0];
-        long = geojson?.features[0]?.geometry?.coordinates[0][0][1];
-      }
-
-      const area = turfArea(geojson);
-
-      return {
-        visible: true,
-        name: name,
-        acres: area,
-        comments: geojson?.properties?.Comments,
-        county: geojson?.properties?.County,
-        polygon_So: geojson?.properties?.Polygon_So,
-        shapeArea: area,
-        shapeLeng: geojson?.properties?.Shape_Leng,
-        source: geojson?.properties?.Source,
-        wUR_Basin: geojson?.properties?.WUR_Basin,
-        id: index,
-        lat: lat,
-        long: long,
-        isValidArea: area > 900,
-      };
-    });
-
-    setRows(rows);
-  }, []);
 
   const VirtuosoTableComponents: TableComponents<PolygonLocation> = useMemo(
     () => ({
@@ -305,7 +254,10 @@ const UploadDialog = () => {
             </div>
           </div>
         </div>
-        <div className="dropzone-container">
+        <div
+          className={`dropzone-container${multipolygons.length > 1 && loadedFile ? " dropzone-container--compact" : ""}`}
+          style={multipolygons.length > 1 && loadedFile ? { height: 88 } : undefined}
+        >
           {loadedFile && (
             <div className="cancel-job">
               <IconButton
@@ -331,6 +283,7 @@ const UploadDialog = () => {
             )}
           </div>
         </div>
+        <AddUploadShapes />
         {multipolygons && multipolygons.length > 0 && loadedFile && (
           <div className="multipolygon-table" style={{ width: "100%" }}>
             <Typography variant="h6" style={{ color: "var(--st-gray-30)", padding: "8px 16px" }}>
@@ -348,6 +301,7 @@ const UploadDialog = () => {
             </div>
           </div>
         )}
+        <BulkJobGroupOptions visible={showBulkGroupOptions} />
         <div
           className="bottom-buttons"
           style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end" }}
@@ -388,26 +342,50 @@ const UploadDialog = () => {
             }}
             onClick={() => {
               if (canSubmitJob) {
-                submitJob();
-              } else if (canSubmitBulkJob) {
-                const jobs = prepareMultipolygonJob();
-                const totalNumberOfYears = jobs.reduce((acc, job) => acc + job.end_year - job.start_year + 1, 0);
-
-                // Rough estimate of 5 minutes per year
-                const estimatedTimePerYear = 5;
-                const estimatedTimeMS = totalNumberOfYears * estimatedTimePerYear * 60 * 1000;
-                const estimatedTime = formatElapsedTime(estimatedTimeMS).trim();
+                const yearCount = endYear - startYear + 1;
+                const areaSqM = loadedGeoJSON ? turfArea(loadedGeoJSON) : 0;
+                const acres = squareMetersToAcres(areaSqM);
+                const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(yearCount)).trim();
 
                 confirm({
-                  title: "Submit Bulk Job",
-                  description: `Are you sure you want to submit ${jobs.length} jobs (ETA: ${estimatedTime})?`,
-                  confirmationButtonProps: { color: "primary", variant: "contained" },
-                  cancellationButtonProps: { color: "secondary", variant: "contained" },
-                  titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
+                  title: "Submit job?",
+                  description: [
+                    `Years requested: ${yearCount} (${startYear}–${endYear})`,
+                    `Area: ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
+                    `Estimated processing time: ~${estimatedTime}`,
+                  ].join("\n"),
+                  ...submitJobConfirmSx,
                 }).then(() => {
-                  submitMultipolygonJob(jobs);
+                  submitJob();
+                });
+              } else if (canSubmitBulkJob) {
+                const jobs = prepareMultipolygonJob();
+                if (jobs.length === 0) {
+                  return;
+                }
+
+                const yearsPerJob = endYear - startYear + 1;
+                const totalYearRuns = jobs.reduce((acc, job) => acc + (job.end_year - job.start_year + 1), 0);
+                const areaSqM = visibleRows.reduce((acc, row) => acc + turfArea(multipolygons[row.id]), 0);
+                const acres = squareMetersToAcres(areaSqM);
+                const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(totalYearRuns)).trim();
+
+                confirm(
+                  createBulkSubmitConfirmOptions({
+                    jobCount: jobs.length,
+                    yearsPerJob,
+                    startYear,
+                    endYear,
+                    totalYearRuns,
+                    acres,
+                    estimatedTime,
+                  })
+                ).then(() => {
+                  const resolvedGroupName = bulkGroupName.trim() || jobName.trim() || "Untitled Job";
+                  submitMultipolygonJob(jobs, {
+                    groupTogether: groupJobsTogether && jobs.length > 1,
+                    groupName: resolvedGroupName,
+                  });
                 });
               }
             }}

@@ -27,3 +27,132 @@ ul.MuiMenu-list {
   max-height: 400px;
   overflow-y: auto;
 }
+
+.queue-group {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  .queue-group-header.item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--st-gray-80);
+    padding: 0 8px;
+  }
+
+  .queue-group-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 6px;
+    padding: 8px 8px 10px;
+    box-sizing: border-box;
+  }
+
+  .queue-group-meta-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .queue-group-details {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .queue-group-expand {
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 0;
+    color: inherit;
+
+    &:focus,
+    &:focus-visible {
+      outline: none;
+      background: transparent;
+    }
+  }
+
+  .queue-group-title-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .queue-group-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .queue-group-count {
+    color: var(--st-gray-40);
+    flex-shrink: 0;
+  }
+
+  .queue-group-submitter {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .queue-group-submitter-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+  }
+
+  .queue-group-progress {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-top: 2px;
+    margin-bottom: 0;
+  }
+
+  .queue-group-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 8px;
+    width: 100%;
+    margin-top: 4px;
+
+    .MuiButton-root {
+      flex: 1;
+      font-size: 12px;
+      line-height: 1.2;
+      padding-top: 6px;
+      padding-bottom: 6px;
+    }
+  }
+
+  .queue-group-job {
+    height: 300px;
+    border-top: 1px solid var(--st-gray-80);
+
+    .queue-item {
+      height: 100%;
+    }
+  }
+}
+
+.queue-item--group-member {
+  border-left: 4px solid #3b82f6;
+  margin-left: 6px;
+  padding-left: 6px;
+  box-sizing: border-box;
+}
