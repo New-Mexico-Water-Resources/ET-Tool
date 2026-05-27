@@ -54,6 +54,7 @@ const CurrentJobChip = () => {
   const clearJobGroup = useStore((state) => state.clearJobGroup);
   const loadJobGroup = useStore((state) => state.loadJobGroup);
   const downloadJobGroup = useStore((state) => state.downloadJobGroup);
+  const downloadJobGroupGeojson = useStore((state) => state.downloadJobGroupGeojson);
   const downloadingJobGroupId = useStore((state) => state.downloadingJobGroupId);
   const [locations, setLocations] = useStore((state) => [state.locations, state.setLocations]);
   const multipolygons = useStore((state) => state.multipolygons);
@@ -1003,17 +1004,42 @@ const CurrentJobChip = () => {
                   <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
                 </>
               )}
+              {isGroupMode && activeJobGroup && (
+                <>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+                  >
+                    Map Data
+                  </Typography>
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    disableRipple
+                    disabled={isGroupDownloading}
+                    onClick={() => {
+                      downloadJobGroupGeojson(activeJobGroup.jobs, activeJobGroup.groupName);
+                      setDownloadMenuOpen(false);
+                    }}
+                  >
+                    {isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                    GeoJSON
+                  </MenuItem>
+                  <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
+                </>
+              )}
               <Typography
                 variant="body2"
                 color="text.secondary"
                 sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
               >
-                {isGroupMode ? "Group download" : "Report"}
+                Report
               </Typography>
               {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
+                  disabled={isGroupMode && isGroupDownloading}
                   onClick={() => {
                     if (isGroupMode && activeJobGroup) {
                       downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "metric");
@@ -1023,13 +1049,15 @@ const CurrentJobChip = () => {
                     setDownloadMenuOpen(false);
                   }}
                 >
-                  Report (mm/month)
+                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                  {isGroupMode ? "All Reports (mm/month)" : "Report (mm/month)"}
                 </MenuItem>
               )}
               {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
+                  disabled={isGroupMode && isGroupDownloading}
                   onClick={() => {
                     if (isGroupMode && activeJobGroup) {
                       downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "imperial");
@@ -1039,13 +1067,15 @@ const CurrentJobChip = () => {
                     setDownloadMenuOpen(false);
                   }}
                 >
-                  Report (in/month)
+                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                  {isGroupMode ? "All Reports (in/month)" : "Report (in/month)"}
                 </MenuItem>
               )}
               {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
+                  disabled={isGroupMode && isGroupDownloading}
                   onClick={() => {
                     if (isGroupMode && activeJobGroup) {
                       downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "acre-feet");
@@ -1055,7 +1085,8 @@ const CurrentJobChip = () => {
                     setDownloadMenuOpen(false);
                   }}
                 >
-                  Report (acre-feet/month)
+                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                  {isGroupMode ? "All Reports (acre-feet/month)" : "Report (acre-feet/month)"}
                 </MenuItem>
               )}
             </Menu>

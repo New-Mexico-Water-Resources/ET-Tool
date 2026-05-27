@@ -3,6 +3,7 @@ import {
   Button,
   CircularProgress,
   Collapse,
+  Divider,
   IconButton,
   LinearProgress,
   Menu,
@@ -44,6 +45,7 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
   const [jobStatuses, fetchJobStatus] = useStore((state) => [state.jobStatuses, state.fetchJobStatus]);
   const loadJobGroup = useStore((state) => state.loadJobGroup);
   const downloadJobGroup = useStore((state) => state.downloadJobGroup);
+  const downloadJobGroupGeojson = useStore((state) => state.downloadJobGroupGeojson);
   const downloadingJobGroupId = useStore((state) => state.downloadingJobGroupId);
   const deleteJob = useStore((state) => state.deleteJob);
   const activeJob = useStore((state) => state.activeJob);
@@ -256,32 +258,69 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
         onClose={() => setDownloadAnchorEl(null)}
         sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
       >
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+        >
+          Report
+        </Typography>
+        <Divider />
         <MenuItem
           sx={{ backgroundColor: "var(--st-gray-80)" }}
+          disableRipple
+          disabled={isDownloading}
           onClick={() => {
             downloadJobGroup(jobs, groupName, "metric");
             setDownloadAnchorEl(null);
           }}
         >
-          Report (mm/month)
+          {isDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+          All Reports (mm/month)
         </MenuItem>
         <MenuItem
           sx={{ backgroundColor: "var(--st-gray-80)" }}
+          disableRipple
+          disabled={isDownloading}
           onClick={() => {
             downloadJobGroup(jobs, groupName, "imperial");
             setDownloadAnchorEl(null);
           }}
         >
-          Report (in/month)
+          {isDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+          All Reports (in/month)
         </MenuItem>
         <MenuItem
           sx={{ backgroundColor: "var(--st-gray-80)" }}
+          disableRipple
+          disabled={isDownloading}
           onClick={() => {
             downloadJobGroup(jobs, groupName, "acre-feet");
             setDownloadAnchorEl(null);
           }}
         >
-          Report (acre-feet/month)
+          {isDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+          All Reports (acre-feet/month)
+        </MenuItem>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+        >
+          Map Data
+        </Typography>
+        <Divider />
+        <MenuItem
+          sx={{ backgroundColor: "var(--st-gray-80)" }}
+          disableRipple
+          disabled={isDownloading}
+          onClick={() => {
+            downloadJobGroupGeojson(jobs, groupName);
+            setDownloadAnchorEl(null);
+          }}
+        >
+          {isDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+          GeoJSON
         </MenuItem>
       </Menu>
     </div>

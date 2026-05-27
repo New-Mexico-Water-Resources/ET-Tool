@@ -3,7 +3,12 @@ import { devtools, persist } from "zustand/middleware";
 import axios, { AxiosInstance } from "axios";
 import { API_URL, DATA_END_YEAR, ROLES } from "./constants";
 import { formatElapsedTime, formJobForQueue } from "./helpers";
-import { generateGroupId, partitionJobsForQueueView, QueueJob } from "./jobGroups";
+import {
+  combineGeojsonsToFeatureCollection,
+  generateGroupId,
+  partitionJobsForQueueView,
+  QueueJob,
+} from "./jobGroups";
 import { area as turfArea } from "@turf/turf";
 import packageJson from "../../package.json";
 
@@ -183,6 +188,7 @@ interface Store {
   loadJob: (job: any) => void;
   downloadJob: (jobKey: string, units?: "metric" | "imperial" | "acre-feet") => void;
   downloadJobGroup: (jobs: any[], groupName: string, units?: "metric" | "imperial" | "acre-feet") => void;
+  downloadJobGroupGeojson: (jobs: QueueJob[], groupName: string) => Promise<void>;
   downloadingJobGroupId: string | null;
   restartJob: (jobKey: string) => void;
   pauseJob: (jobKey: string) => void;
@@ -774,6 +780,74 @@ const useStore = create<Store>()(
           .finally(() => {
             set({ downloadingJobGroupId: null });
           });
+      },
+      downloadJobGroupGeojson: async (jobs, groupName) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance || jobs.length === 0) {
+          return;
+        }
+
+        const groupId = jobs[0]?.group_id || groupName;
+        set({ downloadingJobGroupId: groupId });
+
+        try {
+          const { activeJobGroup, locations, multipolygons } = get();
+          const groupLoaded =
+            activeJobGroup &&
+            activeJobGroup.groupName === groupName &&
+            activeJobGroup.jobs.length === jobs.length &&
+            activeJobGroup.jobs.every((job) => jobs.some((entry) => entry.key === job.key)) &&
+            multipolygons.length > 0 &&
+            locations.length > 0;
+
+          let sources: { geojson: unknown; name?: string; jobKey?: string }[];
+
+          if (groupLoaded) {
+            sources = jobs.map((job) => {
+              const location = locations.find((entry) => entry.jobKey === job.key);
+              const geojson =
+                location != null && multipolygons[location.id] != null
+                  ? multipolygons[location.id]
+                  : job.loaded_geo_json;
+
+              return { geojson, name: job.name, jobKey: job.key };
+            });
+          } else {
+            sources = await Promise.all(
+              jobs.map(async (job) => {
+                if (job.loaded_geo_json) {
+                  return { geojson: job.loaded_geo_json, name: job.name, jobKey: job.key };
+                }
+
+                const escapedName = encodeURIComponent(job.name);
+                const escapedKey = encodeURIComponent(job.key);
+                const response = await axiosInstance.get(
+                  `${API_URL}/geojson?name=${escapedName}&key=${escapedKey}`
+                );
+                return { geojson: response.data, name: job.name, jobKey: job.key };
+              })
+            );
+          }
+
+          const combined = combineGeojsonsToFeatureCollection(sources);
+          if (combined.features.length === 0) {
+            set({ errorMessage: "No shapes available to download for this group" });
+            return;
+          }
+
+          const blob = new Blob([JSON.stringify(combined)], { type: "application/json" });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${groupName.replace(/[(),]/g, "")}.geojson`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        } catch (error: unknown) {
+          const err = error as Error;
+          set({ errorMessage: err?.message || "Error downloading group GeoJSON" });
+        } finally {
+          set({ downloadingJobGroupId: null });
+        }
       },
       downloadJob: (jobKey, units = "metric") => {
         const axiosInstance = get().authAxios();
