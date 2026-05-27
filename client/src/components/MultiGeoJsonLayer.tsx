@@ -121,7 +121,7 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
               permanent: false,
               sticky: true,
               offset: [10, 0],
-              opacity: 0.75,
+              opacity: 1,
               className: "custom-tooltip",
             }
           );

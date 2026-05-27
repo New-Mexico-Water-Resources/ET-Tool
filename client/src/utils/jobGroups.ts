@@ -291,7 +291,7 @@ export function getGroupSubmitter(jobs: QueueJob[]) {
 }
 
 export const QUEUE_JOB_ITEM_HEIGHT = 300;
-export const QUEUE_GROUP_HEADER_HEIGHT = 186;
+export const QUEUE_GROUP_HEADER_HEIGHT = 196;
 
 export function getQueueDisplayItemHeight(
   item: QueueDisplayItem,

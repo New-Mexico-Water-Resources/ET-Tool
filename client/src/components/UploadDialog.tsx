@@ -25,6 +25,7 @@ import { TableVirtuoso, TableComponents } from "react-virtuoso";
 import React, { ChangeEvent, useCallback, useMemo, useState } from "react";
 import { createBulkSubmitConfirmOptions } from "./BulkJobSubmitConfirm";
 import BulkJobGroupOptions from "./BulkJobGroupOptions";
+import AddUploadShapes from "./AddUploadShapes";
 import { useDropzone } from "react-dropzone";
 import useStore, { PolygonLocation } from "../utils/store";
 import { useConfirm } from "material-ui-confirm";
@@ -55,7 +56,7 @@ const UploadDialog = () => {
   const prepareMultipolygonJob = useStore((state) => state.prepareMultipolygonJob);
   const submitMultipolygonJob = useStore((state) => state.submitMultipolygonJob);
   const closeNewJob = useStore((state) => state.closeNewJob);
-  const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
+  const ingestUploadFile = useStore((state) => state.ingestUploadFile);
   const previewJob = useStore((state) => state.previewJob);
   const previewMultipolygonJob = useStore((state) => state.previewMultipolygonJob);
 
@@ -79,42 +80,14 @@ const UploadDialog = () => {
   const canWriteJobs = useMemo(() => userInfo?.permissions.includes("write:jobs"), [userInfo?.permissions]);
   const showBulkGroupOptions = Boolean(canSubmitBulkJob && multipolygons.length > 1);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    acceptedFiles.forEach((file) => {
-      const reader = new FileReader();
-
-      reader.onabort = () => console.log("file reading was aborted");
-      reader.onerror = () => console.log("file reading has failed");
-      reader.onload = () => {
-        setLoadedFile(file);
-        if (!jobName) {
-          const fileName = file.name.replace(/\.[^/.]+$/, "");
-          setJobName(fileName);
-        }
-
-        const prepareRequest = prepareGeoJSON(file);
-        if (!prepareRequest) {
-          // User not authenticated
-          console.error("User not authenticated, cannot prepare GeoJSON.");
-          return;
-        }
-
-        prepareRequest.then((geojson) => {
-          if (geojson.data && !geojson?.data?.multipolygon) {
-            setLoadedGeoJSON(geojson.data);
-            setMultipolygons([]);
-            setRows([]);
-            setActiveJob(null);
-          } else if (geojson?.data?.multipolygon && geojson?.data?.geojsons?.length > 0) {
-            setMultipolygons(geojson.data.geojsons);
-            generateRows(geojson.data.geojsons);
-            setActiveJob(null);
-          }
-        });
-      };
-      reader.readAsText(file);
-    });
-  }, []);
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      acceptedFiles.forEach((file) => {
+        void ingestUploadFile(file);
+      });
+    },
+    [ingestUploadFile]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -147,43 +120,6 @@ const UploadDialog = () => {
 
   const [rows, setRows] = useStore((state) => [state.locations, state.setLocations]);
   const visibleRows = useMemo(() => rows.filter((row) => row.visible), [rows]);
-
-  const generateRows = useCallback((multipolygons: any[]) => {
-    const rows: PolygonLocation[] = multipolygons.map((geojson, index) => {
-      const defaultName = `${geojson?.county || ""} ${index + 1}`;
-      const name = geojson?.features[0]?.properties?.name || defaultName;
-
-      let lat = geojson?.geometry?.coordinates[0][0][0];
-      let long = geojson?.geometry?.coordinates[0][0][1];
-
-      if (!lat || !long) {
-        // Get from first point in polygon
-        lat = geojson?.features[0]?.geometry?.coordinates[0][0][0];
-        long = geojson?.features[0]?.geometry?.coordinates[0][0][1];
-      }
-
-      const area = turfArea(geojson);
-
-      return {
-        visible: true,
-        name: name,
-        acres: area,
-        comments: geojson?.properties?.Comments,
-        county: geojson?.properties?.County,
-        polygon_So: geojson?.properties?.Polygon_So,
-        shapeArea: area,
-        shapeLeng: geojson?.properties?.Shape_Leng,
-        source: geojson?.properties?.Source,
-        wUR_Basin: geojson?.properties?.WUR_Basin,
-        id: index,
-        lat: lat,
-        long: long,
-        isValidArea: area > 900,
-      };
-    });
-
-    setRows(rows);
-  }, []);
 
   const VirtuosoTableComponents: TableComponents<PolygonLocation> = useMemo(
     () => ({
@@ -348,6 +284,7 @@ const UploadDialog = () => {
             )}
           </div>
         </div>
+        <AddUploadShapes />
         {multipolygons && multipolygons.length > 0 && loadedFile && (
           <div className="multipolygon-table" style={{ width: "100%" }}>
             <Typography variant="h6" style={{ color: "var(--st-gray-30)", padding: "8px 16px" }}>

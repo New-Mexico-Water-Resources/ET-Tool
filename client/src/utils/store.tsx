@@ -9,6 +9,12 @@ import {
   partitionJobsForQueueView,
   QueueJob,
 } from "./jobGroups";
+import {
+  applyUploadShapeList,
+  buildPolygonLocationsFromGeojsons,
+  collectExistingUploadShapes,
+  geojsonsFromPrepareResponse,
+} from "./uploadShapes";
 import { area as turfArea } from "@turf/turf";
 import packageJson from "../../package.json";
 
@@ -199,6 +205,9 @@ interface Store {
   jobStatuses: Record<string, JobStatus>;
   fetchJobStatus: (jobKey: string, jobName: string) => Promise<JobStatus> | null;
   prepareGeoJSON: (shapefile: File) => Promise<any> | null;
+  addUploadShapes: (newGeojsons: unknown[]) => void;
+  ingestUploadFile: (file: File) => Promise<void>;
+  addUploadGeojson: (geojson: unknown, name?: string) => void;
   clearPendingJobs: () => void;
   authToken: string;
   setAuthToken: (authToken: string) => void;
@@ -698,9 +707,11 @@ const useStore = create<Store>()(
           });
 
           const useCurrentJobStore = (await import("./currentJobStore")).default;
-          useCurrentJobStore.getState().setPreviewMonth(1);
-          useCurrentJobStore.getState().setPreviewYear(minStart);
-          useCurrentJobStore.getState().setPreviewVariable("ET");
+          const previewStore = useCurrentJobStore.getState();
+          previewStore.setPreviewMonth(1);
+          previewStore.setPreviewYear(minStart);
+          previewStore.setPreviewVariable("ET");
+          previewStore.setShowPreview(jobs.some((job) => job.status === "Complete"));
         } catch (error: any) {
           set({
             errorMessage: error?.message || "Error loading job group",
@@ -711,12 +722,19 @@ const useStore = create<Store>()(
       loadJob: (job) => {
         set({ activeJobGroup: null, activeJob: job, showUploadDialog: false, previewMode: false });
 
+        const syncPreviewVisibility = () => {
+          void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
+            useCurrentJobStore.getState().setShowPreview(job.status === "Complete");
+          });
+        };
+
         if (job.loaded_geo_json) {
           set({
             loadedGeoJSON: job.loaded_geo_json,
             multipolygons: [],
             jobLocateGeneration: get().jobLocateGeneration + 1,
           });
+          syncPreviewVisibility();
           return;
         }
 
@@ -744,6 +762,7 @@ const useStore = create<Store>()(
               multipolygons,
               jobLocateGeneration: get().jobLocateGeneration + 1,
             });
+            syncPreviewVisibility();
           })
           .catch((error) => {
             set({ loadedGeoJSON: null, multipolygons: [], errorMessage: error?.message || "Error loading job" });
@@ -939,6 +958,7 @@ const useStore = create<Store>()(
           loadedFile: null,
           loadedGeoJSON: null,
           multipolygons: [],
+          locations: [],
           jobName: "",
           groupJobsTogether: false,
           bulkGroupName: "",
@@ -948,6 +968,77 @@ const useStore = create<Store>()(
           previewMode: false,
           activeJob: null,
         });
+      },
+      addUploadShapes: (newGeojsons) => {
+        if (!newGeojsons.length) {
+          return;
+        }
+
+        const existing = collectExistingUploadShapes(get());
+        const combined = [...existing, ...newGeojsons];
+        const { loadedGeoJSON, multipolygons } = applyUploadShapeList(combined);
+        const locations =
+          multipolygons.length > 0
+            ? buildPolygonLocationsFromGeojsons(
+                multipolygons,
+                get().minimumValidArea,
+                get().maximumValidArea
+              )
+            : [];
+
+        set({
+          loadedGeoJSON,
+          multipolygons,
+          locations,
+          activeJob: null,
+          previewMode: false,
+        });
+      },
+      ingestUploadFile: async (file) => {
+        const hadShapes = collectExistingUploadShapes(get()).length > 0;
+
+        if (!get().jobName) {
+          const fileName = file.name.replace(/\.[^/.]+$/, "").trim();
+          if (fileName) {
+            set({ jobName: fileName });
+          }
+        }
+
+        const response = await get().prepareGeoJSON(file);
+        if (!response?.data) {
+          return;
+        }
+
+        const shapes = geojsonsFromPrepareResponse(response.data);
+        if (!shapes.length) {
+          return;
+        }
+
+        get().addUploadShapes(shapes);
+
+        if (!hadShapes) {
+          set({ loadedFile: file });
+        }
+      },
+      addUploadGeojson: (geojson, name) => {
+        if (!geojson) {
+          return;
+        }
+
+        const hadShapes = collectExistingUploadShapes(get()).length > 0;
+
+        if (!get().jobName && name) {
+          set({ jobName: name });
+        }
+
+        get().addUploadShapes([geojson]);
+
+        if (!hadShapes) {
+          const fileLabel = name ? `${name}.geojson` : "drawn-shape.geojson";
+          set({
+            loadedFile: new File([JSON.stringify(geojson)], fileLabel, { type: "application/json" }),
+          });
+        }
       },
       closeNewJob: () => {
         set({

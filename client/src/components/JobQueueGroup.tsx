@@ -20,7 +20,6 @@ import { useConfirm } from "material-ui-confirm";
 import StatusIcon from "./StatusIcon";
 import JobQueueItem from "./JobQueueItem";
 import useStore from "../utils/store";
-import useCurrentJobStore from "../utils/currentJobStore";
 import {
   QueueJob,
   computeGroupProgress,
@@ -51,10 +50,6 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
   const activeJob = useStore((state) => state.activeJob);
   const setActiveJob = useStore((state) => state.setActiveJob);
   const currentUserInfo = useStore((state) => state.userInfo);
-  const setShowPreview = useCurrentJobStore((state) => state.setShowPreview);
-  const setPreviewMonth = useCurrentJobStore((state) => state.setPreviewMonth);
-  const setPreviewYear = useCurrentJobStore((state) => state.setPreviewYear);
-
   const canDeleteGroup = useMemo(() => {
     const hasPermission = currentUserInfo?.permissions?.includes("write:jobs");
     if (hasPermission) {
@@ -112,14 +107,7 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
   }, [jobs, jobStatuses, statusSummary, percentComplete]);
 
   const handleLocate = () => {
-    loadJobGroup(jobs, groupName).then(() => {
-      const startYears = jobs.map((job) => job.start_year).filter((y): y is number => y != null);
-      setShowPreview(true);
-      setPreviewMonth(1);
-      if (startYears.length) {
-        setPreviewYear(Math.min(...startYears));
-      }
-    });
+    void loadJobGroup(jobs, groupName);
   };
 
   return (
@@ -173,75 +161,77 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
         )}
       </div>
       <div className="queue-group-body">
-        <Box className="queue-group-details">
-          <Typography variant="body2">
-            Years: <b>{yearRangeLabel}</b>
-          </Typography>
-          <Typography variant="body2">
-            Started: <b>{startedLabel}</b>
-          </Typography>
-          {submitter?.name ? (
-            <Tooltip title={`Name: ${submitter.name}\nEmail: ${submitter.email || ""}`}>
-              <Typography variant="body2" className="queue-group-submitter">
-                <img src={submitter.picture} alt="" className="queue-group-submitter-avatar" />
-                <b>{submitter.name}</b>
-              </Typography>
-            </Tooltip>
-          ) : (
+        <div className="queue-group-meta-row">
+          <Box className="queue-group-details">
             <Typography variant="body2">
-              Submitted by: <b>Multiple users</b>
+              Years: <b>{yearRangeLabel}</b>
             </Typography>
-          )}
-          <Tooltip title={progressTooltip}>
-            <Box className="queue-group-progress">
-              <Box sx={{ width: "100%", mr: 1 }}>
-                <LinearProgress value={percentComplete} variant="determinate" />
-              </Box>
-              <Box sx={{ minWidth: 35 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {percentComplete}%
+            <Typography variant="body2">
+              Started: <b>{startedLabel}</b>
+            </Typography>
+            {submitter?.name ? (
+              <Tooltip title={`Name: ${submitter.name}\nEmail: ${submitter.email || ""}`}>
+                <Typography variant="body2" className="queue-group-submitter">
+                  <img src={submitter.picture} alt="" className="queue-group-submitter-avatar" />
+                  <b>{submitter.name}</b>
                 </Typography>
-              </Box>
-            </Box>
-          </Tooltip>
-          <Box className="queue-group-actions">
-            <Button
-              size="small"
-              variant="contained"
-              color="secondary"
-              onClick={handleLocate}
-              startIcon={<MapIcon fontSize="inherit" />}
-            >
-              Locate
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              color="secondary"
-              disabled={isDownloadDisabled || isDownloading}
-              onClick={(event) => {
-                setDownloadAnchorEl(event.currentTarget);
-              }}
-              startIcon={isDownloading ? <CircularProgress size={14} /> : <DownloadIcon fontSize="inherit" />}
-            >
-              Download
-            </Button>
+              </Tooltip>
+            ) : (
+              <Typography variant="body2">
+                Submitted by: <b>Multiple users</b>
+              </Typography>
+            )}
           </Box>
-        </Box>
-        <IconButton
-          className="queue-group-expand"
-          aria-expanded={expanded}
-          aria-label={expanded ? "Collapse group" : "Expand group"}
-          onClick={onToggle}
-        >
-          <ExpandMoreIcon
-            sx={{
-              color: "var(--st-gray-30)",
-              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-              transition: "transform 0.2s",
+          <IconButton
+            className="queue-group-expand"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse group" : "Expand group"}
+            onClick={onToggle}
+          >
+            <ExpandMoreIcon
+              sx={{
+                color: "var(--st-gray-30)",
+                transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s",
+              }}
+            />
+          </IconButton>
+        </div>
+        <Tooltip title={progressTooltip}>
+          <Box className="queue-group-progress">
+            <Box sx={{ width: "100%", mr: 1 }}>
+              <LinearProgress value={percentComplete} variant="determinate" />
+            </Box>
+            <Box sx={{ minWidth: 35 }}>
+              <Typography variant="body2" color="text.secondary">
+                {percentComplete}%
+              </Typography>
+            </Box>
+          </Box>
+        </Tooltip>
+        <Box className="queue-group-actions">
+          <Button
+            size="small"
+            variant="contained"
+            color="secondary"
+            onClick={handleLocate}
+            startIcon={<MapIcon fontSize="inherit" />}
+          >
+            Locate
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            color="secondary"
+            disabled={isDownloadDisabled || isDownloading}
+            onClick={(event) => {
+              setDownloadAnchorEl(event.currentTarget);
             }}
-          />
-        </IconButton>
+            startIcon={isDownloading ? <CircularProgress size={14} /> : <DownloadIcon fontSize="inherit" />}
+          >
+            Download
+          </Button>
+        </Box>
       </div>
       <Collapse in={expanded} timeout="auto" unmountOnExit>
         <div className="queue-group-members">

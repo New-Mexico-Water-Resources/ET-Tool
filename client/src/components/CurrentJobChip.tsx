@@ -97,6 +97,10 @@ const CurrentJobChip = () => {
   const [showProperties, setShowProperties] = useState(false);
 
   useEffect(() => {
+    setShowJobControls(false);
+  }, [activeJob?.key, activeJobGroup?.groupId]);
+
+  useEffect(() => {
     if (activeJob && showPreview) {
       setShowJobControls(true);
     }
@@ -889,13 +893,7 @@ const CurrentJobChip = () => {
               color="secondary"
               onClick={() => {
                 if (isGroupMode && activeJobGroup) {
-                  loadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName).then(() => {
-                    setShowPreview(true);
-                    if (activeJob?.start_year) {
-                      setPreviewYear(activeJob.start_year);
-                    }
-                    setPreviewMonth(1);
-                  });
+                  void loadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName);
                 } else {
                   loadJob(activeJob);
                 }

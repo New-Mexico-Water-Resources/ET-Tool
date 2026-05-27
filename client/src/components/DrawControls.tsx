@@ -14,13 +14,7 @@ const getNumberOfEdges = (radius: number, segmentLength: number = 30) => {
 };
 
 const DrawControls = () => {
-  const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
-  const setLoadedFile = useStore((state) => state.setLoadedFile);
-  const setMultipolygons = useStore((state) => state.setMultipolygons);
-  const setRows = useStore((state) => state.setLocations);
-  const setActiveJob = useStore((state) => state.setActiveJob);
-  const [jobName, setJobName] = useStore((state) => [state.jobName, state.setJobName]);
-  const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
+  const ingestUploadFile = useStore((state) => state.ingestUploadFile);
   const startNewJob = useStore((state) => state.startNewJob);
   const showUploadDialog = useStore((state) => state.showUploadDialog);
   const isRightPanelOpen = useStore((state) => state.isRightPanelOpen);
@@ -91,7 +85,10 @@ const DrawControls = () => {
 
   const handleCreated = useCallback(
     (evt: any) => {
-      startNewJob();
+      if (!showUploadDialog) {
+        startNewJob();
+      }
+
       let geojson = evt.layer.toGeoJSON();
 
       if (evt.layerType === "circle") {
@@ -115,38 +112,16 @@ const DrawControls = () => {
         }
       });
 
-      const syntheticFile = new File([JSON.stringify(geojson)], "New Region.geojson", {
+      const syntheticFile = new File([JSON.stringify(geojson)], "drawn-shape.geojson", {
         type: "application/json",
       });
-      setLoadedFile(syntheticFile);
-      prepareGeoJSON(syntheticFile)?.then((response) => {
-        setLoadedGeoJSON(response.data);
-        setMultipolygons([]);
-        setRows([]);
-        setActiveJob(null);
-        if (!jobName) {
-          const fileName = "New Region";
-          setJobName(fileName);
-        }
-      });
+      void ingestUploadFile(syntheticFile);
 
       setTimeout(() => {
         updateDrawControls();
       }, 100);
     },
-    [
-      jobName,
-      map,
-      setActiveJob,
-      setJobName,
-      setLoadedFile,
-      setLoadedGeoJSON,
-      setMultipolygons,
-      setRows,
-      startNewJob,
-      prepareGeoJSON,
-      updateDrawControls,
-    ]
+    [ingestUploadFile, map, showUploadDialog, startNewJob, updateDrawControls]
   );
 
   const editSettings = useMemo(() => {

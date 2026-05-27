@@ -36,6 +36,7 @@ import { area as turfArea } from "@turf/turf";
 
 import ErrorIcon from "@mui/icons-material/Error";
 import EditIcon from "@mui/icons-material/Edit";
+import AddUploadShapes from "./AddUploadShapes";
 
 const LayersControl: FC = () => {
   const minimumValidArea = useStore((state) => state.minimumValidArea);
@@ -96,8 +97,6 @@ const LayersControl: FC = () => {
   const prepareMultipolygonJob = useStore((state) => state.prepareMultipolygonJob);
   const submitMultipolygonJob = useStore((state) => state.submitMultipolygonJob);
   const closeNewJob = useStore((state) => state.closeNewJob);
-  const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
-
   const userInfo = useStore((state) => state.userInfo);
   const canWriteJobs = useMemo(() => userInfo?.permissions.includes("write:jobs"), [userInfo?.permissions]);
 
@@ -138,87 +137,18 @@ const LayersControl: FC = () => {
     return Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i);
   }, [startYear, endYear]);
 
-  const generateRows = useCallback((multipolygons: any[]) => {
-    const rows: PolygonLocation[] = multipolygons.map((geojson, index) => {
-      let defaultName = `${geojson?.properties?.County || ""} Part ${index + 1}`;
-      defaultName = defaultName.trim();
-
-      const name = geojson?.features?.[0]?.properties?.name || defaultName;
-
-      let lat = geojson?.geometry?.coordinates[0][0][0];
-      let long = geojson?.geometry?.coordinates[0][0][1];
-
-      if (!lat || !long) {
-        // Get from first point in polygon
-        lat = geojson?.features?.[0]?.geometry?.coordinates[0][0][0];
-        long = geojson?.features?.[0]?.geometry?.coordinates[0][0][1];
-      }
-
-      const area = turfArea(geojson);
-      const areaInAcres = area / 4046.86;
-
-      const isValidArea = area > minimumValidArea && area < maximumValidArea;
-
-      return {
-        visible: isValidArea,
-        name: name,
-        acres: areaInAcres,
-        comments: geojson?.properties?.Comments,
-        county: geojson?.properties?.County,
-        polygon_So: geojson?.properties?.Polygon_So,
-        shapeArea: area,
-        shapeLeng: geojson?.properties?.Shape_Leng,
-        source: geojson?.properties?.Source,
-        wUR_Basin: geojson?.properties?.WUR_Basin,
-        id: index,
-        lat: lat,
-        long: long,
-        crop: geojson?.properties?.CDL_Crop || "",
-        isValidArea: isValidArea,
-      };
-    });
-
-    setRows(rows);
-  }, []);
+  const ingestUploadFile = useStore((state) => state.ingestUploadFile);
 
   const confirm = useConfirm();
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    acceptedFiles.forEach((file) => {
-      const reader = new FileReader();
-
-      reader.onabort = () => console.log("file reading was aborted");
-      reader.onerror = () => console.log("file reading has failed");
-      reader.onload = () => {
-        setLoadedFile(file);
-        if (!jobName) {
-          const fileName = (file?.name || "").replace(/\.[^/.]+$/, "").trim();
-          setJobName(fileName);
-        }
-
-        const prepareRequest = prepareGeoJSON(file);
-        if (!prepareRequest) {
-          // User not authenticated
-          console.error("User not authenticated, cannot prepare GeoJSON.");
-          return;
-        }
-
-        prepareRequest.then((geojson) => {
-          if (geojson.data && !geojson?.data?.multipolygon) {
-            setLoadedGeoJSON(geojson.data);
-            setMultipolygons([]);
-            setRows([]);
-            setActiveJob(null);
-          } else if (geojson?.data?.multipolygon && geojson?.data?.geojsons?.length > 0) {
-            setMultipolygons(geojson.data.geojsons);
-            generateRows(geojson.data.geojsons);
-            setActiveJob(null);
-          }
-        });
-      };
-      reader.readAsText(file);
-    });
-  }, []);
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      acceptedFiles.forEach((file) => {
+        void ingestUploadFile(file);
+      });
+    },
+    [ingestUploadFile]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -554,6 +484,7 @@ const LayersControl: FC = () => {
                 setLoadedFile(null);
                 setLoadedGeoJSON(null);
                 setMultipolygons([]);
+                setRows([]);
               }}
             >
               <CloseIcon sx={{ color: "var(--st-gray-50)", ":hover": { color: "var(--st-gray-10)" } }} />
@@ -598,6 +529,7 @@ const LayersControl: FC = () => {
           )}
         </div>
       </div>
+      <AddUploadShapes />
       <div className="message-container" style={{ display: "flex", maxWidth: "300px" }}>
         {!canWriteJobs && (
           <Typography

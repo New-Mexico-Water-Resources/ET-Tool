@@ -1,0 +1,88 @@
+import { area as turfArea } from "@turf/turf";
+import type { PolygonLocation } from "./store";
+
+export function collectExistingUploadShapes(state: {
+  loadedGeoJSON: unknown;
+  multipolygons: unknown[];
+}): unknown[] {
+  if (state.multipolygons.length > 0) {
+    return [...state.multipolygons];
+  }
+  if (state.loadedGeoJSON) {
+    return [state.loadedGeoJSON];
+  }
+  return [];
+}
+
+export function applyUploadShapeList(geojsons: unknown[]): {
+  loadedGeoJSON: unknown | null;
+  multipolygons: unknown[];
+} {
+  if (geojsons.length === 0) {
+    return { loadedGeoJSON: null, multipolygons: [] };
+  }
+  if (geojsons.length === 1) {
+    return { loadedGeoJSON: geojsons[0], multipolygons: [] };
+  }
+  return { loadedGeoJSON: null, multipolygons: geojsons };
+}
+
+export function buildPolygonLocationsFromGeojsons(
+  multipolygons: unknown[],
+  minimumValidArea: number,
+  maximumValidArea: number
+): PolygonLocation[] {
+  return multipolygons.map((geojson, index) => {
+    const geo = geojson as Record<string, unknown>;
+    let defaultName = `${(geo?.properties as Record<string, unknown>)?.County || ""} Part ${index + 1}`;
+    defaultName = defaultName.trim();
+
+    const features = geo?.features as { properties?: { name?: string }; geometry?: { coordinates?: number[][][][] } }[] | undefined;
+    const name = features?.[0]?.properties?.name || defaultName;
+
+    let lat = (geo?.geometry as { coordinates?: number[][][][] })?.coordinates?.[0]?.[0]?.[0];
+    let long = (geo?.geometry as { coordinates?: number[][][][] })?.coordinates?.[0]?.[0]?.[1];
+
+    if (!lat || !long) {
+      lat = features?.[0]?.geometry?.coordinates?.[0]?.[0]?.[0];
+      long = features?.[0]?.geometry?.coordinates?.[0]?.[0]?.[1];
+    }
+
+    const area = turfArea(geojson as Parameters<typeof turfArea>[0]);
+    const areaInAcres = area / 4046.86;
+    const isValidArea = area > minimumValidArea && area < maximumValidArea;
+
+    const properties = (geo?.properties || {}) as Record<string, unknown>;
+
+    return {
+      visible: isValidArea,
+      name,
+      acres: areaInAcres,
+      comments: (properties.Comments as string) || "",
+      county: (properties.County as string) || "",
+      polygon_So: (properties.Polygon_So as string) || "",
+      shapeArea: area,
+      shapeLeng: (properties.Shape_Leng as number) || 0,
+      source: (properties.Source as string) || "",
+      wUR_Basin: (properties.WUR_Basin as string) || "",
+      id: index,
+      lat: lat || 0,
+      long: long || 0,
+      crop: (properties.CDL_Crop as string) || "",
+      isValidArea,
+    };
+  });
+}
+
+export function geojsonsFromPrepareResponse(data: unknown): unknown[] {
+  if (!data || typeof data !== "object") {
+    return [];
+  }
+
+  const payload = data as { multipolygon?: boolean; geojsons?: unknown[] };
+  if (payload.multipolygon && payload.geojsons?.length) {
+    return payload.geojsons;
+  }
+
+  return [data];
+}

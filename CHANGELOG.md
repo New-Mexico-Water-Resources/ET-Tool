@@ -16,6 +16,8 @@
   - **Job Groups**
     - When submitting a multi-polygon job, they can now optionally be kept together in a group
     - Job groups can be previewed together simultaneously, downloaded together, and deleted together
+  - Adds ability to add polygons one at a time to create your own job group
+    - Job groups can be created either via upload or by drawing multiple polygons on the map
   - Changes PET in interactive preview to ETo
   - New Search button to quickly zoom to locations via address or lat/lon coordinate
   - Adds confirmation dialog before submitting a new job along with an ETA
