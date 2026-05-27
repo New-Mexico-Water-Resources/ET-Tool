@@ -3,7 +3,6 @@ import {
   Button,
   CircularProgress,
   Collapse,
-  Divider,
   IconButton,
   LinearProgress,
   Menu,
@@ -255,9 +254,8 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
         >
           Report
         </Typography>
-        <Divider />
         <MenuItem
-          sx={{ backgroundColor: "var(--st-gray-80)" }}
+          sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
           disableRipple
           disabled={isDownloading}
           onClick={() => {
@@ -299,9 +297,8 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
         >
           Map Data
         </Typography>
-        <Divider />
         <MenuItem
-          sx={{ backgroundColor: "var(--st-gray-80)" }}
+          sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
           disableRipple
           disabled={isDownloading}
           onClick={() => {

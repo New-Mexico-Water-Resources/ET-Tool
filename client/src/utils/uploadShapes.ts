@@ -34,16 +34,21 @@ export function buildPolygonLocationsFromGeojsons(
 ): PolygonLocation[] {
   return multipolygons.map((geojson, index) => {
     const geo = geojson as Record<string, unknown>;
+    const geoAny = geojson as {
+      geometry?: { coordinates?: number[][][] };
+      features?: { properties?: { name?: string }; geometry?: { coordinates?: number[][][] } }[];
+      properties?: Record<string, unknown>;
+    };
     let defaultName = `${(geo?.properties as Record<string, unknown>)?.County || ""} Part ${index + 1}`;
     defaultName = defaultName.trim();
 
-    const features = geo?.features as { properties?: { name?: string }; geometry?: { coordinates?: number[][][][] } }[] | undefined;
+    const features = geoAny.features;
     const name = features?.[0]?.properties?.name || defaultName;
 
-    let lat = (geo?.geometry as { coordinates?: number[][][][] })?.coordinates?.[0]?.[0]?.[0];
-    let long = (geo?.geometry as { coordinates?: number[][][][] })?.coordinates?.[0]?.[0]?.[1];
+    let lat = geoAny.geometry?.coordinates?.[0]?.[0]?.[0];
+    let long = geoAny.geometry?.coordinates?.[0]?.[0]?.[1];
 
-    if (!lat || !long) {
+    if (lat == null || long == null) {
       lat = features?.[0]?.geometry?.coordinates?.[0]?.[0]?.[0];
       long = features?.[0]?.geometry?.coordinates?.[0]?.[0]?.[1];
     }

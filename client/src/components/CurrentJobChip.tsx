@@ -937,7 +937,7 @@ const CurrentJobChip = () => {
                     Map Data
                   </Typography>
                   <MenuItem
-                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
                     disableRipple
                     onClick={() => {
                       if (!activeJob?.loaded_geo_json) {
@@ -998,8 +998,6 @@ const CurrentJobChip = () => {
                     {isBulkGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
                     All GeoTIFFs (clipped)
                   </MenuItem>
-
-                  <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
                 </>
               )}
               {isGroupMode && activeJobGroup && (
@@ -1012,7 +1010,7 @@ const CurrentJobChip = () => {
                     Map Data
                   </Typography>
                   <MenuItem
-                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
                     disableRipple
                     disabled={isGroupDownloading}
                     onClick={() => {
@@ -1023,7 +1021,6 @@ const CurrentJobChip = () => {
                     {isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
                     GeoJSON
                   </MenuItem>
-                  <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
                 </>
               )}
               <Typography
@@ -1035,7 +1032,7 @@ const CurrentJobChip = () => {
               </Typography>
               {totalMonths > 0 && (
                 <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
                   disableRipple
                   disabled={isGroupMode && isGroupDownloading}
                   onClick={() => {

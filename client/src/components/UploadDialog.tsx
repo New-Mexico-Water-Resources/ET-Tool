@@ -50,8 +50,7 @@ const UploadDialog = () => {
   const [endYear, setEndYear] = useStore((state) => [state.endYear, state.setEndYear]);
   const [loadedFile, setLoadedFile] = useStore((state) => [state.loadedFile, state.setLoadedFile]);
   const [loadedGeoJSON, setLoadedGeoJSON] = useStore((state) => [state.loadedGeoJSON, state.setLoadedGeoJSON]);
-  const [multipolygons, setMultipolygons] = useStore((state) => [state.multipolygons, state.setMultipolygons]);
-  const setActiveJob = useStore((state) => state.setActiveJob);
+  const multipolygons = useStore((state) => state.multipolygons);
   const submitJob = useStore((state) => state.submitJob);
   const prepareMultipolygonJob = useStore((state) => state.prepareMultipolygonJob);
   const submitMultipolygonJob = useStore((state) => state.submitMultipolygonJob);
@@ -118,7 +117,7 @@ const UploadDialog = () => {
     { width: 200, label: "Comments", dataKey: "comments" },
   ];
 
-  const [rows, setRows] = useStore((state) => [state.locations, state.setLocations]);
+  const rows = useStore((state) => state.locations);
   const visibleRows = useMemo(() => rows.filter((row) => row.visible), [rows]);
 
   const VirtuosoTableComponents: TableComponents<PolygonLocation> = useMemo(

@@ -16,7 +16,7 @@ import ClearAllIcon from "@mui/icons-material/ClearAll";
 import SelectAllIcon from "@mui/icons-material/SelectAll";
 import MapIcon from "@mui/icons-material/Map";
 import CloseIcon from "@mui/icons-material/Close";
-import useStore, { PolygonLocation } from "../utils/store";
+import useStore from "../utils/store";
 import { ChangeEvent, FC, useCallback, useMemo, useState } from "react";
 import { createBulkSubmitConfirmOptions } from "./BulkJobSubmitConfirm";
 import BulkJobGroupOptions from "./BulkJobGroupOptions";
@@ -41,7 +41,7 @@ import AddUploadShapes from "./AddUploadShapes";
 const LayersControl: FC = () => {
   const minimumValidArea = useStore((state) => state.minimumValidArea);
   const maximumValidArea = useStore((state) => state.maximumValidArea);
-  const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
+  const activeJob = useStore((state) => state.activeJob);
 
   const [multipolygons, setMultipolygons] = useStore((state) => [state.multipolygons, state.setMultipolygons]);
   const [loadedGeoJSON, setLoadedGeoJSON] = useStore((state) => [state.loadedGeoJSON, state.setLoadedGeoJSON]);
