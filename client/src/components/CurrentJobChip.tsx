@@ -240,7 +240,6 @@ const CurrentJobChip = () => {
     return (activeJob.end_year - activeJob.start_year + 1) * 12;
   }, [activeJob?.start_year, activeJob?.end_year]);
 
-  // Memoize the month/year calculation to avoid recalculation on every render
   const monthYearFromSlider = useMemo(() => {
     const yearOffset = Math.floor(sliderValue / 12);
     const monthOffset = sliderValue % 12;
@@ -250,7 +249,6 @@ const CurrentJobChip = () => {
     };
   }, [sliderValue, activeJob?.start_year]);
 
-  // Update preview month/year only when slider value changes
   useEffect(() => {
     if (monthYearFromSlider.year && monthYearFromSlider.month) {
       setPreviewYear(monthYearFromSlider.year);
@@ -258,7 +256,6 @@ const CurrentJobChip = () => {
     }
   }, [monthYearFromSlider, setPreviewYear, setPreviewMonth]);
 
-  // Keep timeline slider aligned when month/year are changed from the dropdowns
   useEffect(() => {
     if (!activeJob?.start_year || !previewYear || !previewMonth || totalMonths <= 0) {
       return;
@@ -275,7 +272,6 @@ const CurrentJobChip = () => {
     setSliderValue(newValue);
   };
 
-  // Memoize the value label formatter to avoid recreation on every render
   const valueLabelFormat = useCallback(
     (value: number) => {
       const yearOffset = Math.floor(value / 12);
@@ -286,6 +282,10 @@ const CurrentJobChip = () => {
     },
     [activeJob?.start_year]
   );
+
+  const visibleLayerCount = useMemo(() => {
+    return locations.filter((location) => location.visible).length;
+  }, [locations]);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -406,7 +406,6 @@ const CurrentJobChip = () => {
             }}
           >
             <Accordion
-              defaultExpanded
               disableGutters
               elevation={0}
               sx={{
@@ -450,7 +449,7 @@ const CurrentJobChip = () => {
                 }}
               >
                 <Typography variant="caption" sx={{ color: "var(--st-gray-40)" }}>
-                  Layers
+                  Layers ({visibleLayerCount}/{locations.length})
                 </Typography>
               </AccordionSummary>
               <AccordionDetails
@@ -595,7 +594,7 @@ const CurrentJobChip = () => {
                     backgroundColor: "var(--st-gray-90)",
                     zIndex: 1000,
                     borderRadius: "8px",
-                    marginBottom: 16,
+                    marginBottom: 8,
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "8px" }}>
@@ -778,7 +777,7 @@ const CurrentJobChip = () => {
                     )}
                   </div>
                   {canPreview && (
-                    <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: "4px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                         <Tooltip title="Previous month">
                           <span>
@@ -931,77 +930,77 @@ const CurrentJobChip = () => {
             >
               {!isGroupMode && (
                 <>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
-              >
-                Map Data
-              </Typography>
-              <MenuItem
-                sx={{ backgroundColor: "var(--st-gray-80)" }}
-                disableRipple
-                onClick={() => {
-                  if (!activeJob?.loaded_geo_json) {
-                    return;
-                  }
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+                  >
+                    Map Data
+                  </Typography>
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    disableRipple
+                    onClick={() => {
+                      if (!activeJob?.loaded_geo_json) {
+                        return;
+                      }
 
-                  const blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
+                      const blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
 
-                  const shortName = activeJob.name.replace(/[(),]/g, "");
-                  const escapedName = encodeURIComponent(shortName);
-                  a.download = `${escapedName}.geojson`;
-                  a.click();
-                }}
-              >
-                GeoJSON
-              </MenuItem>
+                      const shortName = activeJob.name.replace(/[(),]/g, "");
+                      const escapedName = encodeURIComponent(shortName);
+                      a.download = `${escapedName}.geojson`;
+                      a.click();
+                    }}
+                  >
+                    GeoJSON
+                  </MenuItem>
 
-              {canPreview && previewMonth && previewYear && previewVariable && (
-                <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
-                  disableRipple
-                  disabled={isPreviewGeotiffDownloading}
-                  onClick={() => {
-                    downloadGeotiff(activeJob.key);
-                  }}
-                >
-                  {isPreviewGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-                  Interactive Preview GeoTIFF
-                </MenuItem>
-              )}
+                  {canPreview && previewMonth && previewYear && previewVariable && (
+                    <MenuItem
+                      sx={{ backgroundColor: "var(--st-gray-80)" }}
+                      disableRipple
+                      disabled={isPreviewGeotiffDownloading}
+                      onClick={() => {
+                        downloadGeotiff(activeJob.key);
+                      }}
+                    >
+                      {isPreviewGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                      Interactive Preview GeoTIFF
+                    </MenuItem>
+                  )}
 
-              <MenuItem
-                sx={{ backgroundColor: "var(--st-gray-80)" }}
-                disableRipple
-                onClick={() => {
-                  if (!previewVariable || !previewMonth || !previewYear) {
-                    console.error("Missing preview variable, month, or year");
-                    return;
-                  }
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    disableRipple
+                    onClick={() => {
+                      if (!previewVariable || !previewMonth || !previewYear) {
+                        console.error("Missing preview variable, month, or year");
+                        return;
+                      }
 
-                  downloadAllGeotiffs(activeJob.key);
-                }}
-              >
-                All GeoTIFFs
-              </MenuItem>
+                      downloadAllGeotiffs(activeJob.key);
+                    }}
+                  >
+                    All GeoTIFFs
+                  </MenuItem>
 
-              <MenuItem
-                sx={{ backgroundColor: "var(--st-gray-80)" }}
-                disableRipple
-                disabled={isBulkGeotiffDownloading}
-                onClick={() => {
-                  downloadAllGeotiffs(activeJob.key, { clipped: true });
-                }}
-              >
-                {isBulkGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-                All GeoTIFFs (clipped)
-              </MenuItem>
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    disableRipple
+                    disabled={isBulkGeotiffDownloading}
+                    onClick={() => {
+                      downloadAllGeotiffs(activeJob.key, { clipped: true });
+                    }}
+                  >
+                    {isBulkGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                    All GeoTIFFs (clipped)
+                  </MenuItem>
 
-              <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
+                  <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
                 </>
               )}
               <Typography
