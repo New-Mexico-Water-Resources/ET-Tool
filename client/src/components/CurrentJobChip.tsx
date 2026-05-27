@@ -46,7 +46,16 @@ import { tooltipAtom } from "../utils/atoms";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
+  const activeJobGroup = useStore((state) => state.activeJobGroup);
+  const clearJobGroup = useStore((state) => state.clearJobGroup);
+  const loadJobGroup = useStore((state) => state.loadJobGroup);
+  const downloadJobGroup = useStore((state) => state.downloadJobGroup);
+  const downloadingJobGroupId = useStore((state) => state.downloadingJobGroupId);
+  const [locations, setLocations] = useStore((state) => [state.locations, state.setLocations]);
+  const multipolygons = useStore((state) => state.multipolygons);
   const closeNewJob = useStore((state) => state.closeNewJob);
+  const isGroupMode = Boolean(activeJobGroup);
+  const hasPreviewClipGeometry = isGroupMode ? multipolygons.length > 0 : Boolean(activeJob?.loaded_geo_json);
   const [previewMode, setPreviewMode] = useStore((state) => [state.previewMode, state.setPreviewMode]);
   const setShowUploadDialog = useStore((state) => state.setShowUploadDialog);
   const loadJob = useStore((state) => state.loadJob);
@@ -107,6 +116,8 @@ const CurrentJobChip = () => {
     return !!previewYear && Number(previewYear) && !!previewMonth && Number(previewMonth);
   }, [previewYear, previewMonth]);
 
+  const hasPreviewScaleValue = (value: number | string | null) => value !== null && value !== "";
+
   const displayVariableOptions = useMemo(() => {
     if (activeJob?.start_year && Number(activeJob.start_year) < OPENET_TRANSITION_DATE) {
       return PRE_OPENET_VARIABLE_OPTIONS;
@@ -116,15 +127,27 @@ const CurrentJobChip = () => {
   }, [activeJob?.start_year]);
 
   const liveJob = useMemo(() => {
+    if (isGroupMode) {
+      return null;
+    }
+
     let job = queue.find((job) => job.key === activeJob?.key);
     if (!job) {
       job = backlog.find((job) => job.key === activeJob?.key);
     }
 
     return job;
-  }, [queue, backlog, activeJob?.key]);
+  }, [queue, backlog, activeJob?.key, isGroupMode]);
+
+  const isGroupDownloading = Boolean(
+    isGroupMode && activeJobGroup && downloadingJobGroupId === activeJobGroup.groupId
+  );
 
   useEffect(() => {
+    if (isGroupMode) {
+      return;
+    }
+
     const interval = setInterval(() => {
       if (activeJob && activeJob?.status !== "Complete") {
         const jobStatusRequest = fetchJobStatus(activeJob.key, activeJob.name);
@@ -147,7 +170,7 @@ const CurrentJobChip = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [activeJob, liveJob, setActiveJob, fetchJobStatus]);
+  }, [activeJob, liveJob, setActiveJob, fetchJobStatus, isGroupMode]);
 
   useEffect(() => {
     if (activeJob?.start_year && activeJob?.end_year) {
@@ -331,14 +354,18 @@ const CurrentJobChip = () => {
             minWidth: activeJob ? "225px" : "auto",
           }}
         >
-          {activeJob ? activeJob.name : "No active job"}
+          {isGroupMode ? activeJobGroup?.groupName : activeJob ? activeJob.name : "No active job"}
           {activeJob && (
             <IconButton
               size="small"
               sx={{ color: "var(--st-gray-30)", padding: 0, marginLeft: "auto" }}
               className="close-btn"
               onClick={() => {
-                setActiveJob(null);
+                if (isGroupMode) {
+                  clearJobGroup();
+                } else {
+                  setActiveJob(null);
+                }
                 closeNewJob();
               }}
             >
@@ -355,7 +382,49 @@ const CurrentJobChip = () => {
           </Typography>
         )}
 
-        {activeJob && (
+        {isGroupMode && activeJobGroup && (
+          <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
+            Jobs in group: <b>{activeJobGroup.jobs.length}</b>
+          </Typography>
+        )}
+
+        {isGroupMode && locations.length > 0 && (
+          <div
+            style={{
+              maxHeight: "140px",
+              overflowY: "auto",
+              border: "1px solid var(--st-gray-80)",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              marginTop: "4px",
+            }}
+          >
+            <Typography variant="caption" sx={{ color: "var(--st-gray-40)", display: "block", mb: 0.5 }}>
+              Visible on map
+            </Typography>
+            {locations.map((location) => (
+              <FormControlLabel
+                key={location.id}
+                sx={{ color: "var(--st-gray-20)", ml: 0, display: "flex" }}
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={location.visible}
+                    onChange={(event) => {
+                      const nextLocations = locations.map((row) =>
+                        row.id === location.id ? { ...row, visible: event.target.checked } : row
+                      );
+                      setLocations(nextLocations);
+                    }}
+                  />
+                }
+                label={location.name}
+              />
+            ))}
+          </div>
+        )}
+
+        {activeJob && !isGroupMode && (
           <Tooltip title={jobStatus?.status || "N/A"}>
             <Typography
               variant="body2"
@@ -377,7 +446,7 @@ const CurrentJobChip = () => {
           </Tooltip>
         )}
 
-        {activeJob && activeJobProperties.length > 0 && (
+        {activeJob && !isGroupMode && activeJobProperties.length > 0 && (
           <div
             onClick={() => setShowProperties(!showProperties)}
             style={{
@@ -480,7 +549,8 @@ const CurrentJobChip = () => {
                             sx={{ width: "120px", "& .MuiInputLabel-root": { fontSize: "12px" } }}
                             placeholder="Min"
                             size="small"
-                            value={previewMinValue}
+                            value={previewMinValue ?? ""}
+                            InputLabelProps={{ shrink: hasPreviewScaleValue(previewMinValue) }}
                             onChange={(e) => setPreviewMinValue(e.target.value)}
                           />
                         </FormControl>
@@ -495,7 +565,8 @@ const CurrentJobChip = () => {
                             sx={{ width: "120px", "& .MuiInputLabel-root": { fontSize: "12px" } }}
                             placeholder="Max"
                             size="small"
-                            value={previewMaxValue}
+                            value={previewMaxValue ?? ""}
+                            InputLabelProps={{ shrink: hasPreviewScaleValue(previewMaxValue) }}
                             onChange={(e) => setPreviewMaxValue(e.target.value)}
                           />
                           <Tooltip
@@ -553,7 +624,7 @@ const CurrentJobChip = () => {
                         </Select>
                       </FormControl>
                     </div>
-                    {activeJob?.loaded_geo_json && (
+                    {hasPreviewClipGeometry && (
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <FormControlLabel
                           sx={{ margin: 0, marginLeft: "-4px" }}
@@ -757,7 +828,17 @@ const CurrentJobChip = () => {
               variant="contained"
               color="secondary"
               onClick={() => {
-                loadJob(activeJob);
+                if (isGroupMode && activeJobGroup) {
+                  loadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName).then(() => {
+                    setShowPreview(true);
+                    if (activeJob?.start_year) {
+                      setPreviewYear(activeJob.start_year);
+                    }
+                    setPreviewMonth(1);
+                  });
+                } else {
+                  loadJob(activeJob);
+                }
               }}
             >
               <MapIcon fontSize="inherit" />
@@ -768,12 +849,18 @@ const CurrentJobChip = () => {
               size="small"
               variant="contained"
               color="secondary"
+              disabled={isGroupDownloading}
               onClick={(evt) => {
+                if (isGroupMode && activeJobGroup) {
+                  setDownloadAnchorEl(evt.currentTarget);
+                  setDownloadMenuOpen(true);
+                  return;
+                }
                 setDownloadAnchorEl(evt.currentTarget);
                 setDownloadMenuOpen(true);
               }}
             >
-              <DownloadIcon fontSize="inherit" />
+              {isGroupDownloading ? <CircularProgress size={14} /> : <DownloadIcon fontSize="inherit" />}
               Download
             </Button>
             <Menu
@@ -782,6 +869,8 @@ const CurrentJobChip = () => {
               onClose={() => setDownloadMenuOpen(false)}
               sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
             >
+              {!isGroupMode && (
+                <>
               <Typography
                 variant="body2"
                 color="text.secondary"
@@ -853,19 +942,26 @@ const CurrentJobChip = () => {
               </MenuItem>
 
               <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
+                </>
+              )}
               <Typography
                 variant="body2"
                 color="text.secondary"
                 sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
               >
-                Report
+                {isGroupMode ? "Group download" : "Report"}
               </Typography>
               {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
                   onClick={() => {
-                    downloadJob(activeJob.key, "metric");
+                    if (isGroupMode && activeJobGroup) {
+                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "metric");
+                    } else {
+                      downloadJob(activeJob.key, "metric");
+                    }
+                    setDownloadMenuOpen(false);
                   }}
                 >
                   Report (mm/month)
@@ -876,7 +972,12 @@ const CurrentJobChip = () => {
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
                   onClick={() => {
-                    downloadJob(activeJob.key, "imperial");
+                    if (isGroupMode && activeJobGroup) {
+                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "imperial");
+                    } else {
+                      downloadJob(activeJob.key, "imperial");
+                    }
+                    setDownloadMenuOpen(false);
                   }}
                 >
                   Report (in/month)
@@ -887,7 +988,12 @@ const CurrentJobChip = () => {
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
                   onClick={() => {
-                    downloadJob(activeJob.key, "acre-feet");
+                    if (isGroupMode && activeJobGroup) {
+                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "acre-feet");
+                    } else {
+                      downloadJob(activeJob.key, "acre-feet");
+                    }
+                    setDownloadMenuOpen(false);
                   }}
                 >
                   Report (acre-feet/month)

@@ -40,7 +40,15 @@ const JobProgressBar = ({ status }: { status: JobStatus }) => {
   );
 };
 
-const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void }) => {
+const JobQueueItem = ({
+  job,
+  onOpenLogs,
+  inGroupMember = false,
+}: {
+  job: any;
+  onOpenLogs: () => void;
+  inGroupMember?: boolean;
+}) => {
   const confirm = useConfirm();
 
   const activeJob = useStore((state) => state.activeJob);
@@ -118,7 +126,10 @@ const JobQueueItem = ({ job, onOpenLogs }: { job: any; onOpenLogs: () => void })
   }, [job.key]);
 
   return (
-    <div className="queue-item" style={{ height: "100%", justifyContent: "space-between" }}>
+    <div
+      className={`queue-item${inGroupMember ? " queue-item--group-member" : ""}`}
+      style={{ height: "100%", justifyContent: "space-between" }}
+    >
       <div className="item-header">
         <Tooltip title={`${job.name}\nStatus: ${job.status}`}>
           <Typography

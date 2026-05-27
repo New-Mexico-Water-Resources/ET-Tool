@@ -67,6 +67,125 @@ export interface PreviewGeoRaster {
 export const isNoData = (value: number) =>
   value == null || Number.isNaN(value) || value >= NODATA_THRESHOLD;
 
+export const getPreviewValueAtLatLng = (georaster: PreviewGeoRaster, lat: number, lng: number) => {
+  const x = Math.floor((lng - georaster.xmin) / georaster.pixelWidth);
+  const y = Math.floor((georaster.ymax - lat) / georaster.pixelHeight);
+
+  if (x < 0 || x >= georaster.width || y < 0 || y >= georaster.height) {
+    return null;
+  }
+
+  return georaster.values[0][y][x];
+};
+
+export type PreviewScaleRange = {
+  min: number;
+  max: number;
+  shouldPersist: boolean;
+};
+
+export const normalizePreviewDataRange = (dataMin: number, dataMax: number) => {
+  let min = dataMin;
+  let max = dataMax;
+  if (min === max) {
+    min = 0;
+    max = Math.max(max, 300);
+  }
+  return { min, max };
+};
+
+export const resolvePreviewScaleRange = (
+  dynamicPreviewColorScale: boolean,
+  previewMin: number | string | null,
+  previewMax: number | string | null,
+  dataMin: number,
+  dataMax: number
+): PreviewScaleRange => {
+  const { min: normalizedMin, max: normalizedMax } = normalizePreviewDataRange(dataMin, dataMax);
+
+  if (dynamicPreviewColorScale) {
+    return { min: normalizedMin, max: normalizedMax, shouldPersist: true };
+  }
+
+  const customMin = Number(previewMin);
+  const customMax = Number(previewMax);
+  if (Number.isFinite(customMin) && Number.isFinite(customMax) && customMin !== customMax) {
+    return { min: customMin, max: customMax, shouldPersist: false };
+  }
+
+  return { min: normalizedMin, max: normalizedMax, shouldPersist: true };
+};
+
+export const shouldUpdatePreviewScaleStore = (
+  previewMin: number | string | null,
+  previewMax: number | string | null,
+  nextMin: number,
+  nextMax: number
+) => Number(previewMin) !== nextMin || Number(previewMax) !== nextMax;
+
+export const hasValidCustomPreviewScale = (
+  previewMin: number | string | null,
+  previewMax: number | string | null
+) => {
+  const min = Number(previewMin);
+  const max = Number(previewMax);
+  return Number.isFinite(min) && Number.isFinite(max) && min !== max;
+};
+
+export type PreviewLayerScale = {
+  min: number;
+  max: number;
+  shouldUpdateStore: boolean;
+};
+
+export const getPreviewLayerScale = (
+  dataMin: number,
+  dataMax: number,
+  dynamicPreviewColorScale: boolean,
+  previewMin: number | string | null,
+  previewMax: number | string | null
+): PreviewLayerScale => {
+  let minValue = dataMin;
+  let maxValue = dataMax;
+
+  if (dynamicPreviewColorScale) {
+    if (minValue === maxValue) {
+      minValue = 0;
+      maxValue = Math.max(maxValue, 300);
+    }
+    return { min: minValue, max: maxValue, shouldUpdateStore: true };
+  }
+
+  if (hasValidCustomPreviewScale(previewMin, previewMax)) {
+    return {
+      min: Number(previewMin),
+      max: Number(previewMax),
+      shouldUpdateStore: false,
+    };
+  }
+
+  if (minValue === maxValue) {
+    minValue = 0;
+    maxValue = Math.max(maxValue, 300);
+  }
+
+  return { min: minValue, max: maxValue, shouldUpdateStore: false };
+};
+
+export const formatPreviewValue = (value: number, units: "mm" | "inches") => {
+  if (units === "inches") {
+    return {
+      value: value / 25.4,
+      units: "in/month",
+    };
+  }
+
+  return {
+    value,
+    units: "mm/month",
+  };
+};
+
 const assertMatchingDimensions = (rasters: PreviewGeoRaster[]) => {
   const [first, ...rest] = rasters;
   for (const raster of rest) {

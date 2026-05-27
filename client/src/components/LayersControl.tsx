@@ -18,6 +18,8 @@ import MapIcon from "@mui/icons-material/Map";
 import CloseIcon from "@mui/icons-material/Close";
 import useStore, { PolygonLocation } from "../utils/store";
 import { ChangeEvent, FC, useCallback, useMemo, useState } from "react";
+import { createBulkSubmitConfirmOptions } from "./BulkJobSubmitConfirm";
+import BulkJobGroupOptions from "./BulkJobGroupOptions";
 import { FixedSizeList as List } from "react-window";
 
 import "../scss/LayersControl.scss";
@@ -27,6 +29,7 @@ import {
   estimateSubmitDurationMsFromYearRuns,
   formatElapsedTime,
   squareMetersToAcres,
+  submitJobConfirmSx,
 } from "../utils/helpers";
 import { useConfirm } from "material-ui-confirm";
 import { area as turfArea } from "@turf/turf";
@@ -108,8 +111,10 @@ const LayersControl: FC = () => {
     return jobName && loadedFile && multipolygons.length > 0 && startYear <= endYear;
   }, [jobName, loadedFile, multipolygons, startYear, endYear]);
 
+  const [groupJobsTogether, bulkGroupName] = useStore((state) => [state.groupJobsTogether, state.bulkGroupName]);
+
   const isBulkJob = useMemo(() => {
-    return canSubmitBulkJob && multipolygons.length > 1;
+    return Boolean(canSubmitBulkJob && multipolygons.length > 1);
   }, [canSubmitBulkJob, multipolygons]);
 
   const isValidArea = useMemo(() => {
@@ -534,7 +539,13 @@ const LayersControl: FC = () => {
           </AutoSizer>
         </div>
       )}
-      <div className="dropzone-container" style={{ height: !loadedFile && rows.length === 0 ? 400 : 200, width: "318px" }}>
+      <div
+        className={`dropzone-container${isBulkJob && loadedFile ? " dropzone-container--compact" : ""}`}
+        style={{
+          height: !loadedFile && rows.length === 0 ? 400 : isBulkJob && loadedFile ? 88 : 200,
+          width: "100%",
+        }}
+      >
         {loadedFile && (
           <div className="cancel-job">
             <IconButton
@@ -549,19 +560,33 @@ const LayersControl: FC = () => {
             </IconButton>
           </div>
         )}
-        <div className={`dropzone-area ${isDragActive ? "drag-active" : ""}`} {...getRootProps()} style={{ padding: "8px" }}>
+        <div
+          className={`dropzone-area ${isDragActive ? "drag-active" : ""}`}
+          {...getRootProps()}
+          style={isBulkJob && loadedFile ? { padding: "6px 8px" } : { padding: "8px" }}
+        >
           <input {...getInputProps()} />
           {loadedFile ? (
-            <div
-              className="loaded-file"
-              style={{ margin: "8px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
-            >
-              <MapIcon style={{ color: "var(--st-gray-20)" }} />
-              <p style={{ color: "var(--st-gray-20)", marginBottom: 0, textAlign: "center" }}>{loadedFile.name}</p>
-              <p style={{ color: "var(--st-gray-50)", margin: 0, fontSize: "12px" }}>
-                Area: {roundedLoadedGeoJSONArea} Acres
-              </p>
-            </div>
+            isBulkJob ? (
+              <div className="loaded-file loaded-file--stacked">
+                <div className="loaded-file-name">
+                  <MapIcon style={{ color: "var(--st-gray-20)", flexShrink: 0 }} />
+                  <p>{loadedFile.name}</p>
+                </div>
+                <p className="loaded-file-area">Area: {roundedLoadedGeoJSONArea} Acres</p>
+              </div>
+            ) : (
+              <div
+                className="loaded-file"
+                style={{ margin: "8px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
+              >
+                <MapIcon style={{ color: "var(--st-gray-20)" }} />
+                <p style={{ color: "var(--st-gray-20)", marginBottom: 0, textAlign: "center" }}>{loadedFile.name}</p>
+                <p style={{ color: "var(--st-gray-50)", margin: 0, fontSize: "12px" }}>
+                  Area: {roundedLoadedGeoJSONArea} Acres
+                </p>
+              </div>
+            )
           ) : (
             <p style={{ color: "var(--st-gray-40)", textAlign: "center" }}>
               Drag & drop <br /> or <strong>browse</strong> to upload
@@ -586,6 +611,7 @@ const LayersControl: FC = () => {
           </Typography>
         )}
       </div>
+      <BulkJobGroupOptions visible={isBulkJob} />
       <div
         className="bottom-buttons"
         style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end" }}
@@ -614,20 +640,6 @@ const LayersControl: FC = () => {
             border: isValidArea && (canSubmitJob || canSubmitBulkJob) ? "1px solid #1E40AF" : "1px solid transparent",
           }}
           onClick={() => {
-            const confirmSx = {
-              titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-              contentProps: {
-                sx: {
-                  backgroundColor: "var(--st-gray-90)",
-                  color: "var(--st-gray-10)",
-                  whiteSpace: "pre-line",
-                },
-              },
-              dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
-              confirmationButtonProps: { color: "primary", variant: "contained" },
-              cancellationButtonProps: { color: "secondary", variant: "contained" },
-            } as const;
-
             if (canSubmitJob) {
               const yearCount = endYear - startYear + 1;
               const areaSqM = loadedGeoJSON ? turfArea(loadedGeoJSON) : 0;
@@ -641,7 +653,7 @@ const LayersControl: FC = () => {
                   `Area: ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
                   `Estimated processing time: ~${estimatedTime}`,
                 ].join("\n"),
-                ...confirmSx,
+                ...submitJobConfirmSx,
               }).then(() => {
                 submitJob();
                 closeNewJob();
@@ -661,19 +673,22 @@ const LayersControl: FC = () => {
               const acres = squareMetersToAcres(areaSqM);
               const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(totalYearRuns)).trim();
 
-              confirm({
-                title: "Submit bulk jobs?",
-                description: [
-                  `Jobs: ${jobs.length}`,
-                  `Years: ${yearsPerJob} per job (${startYear}–${endYear}), ${totalYearRuns} total year-runs`,
-                  `Combined area (visible layers): ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
-                  `Estimated processing time: ~${estimatedTime}`,
-                  "",
-                  `Submit ${jobs.length} job${jobs.length === 1 ? "" : "s"}?`,
-                ].join("\n"),
-                ...confirmSx,
-              }).then(() => {
-                submitMultipolygonJob(jobs);
+              confirm(
+                createBulkSubmitConfirmOptions({
+                  jobCount: jobs.length,
+                  yearsPerJob,
+                  startYear,
+                  endYear,
+                  totalYearRuns,
+                  acres,
+                  estimatedTime,
+                })
+              ).then(() => {
+                const resolvedGroupName = bulkGroupName.trim() || jobName.trim() || "Untitled Job";
+                submitMultipolygonJob(jobs, {
+                  groupTogether: groupJobsTogether && jobs.length > 1,
+                  groupName: resolvedGroupName,
+                });
                 closeNewJob();
               });
             }

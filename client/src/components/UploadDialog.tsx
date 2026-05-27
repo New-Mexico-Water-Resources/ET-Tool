@@ -23,6 +23,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import { TableVirtuoso, TableComponents } from "react-virtuoso";
 
 import React, { ChangeEvent, useCallback, useMemo, useState } from "react";
+import { createBulkSubmitConfirmOptions } from "./BulkJobSubmitConfirm";
+import BulkJobGroupOptions from "./BulkJobGroupOptions";
 import { useDropzone } from "react-dropzone";
 import useStore, { PolygonLocation } from "../utils/store";
 import { useConfirm } from "material-ui-confirm";
@@ -31,11 +33,17 @@ import {
   formatElapsedTime,
   formJobForQueue,
   squareMetersToAcres,
+  submitJobConfirmSx,
 } from "../utils/helpers";
 import { area as turfArea } from "@turf/turf";
 
 const UploadDialog = () => {
-  const [jobName, setJobName] = useStore((state) => [state.jobName, state.setJobName]);
+  const [jobName, setJobName, groupJobsTogether, bulkGroupName] = useStore((state) => [
+    state.jobName,
+    state.setJobName,
+    state.groupJobsTogether,
+    state.bulkGroupName,
+  ]);
   const [minYear, maxYear] = useStore((state) => [state.minYear, state.maxYear]);
   const [startYear, setStartYear] = useStore((state) => [state.startYear, state.setStartYear]);
   const [endYear, setEndYear] = useStore((state) => [state.endYear, state.setEndYear]);
@@ -69,6 +77,7 @@ const UploadDialog = () => {
 
   const userInfo = useStore((state) => state.userInfo);
   const canWriteJobs = useMemo(() => userInfo?.permissions.includes("write:jobs"), [userInfo?.permissions]);
+  const showBulkGroupOptions = Boolean(canSubmitBulkJob && multipolygons.length > 1);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     acceptedFiles.forEach((file) => {
@@ -310,7 +319,10 @@ const UploadDialog = () => {
             </div>
           </div>
         </div>
-        <div className="dropzone-container">
+        <div
+          className={`dropzone-container${multipolygons.length > 1 && loadedFile ? " dropzone-container--compact" : ""}`}
+          style={multipolygons.length > 1 && loadedFile ? { height: 88 } : undefined}
+        >
           {loadedFile && (
             <div className="cancel-job">
               <IconButton
@@ -353,6 +365,7 @@ const UploadDialog = () => {
             </div>
           </div>
         )}
+        <BulkJobGroupOptions visible={showBulkGroupOptions} />
         <div
           className="bottom-buttons"
           style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end" }}
@@ -392,20 +405,6 @@ const UploadDialog = () => {
               border: canSubmitJob || canSubmitBulkJob ? "1px solid #1E40AF" : "1px solid transparent",
             }}
             onClick={() => {
-              const confirmSx = {
-                titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                contentProps: {
-                  sx: {
-                    backgroundColor: "var(--st-gray-90)",
-                    color: "var(--st-gray-10)",
-                    whiteSpace: "pre-line",
-                  },
-                },
-                dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
-                confirmationButtonProps: { color: "primary", variant: "contained" },
-                cancellationButtonProps: { color: "secondary", variant: "contained" },
-              } as const;
-
               if (canSubmitJob) {
                 const yearCount = endYear - startYear + 1;
                 const areaSqM = loadedGeoJSON ? turfArea(loadedGeoJSON) : 0;
@@ -419,7 +418,7 @@ const UploadDialog = () => {
                     `Area: ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
                     `Estimated processing time: ~${estimatedTime}`,
                   ].join("\n"),
-                  ...confirmSx,
+                  ...submitJobConfirmSx,
                 }).then(() => {
                   submitJob();
                 });
@@ -435,19 +434,22 @@ const UploadDialog = () => {
                 const acres = squareMetersToAcres(areaSqM);
                 const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(totalYearRuns)).trim();
 
-                confirm({
-                  title: "Submit bulk jobs?",
-                  description: [
-                    `Jobs: ${jobs.length}`,
-                    `Years: ${yearsPerJob} per job (${startYear}–${endYear}), ${totalYearRuns} total year-runs`,
-                    `Combined area (visible layers): ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
-                    `Estimated processing time: ~${estimatedTime}`,
-                    "",
-                    `Submit ${jobs.length} job${jobs.length === 1 ? "" : "s"}?`,
-                  ].join("\n"),
-                  ...confirmSx,
-                }).then(() => {
-                  submitMultipolygonJob(jobs);
+                confirm(
+                  createBulkSubmitConfirmOptions({
+                    jobCount: jobs.length,
+                    yearsPerJob,
+                    startYear,
+                    endYear,
+                    totalYearRuns,
+                    acres,
+                    estimatedTime,
+                  })
+                ).then(() => {
+                  const resolvedGroupName = bulkGroupName.trim() || jobName.trim() || "Untitled Job";
+                  submitMultipolygonJob(jobs, {
+                    groupTogether: groupJobsTogether && jobs.length > 1,
+                    groupName: resolvedGroupName,
+                  });
                 });
               }
             }}

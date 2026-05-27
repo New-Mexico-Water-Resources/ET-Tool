@@ -21,6 +21,7 @@ import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
 import MapSearchControl from "../components/MapSearchControl";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
+import GroupPreviewMapLayer from "../components/GroupPreviewMapLayer";
 import ColorScale from "../components/ColorScale";
 import { CdlHoverIdentify, CdlLegendFab } from "../components/CdlMapExtras";
 import useCurrentJobStore from "../utils/currentJobStore";
@@ -65,6 +66,7 @@ const Dashboard = () => {
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
   const activeJob = useStore((state) => state.activeJob);
+  const activeJobGroup = useStore((state) => state.activeJobGroup);
   const setActiveJob = useStore((state) => state.setActiveJob);
 
   const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
@@ -272,7 +274,7 @@ const Dashboard = () => {
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <QueuePollingEffect />
       <NavToolbar />
-      {isAuthenticated && multipolygons.length <= 1 && <CurrentJobChip />}
+      {isAuthenticated && activeJob && (activeJobGroup || multipolygons.length <= 1) && <CurrentJobChip />}
       {isAuthenticated && showUploadDialog && <LayersControl />}
       {(!isAuthenticated || (!canReadJobs && userInfo)) && (
         <div
@@ -394,7 +396,8 @@ const Dashboard = () => {
           maxZoom={activeMapLayer.maxZoom}
           crs={CRS.EPSG3857}
         >
-          <ActiveMonthlyMapLayer />
+          {!activeJobGroup && <ActiveMonthlyMapLayer />}
+          <GroupPreviewMapLayer />
           <ActiveMapLayer />
           {showWmsLegend && <CdlHoverIdentify />}
           <ZoomControl position="topright" />

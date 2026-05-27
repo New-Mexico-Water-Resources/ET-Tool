@@ -13,6 +13,7 @@
     - Adds new USDA Cropland Data Layer, Google Hybrid imagery, and NDVI basemaps
     - USDA Cropland Data Layer includes searchable legend and allows hovering over an area to view the crop type
   - Renames All jobs to "Previously Run Jobs"
+  - Changes PET in interactive preview to ETo
   - New Search button to quickly zoom to locations via address or lat/lon coordinate
   - Adds confirmation dialog before submitting a new job along with an ETA
   - Moves per-year report files into an annual subfolder in the job output

@@ -77,4 +77,30 @@ export const formJobForQueue = (jobName: string, startYear: number, endYear: num
   return newJob;
 };
 
+export const submitJobConfirmSx = {
+  titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+  contentProps: {
+    sx: {
+      backgroundColor: "var(--st-gray-90)",
+      color: "var(--st-gray-10)",
+      whiteSpace: "pre-line",
+      pt: 2,
+      pb: 1.5,
+      "& .MuiDialogContentText-root": { marginBottom: 0 },
+    },
+  },
+  dialogProps: {
+    maxWidth: false,
+    PaperProps: {
+      sx: {
+        width: "max-content",
+        maxWidth: "min(480px, calc(100vw - 32px))",
+      },
+    },
+  },
+  dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)", pt: 0 } },
+  confirmationButtonProps: { color: "primary", variant: "contained" },
+  cancellationButtonProps: { color: "secondary", variant: "contained" },
+} as const;
+
 export default {};

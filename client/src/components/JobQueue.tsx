@@ -1,17 +1,24 @@
 import { Button, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import useStore from "../utils/store";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 
 import "../scss/JobQueue.scss";
 import JobQueueItem from "./JobQueueItem";
+import JobQueueGroup from "./JobQueueGroup";
 import JobLogViewer from "./JobLogViewer";
 import { useConfirm } from "material-ui-confirm";
 
-import { FixedSizeList as List, ListChildComponentProps } from "react-window";
+import { VariableSizeList as List, ListChildComponentProps } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import dayjs from "dayjs";
+import {
+  QueueDisplayItem,
+  QueueJob,
+  buildQueueDisplayItems,
+  getQueueDisplayItemHeight,
+} from "../utils/jobGroups";
 
 const JobQueue = () => {
   const queue = useStore((state) => state.queue);
@@ -22,6 +29,7 @@ const JobQueue = () => {
 
   const [activeStatusFilters, setActiveStatusFilters] = useState<string[]>([]);
   const [activeAuthorFilters, setActiveAuthorFilters] = useState<string[]>([]);
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
 
   const backlogDateFilterOptions = ["Last Day", "Last Week", "Last Month", "Last Year", "All Time"];
 
@@ -52,6 +60,7 @@ const JobQueue = () => {
   const [sortAscending, setSortAscending] = useStore((state) => [state.sortAscending, state.setSortAscending]);
 
   const confirm = useConfirm();
+  const listRef = useRef<List>(null);
 
   const canDeleteJobs = useStore((state) => state.userInfo?.permissions.includes("write:jobs"));
 
@@ -77,10 +86,11 @@ const JobQueue = () => {
     setSearchField("");
     setActiveAuthorFilters([]);
     setActiveStatusFilters([]);
-  }, [isQueueOpen]);
+    setExpandedGroupIds(new Set());
+  }, [isQueueOpen, isBacklogOpen]);
 
   const filteredItemList = useMemo(() => {
-    let items = isBacklogOpen ? backlog : queue;
+    let items: QueueJob[] = isBacklogOpen ? backlog : queue;
     if (isBacklogOpen && backlogCutoffDate) {
       items = items.filter(
         (item) => new Date(item?.started || 0) > backlogCutoffDate || new Date(item?.finished || 0) > backlogCutoffDate
@@ -90,7 +100,7 @@ const JobQueue = () => {
     const searchTerm = searchField?.toLowerCase() || "";
 
     if (activeAuthorFilters.length) {
-      items = items.filter((item) => activeAuthorFilters.includes(item.user?.name));
+      items = items.filter((item) => item.user?.name && activeAuthorFilters.includes(item.user.name));
     }
 
     if (activeStatusFilters.length) {
@@ -100,20 +110,20 @@ const JobQueue = () => {
     const filteredItems = items.filter((item) => {
       const fields = [
         item?.name?.toLowerCase() || "",
+        item?.group_name?.toLowerCase() || "",
         `${item?.start_year}`,
         `${item?.end_year}`,
         item.user?.name?.toLowerCase(),
         item.user?.email?.toLowerCase(),
         item?.status.toLowerCase(),
-      ].filter((field) => field);
+      ].filter((field): field is string => Boolean(field));
 
-      // Name, Start Year, End Year, Creator Name, Creator Email
       return !searchField || fields.some((field) => field.includes(searchTerm));
     });
 
     filteredItems.sort((a, b) => {
-      const aStartedDate = new Date(a.started);
-      const bStartedDate = new Date(b.started);
+      const aStartedDate = new Date(a.started || 0);
+      const bStartedDate = new Date(b.started || 0);
       if (sortAscending) {
         return aStartedDate.getTime() - bStartedDate.getTime();
       } else {
@@ -132,6 +142,8 @@ const JobQueue = () => {
     activeStatusFilters,
     backlogCutoffDate,
   ]);
+
+  const displayItems = useMemo(() => buildQueueDisplayItems(filteredItemList), [filteredItemList]);
 
   const authors = useMemo(() => {
     const authors = new Set<string>();
@@ -153,25 +165,59 @@ const JobQueue = () => {
     return Array.from(statuses);
   }, [queue, backlog, isBacklogOpen]);
 
-  const handleOpenLogs = useCallback(
-    (key: string) => {
-      setActiveJobLogKey(key);
-      setJobLogsOpen(true);
-    },
-    [setActiveJobLogKey, setJobLogsOpen]
+  const handleOpenLogs = useCallback((key: string) => {
+    setActiveJobLogKey(key);
+    setJobLogsOpen(true);
+  }, []);
+
+  const toggleGroupExpanded = useCallback((groupId: string) => {
+    setExpandedGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }, []);
+
+  const getItemSize = useCallback(
+    (index: number) => getQueueDisplayItemHeight(displayItems[index], expandedGroupIds),
+    [displayItems, expandedGroupIds]
   );
+
+  useEffect(() => {
+    listRef.current?.resetAfterIndex(0);
+  }, [displayItems, expandedGroupIds]);
 
   const Row = useCallback(
     ({ index, style }: ListChildComponentProps) => {
-      const job = filteredItemList[index];
+      const item: QueueDisplayItem = displayItems[index];
+
+      if (item.type === "group") {
+        return (
+          <div style={style}>
+            <JobQueueGroup
+              jobs={item.jobs}
+              groupName={item.groupName}
+              expanded={expandedGroupIds.has(item.groupId)}
+              onToggle={() => toggleGroupExpanded(item.groupId)}
+              onOpenLogs={handleOpenLogs}
+            />
+          </div>
+        );
+      }
+
       return (
         <div style={style}>
-          <JobQueueItem job={job} onOpenLogs={() => handleOpenLogs(job.key)} />
+          <JobQueueItem job={item.job} onOpenLogs={() => handleOpenLogs(item.job.key)} />
         </div>
       );
     },
-    [filteredItemList, handleOpenLogs]
+    [displayItems, expandedGroupIds, handleOpenLogs, toggleGroupExpanded]
   );
+
   return (
     <div className={`queue-container ${isQueueOpen || isBacklogOpen ? "open" : "closed"}`}>
       <JobLogViewer
@@ -345,7 +391,13 @@ const JobQueue = () => {
       <div className="queue-list">
         <AutoSizer>
           {({ height, width }) => (
-            <List height={height} itemCount={filteredItemList.length} itemSize={300} width={width}>
+            <List
+              ref={listRef}
+              height={height}
+              itemCount={displayItems.length}
+              itemSize={getItemSize}
+              width={width}
+            >
               {Row}
             </List>
           )}

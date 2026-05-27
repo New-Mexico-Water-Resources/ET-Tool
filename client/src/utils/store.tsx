@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import axios, { AxiosInstance } from "axios";
-import { API_URL, DATA_END_YEAR, QUEUE_STATUSES, ROLES } from "./constants";
+import { API_URL, DATA_END_YEAR, ROLES } from "./constants";
 import { formatElapsedTime, formJobForQueue } from "./helpers";
+import { generateGroupId, partitionJobsForQueueView, QueueJob } from "./jobGroups";
+import { area as turfArea } from "@turf/turf";
 import packageJson from "../../package.json";
 
 export interface PolygonLocation {
@@ -22,6 +24,13 @@ export interface PolygonLocation {
   lat: number;
   long: number;
   isValidArea: boolean;
+  jobKey?: string;
+}
+
+export interface ActiveJobGroup {
+  groupId: string;
+  groupName: string;
+  jobs: any[];
 }
 
 export interface JobStatus {
@@ -123,6 +132,10 @@ interface Store {
   setBacklogDateFilter: (backlogDateFilter: string) => void;
   jobName: string;
   setJobName: (jobName: string) => void;
+  groupJobsTogether: boolean;
+  setGroupJobsTogether: (groupJobsTogether: boolean) => void;
+  bulkGroupName: string;
+  setBulkGroupName: (bulkGroupName: string) => void;
   minYear: number;
   setMinYear: (minYear: number) => void;
   maxYear: number;
@@ -162,10 +175,15 @@ interface Store {
   locations: PolygonLocation[];
   setLocations: (locations: PolygonLocation[]) => void;
   prepareMultipolygonJob: () => any[];
-  submitMultipolygonJob: (jobs: any[]) => void;
+  submitMultipolygonJob: (jobs: any[], options?: { groupTogether?: boolean; groupName?: string }) => void;
   jobLocateGeneration: number;
+  activeJobGroup: ActiveJobGroup | null;
+  loadJobGroup: (jobs: any[], groupName: string) => Promise<void>;
+  clearJobGroup: () => void;
   loadJob: (job: any) => void;
   downloadJob: (jobKey: string, units?: "metric" | "imperial" | "acre-feet") => void;
+  downloadJobGroup: (jobs: any[], groupName: string, units?: "metric" | "imperial" | "acre-feet") => void;
+  downloadingJobGroupId: string | null;
   restartJob: (jobKey: string) => void;
   pauseJob: (jobKey: string) => void;
   resumeJob: (jobKey: string) => void;
@@ -275,6 +293,10 @@ const useStore = create<Store>()(
       },
       jobName: "",
       setJobName: (jobName) => set({ jobName }),
+      groupJobsTogether: false,
+      setGroupJobsTogether: (groupJobsTogether) => set({ groupJobsTogether }),
+      bulkGroupName: "",
+      setBulkGroupName: (bulkGroupName) => set({ bulkGroupName }),
       minYear: 1985,
       setMinYear: (minYear) => set({ minYear }),
       maxYear: DATA_END_YEAR,
@@ -296,6 +318,8 @@ const useStore = create<Store>()(
       activeJob: null,
       setActiveJob: (activeJob) => set({ activeJob }),
       jobLocateGeneration: 0,
+      activeJobGroup: null,
+      downloadingJobGroupId: null,
       successMessage: "",
       setSuccessMessage: (successMessage) => set({ successMessage }),
       errorMessage: "",
@@ -363,8 +387,7 @@ const useStore = create<Store>()(
           const existingQueue = get().queue;
           const existingBacklog = get().backlog;
 
-          const queue = formattedQueue.filter((job: any) => QUEUE_STATUSES.includes(job.status));
-          const backlog = formattedQueue.filter((job: any) => !QUEUE_STATUSES.includes(job.status));
+          const { queue, backlog } = partitionJobsForQueueView(formattedQueue);
 
           let jobsChanged = existingQueue.length !== queue.length || existingBacklog.length !== backlog.length;
 
@@ -530,24 +553,30 @@ const useStore = create<Store>()(
             return formJobForQueue(jobName, get().startYear, get().endYear, geojson);
           });
       },
-      submitMultipolygonJob: async (jobs: any[]) => {
+      submitMultipolygonJob: async (jobs: any[], options?: { groupTogether?: boolean; groupName?: string }) => {
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {
           return;
         }
 
+        const shouldGroup = Boolean(options?.groupTogether) && jobs.length > 1;
+        const groupId = shouldGroup ? generateGroupId() : undefined;
+        const groupName = shouldGroup
+          ? options?.groupName?.trim() || get().bulkGroupName.trim() || get().jobName.trim() || "Untitled Job"
+          : undefined;
+
         try {
           let activeJob = jobs[0];
-          const responses: any[] = [];
-          await jobs.forEach(async (job, i) => {
+          for (let i = 0; i < jobs.length; i++) {
+            const job = jobs[i];
             const jobName = job?.name.replace(/[^\w\s-_]/gi, "") || "Untitled Job";
             const response = await axiosInstance.post(`${API_URL}/start_run`, {
               name: jobName,
               startYear: job.start_year,
               endYear: job.end_year,
               geojson: job.loaded_geo_json,
+              ...(groupId ? { groupId, groupName } : {}),
             });
-            responses.push(response.data);
             if (i === 0 && response.data?.entry) {
               activeJob = response.data.entry;
 
@@ -556,7 +585,7 @@ const useStore = create<Store>()(
                 loadedGeoJSON: activeJob.loaded_geo_json,
               });
             }
-          });
+          }
 
           set({
             showUploadDialog: false,
@@ -564,6 +593,8 @@ const useStore = create<Store>()(
             loadedFile: null,
             multipolygons: [],
             locations: [],
+            groupJobsTogether: false,
+            bulkGroupName: "",
             successMessage: `All ${jobs.length} jobs submitted successfully!`,
             errorMessage: "",
           });
@@ -574,8 +605,105 @@ const useStore = create<Store>()(
           });
         }
       },
+      clearJobGroup: () => {
+        set({
+          activeJobGroup: null,
+          activeJob: null,
+          loadedGeoJSON: null,
+          multipolygons: [],
+          locations: [],
+        });
+      },
+      loadJobGroup: async (jobs: QueueJob[], groupName: string) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance || jobs.length === 0) {
+          return;
+        }
+
+        try {
+          const geojsons = await Promise.all(
+            jobs.map(async (job) => {
+              if (job.loaded_geo_json) {
+                return job.loaded_geo_json;
+              }
+
+              const escapedName = encodeURIComponent(job.name);
+              const escapedKey = encodeURIComponent(job.key);
+              const response = await axiosInstance.get(
+                `${API_URL}/geojson?name=${escapedName}&key=${escapedKey}`
+              );
+              return response.data;
+            })
+          );
+
+          const locations: PolygonLocation[] = jobs.map((job, index) => {
+            const geojson = geojsons[index];
+            const area = turfArea(geojson);
+
+            let lat = geojson?.geometry?.coordinates?.[0]?.[0]?.[0];
+            let long = geojson?.geometry?.coordinates?.[0]?.[0]?.[1];
+            if (!lat || !long) {
+              lat = geojson?.features?.[0]?.geometry?.coordinates?.[0]?.[0]?.[0];
+              long = geojson?.features?.[0]?.geometry?.coordinates?.[0]?.[0]?.[1];
+            }
+
+            return {
+              visible: true,
+              name: job.name,
+              jobKey: job.key,
+              acres: area,
+              comments: geojson?.properties?.Comments || "",
+              county: geojson?.properties?.County || "",
+              polygon_So: geojson?.properties?.Polygon_So || "",
+              shapeArea: area,
+              shapeLeng: geojson?.properties?.Shape_Leng || 0,
+              source: geojson?.properties?.Source || "",
+              wUR_Basin: geojson?.properties?.WUR_Basin || "",
+              id: index,
+              lat: lat || 0,
+              long: long || 0,
+              isValidArea: area > 900,
+            };
+          });
+
+          const startYears = jobs.map((job) => job.start_year).filter((y): y is number => y != null);
+          const endYears = jobs.map((job) => job.end_year).filter((y): y is number => y != null);
+          const minStart = Math.min(...startYears);
+          const maxEnd = Math.max(...endYears);
+          const groupId = jobs[0].group_id || `group_${Date.now()}`;
+
+          const representativeJob = {
+            ...jobs[0],
+            name: groupName,
+            start_year: minStart,
+            end_year: maxEnd,
+            loaded_geo_json: null,
+          };
+
+          set({
+            activeJobGroup: { groupId, groupName, jobs },
+            activeJob: representativeJob,
+            loadedGeoJSON: null,
+            multipolygons: geojsons,
+            locations,
+            showUploadDialog: false,
+            previewMode: false,
+            jobLocateGeneration: get().jobLocateGeneration + 1,
+          });
+
+          const useCurrentJobStore = (await import("./currentJobStore")).default;
+          useCurrentJobStore.getState().setPreviewMonth(1);
+          useCurrentJobStore.getState().setPreviewYear(minStart);
+          useCurrentJobStore.getState().setPreviewVariable("ET");
+        } catch (error: any) {
+          set({
+            errorMessage: error?.message || "Error loading job group",
+            activeJobGroup: null,
+          });
+        }
+      },
       loadJob: (job) => {
-        set({ activeJob: job, showUploadDialog: false, previewMode: false });
+        set({ activeJobGroup: null, activeJob: job, showUploadDialog: false, previewMode: false });
 
         if (job.loaded_geo_json) {
           set({
@@ -613,6 +741,38 @@ const useStore = create<Store>()(
           })
           .catch((error) => {
             set({ loadedGeoJSON: null, multipolygons: [], errorMessage: error?.message || "Error loading job" });
+          });
+      },
+      downloadJobGroup: (jobs, groupName, units = "metric") => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance || jobs.length === 0) {
+          return;
+        }
+
+        const groupId = jobs[0]?.group_id || groupName;
+        set({ downloadingJobGroupId: groupId });
+
+        const keys = jobs.map((job) => encodeURIComponent(job.key)).join(",");
+        const escapedGroupName = encodeURIComponent(groupName.replace(/[(),]/g, ""));
+
+        axiosInstance
+          .get(`${API_URL}/download/group?keys=${keys}&units=${units}&name=${escapedGroupName}`, {
+            responseType: "arraybuffer",
+          })
+          .then((response) => {
+            const blob = new Blob([response.data], { type: "application/zip" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${groupName.replace(/[(),]/g, "")}.zip`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.message || "Error downloading job group" });
+          })
+          .finally(() => {
+            set({ downloadingJobGroupId: null });
           });
       },
       downloadJob: (jobKey, units = "metric") => {
@@ -706,6 +866,8 @@ const useStore = create<Store>()(
           loadedGeoJSON: null,
           multipolygons: [],
           jobName: "",
+          groupJobsTogether: false,
+          bulkGroupName: "",
           startYear: 1985,
           endYear: DATA_END_YEAR,
           showUploadDialog: true,
@@ -722,6 +884,8 @@ const useStore = create<Store>()(
           multipolygons: [],
           locations: [],
           jobName: "",
+          groupJobsTogether: false,
+          bulkGroupName: "",
           startYear: 1985,
           endYear: DATA_END_YEAR,
         });
