@@ -1,13 +1,16 @@
-FROM node:21 AS build
+FROM node:24 AS build
 
 WORKDIR /app
 
-COPY client/package.json client/yarn.lock ./
-RUN yarn install
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+COPY client/package.json client/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY client/ ./
 COPY CHANGELOG.md ./
-RUN yarn build
+RUN pnpm build
 
 FROM nginx:alpine
 

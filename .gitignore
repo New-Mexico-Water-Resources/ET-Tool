@@ -40,3 +40,4 @@ client_secret.json
 client_secret*.json
 google_drive_new_key.txt
 temp_data
+.pnpm-store

@@ -287,41 +287,41 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
               </Typography>
             ) : (
               filteredRows.map((row, i) => (
-              <Box
-                key={`${row.r}-${row.g}-${row.b}-${row.name}-${i}`}
-                component="li"
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1.25,
-                  px: 2,
-                  py: 0.5,
-                  "&:nth-of-type(even)": { backgroundColor: "rgba(255,255,255,0.06)" },
-                }}
-              >
                 <Box
-                  aria-hidden
+                  key={`${row.r}-${row.g}-${row.b}-${row.name}-${i}`}
+                  component="li"
                   sx={{
-                    width: 22,
-                    height: 22,
-                    flexShrink: 0,
-                    borderRadius: 0.5,
-                    border: "1px solid var(--st-gray-60)",
-                    backgroundColor: `rgb(${row.r},${row.g},${row.b})`,
-                  }}
-                />
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "var(--st-gray-20)",
-                    fontSize: "0.8125rem",
-                    lineHeight: 1.4,
-                    WebkitFontSmoothing: "antialiased",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.25,
+                    px: 2,
+                    py: 0.5,
+                    "&:nth-of-type(even)": { backgroundColor: "rgba(255,255,255,0.06)" },
                   }}
                 >
-                  {row.name}
-                </Typography>
-              </Box>
+                  <Box
+                    aria-hidden
+                    sx={{
+                      width: 22,
+                      height: 22,
+                      flexShrink: 0,
+                      borderRadius: 0.5,
+                      border: "1px solid var(--st-gray-60)",
+                      backgroundColor: `rgb(${row.r},${row.g},${row.b})`,
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "var(--st-gray-20)",
+                      fontSize: "0.8125rem",
+                      lineHeight: 1.4,
+                      WebkitFontSmoothing: "antialiased",
+                    }}
+                  >
+                    {row.name}
+                  </Typography>
+                </Box>
               ))
             )}
           </Box>
