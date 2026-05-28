@@ -28,7 +28,6 @@ test_data
 geojson_sample_files
 docs
 *.ipynb
-*.geojson
 
 .git
 .github

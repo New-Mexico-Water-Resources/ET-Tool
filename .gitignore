@@ -30,6 +30,7 @@ client/CHANGELOG.md
 modis_downloads
 misc
 *.geojson
+!water_rights_visualizer/ARD_tiles.geojson
 ~$*.docx
 tile_server/modis_pipeline/package.json
 google_drive_*.txt
