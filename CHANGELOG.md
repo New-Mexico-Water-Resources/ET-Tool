@@ -1,3 +1,8 @@
+## 1.38.0 (2026-05-29)
+
+### Bug Fixes
+- Fixes issue with month-summed gridMET ETo values being erroneously daylight corrected, resulting in roughly half the expected ETo output
+
 ## 1.37.0 (2026-05-27)
 
 ### Features
