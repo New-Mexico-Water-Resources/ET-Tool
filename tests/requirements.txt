@@ -5,3 +5,6 @@ requests>=2.28
 pyyaml>=6.0
 xarray>=2023.1
 netcdf4>=1.6
+pystac-client>=0.8
+planetary-computer>=1.0
+pystac>=1.13
