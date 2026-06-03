@@ -266,6 +266,27 @@ path.leaflet-interactive:focus {
   white-space: pre !important;
 }
 
+.leaflet-draw-toolbar-top a.pixel-draw-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-image: none !important;
+  background-color: #fff;
+
+  svg {
+    display: block;
+  }
+
+  &:hover {
+    background-color: #f4f4f4 !important;
+  }
+
+  &.pixel-draw-active {
+    background-color: #3488ff !important;
+    color: #fff;
+  }
+}
+
 .map-search-leaflet-control {
   clear: both;
   border-top: 0;
