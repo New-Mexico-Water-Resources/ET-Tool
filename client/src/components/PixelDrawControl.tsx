@@ -170,7 +170,10 @@ const PixelDrawControl = () => {
         startNewJob();
       }
 
-      const syntheticFile = new File([JSON.stringify(feature)], "drawn-pixel.geojson", {
+      const strippedLon = lon.toFixed(4);
+      const strippedLat = lat.toFixed(4);
+
+      const syntheticFile = new File([JSON.stringify(feature)], `Point_${strippedLon}_${strippedLat}.geojson`, {
         type: "application/json",
       });
       void ingestUploadFile(syntheticFile);
