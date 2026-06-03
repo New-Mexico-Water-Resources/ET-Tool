@@ -15,13 +15,13 @@ jobs:
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          miniconda-version: latest
+          miniforge-version: latest
           channels: conda-forge
           channel-priority: strict
           activate-environment: et-tool-test
           environment-file: water_rights.yml
           python-version: "3.9"
-          mamba-version: latest
+          use-mamba: true
           auto-update-conda: true
 
       - name: Install test dependencies
@@ -53,13 +53,13 @@ jobs:
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          miniconda-version: latest
+          miniforge-version: latest
           channels: conda-forge
           channel-priority: strict
           activate-environment: et-tool-test
           environment-file: water_rights.yml
           python-version: "3.9"
-          mamba-version: latest
+          use-mamba: true
           auto-update-conda: true
 
       - name: Install test dependencies
