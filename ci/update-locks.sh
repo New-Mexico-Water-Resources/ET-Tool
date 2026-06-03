@@ -10,17 +10,10 @@ if ! command -v conda-lock >/dev/null 2>&1; then
 fi
 
 conda-lock lock \
-  -f water_rights_ci.yml \
-  -p linux-64 \
-  --kind explicit \
-  --filename-template "ci/water_rights_ci-{platform}.lock" \
-  --mamba
-
-conda-lock lock \
   -f water_rights.yml \
   -p linux-64 \
   --kind explicit \
   --filename-template "ci/water_rights-{platform}.lock" \
   --mamba
 
-echo "Updated ci/water_rights_ci-linux-64.lock and ci/water_rights-linux-64.lock"
+echo "Updated ci/water_rights-linux-64.lock"
