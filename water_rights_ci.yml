@@ -1,4 +1,3 @@
-# Lighter conda env for CI unit tests. Integration tests use water_rights.yml.
 channels:
   - conda-forge
 dependencies:
@@ -6,12 +5,13 @@ dependencies:
   - boto3
   - gdal
   - geopandas
+  - h5py
   - matplotlib
   - numpy
   - pandas
   - pillow
   - pygeos
-  - python=3.9
+  - python=3.10
   - python-dateutil
   - rasterio>1.0.0
   - scipy

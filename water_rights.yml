@@ -16,7 +16,7 @@ dependencies:
   - pydrive2
   - pygeos
   - pyresample
-  - python=3.9
+  - python=3.10
   - rasterio>1.0.0
   - scikit-image
   - scipy
