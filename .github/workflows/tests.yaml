@@ -39,10 +39,11 @@ jobs:
 
       - name: Run unit tests
         shell: bash -l {0}
+        working-directory: ${{ github.workspace }}
         env:
-          PYTHONPATH: .
+          PYTHONPATH: ${{ github.workspace }}
           MPLBACKEND: Agg
-        run: python -m pytest tests/unit -m unit -v
+        run: python -m pytest tests/unit -m unit -v --rootdir=${{ github.workspace }}
 
   integration-tests:
     if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main'
@@ -84,8 +85,9 @@ jobs:
 
       - name: Run integration tests
         shell: bash -l {0}
+        working-directory: ${{ github.workspace }}
         env:
-          PYTHONPATH: .
+          PYTHONPATH: ${{ github.workspace }}
           MPLBACKEND: Agg
           S3_INPUT_BUCKET: ose-dev-inputs
           S3_REGION: us-west-2
@@ -93,9 +95,9 @@ jobs:
           OPENET_API_KEY: ${{ secrets.OPENET_API_KEY }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            python -m pytest tests/integration tests/data_quality -v
+            python -m pytest tests/integration tests/data_quality -v --rootdir=${{ github.workspace }}
           else
-            python -m pytest tests/integration -v
+            python -m pytest tests/integration -v --rootdir=${{ github.workspace }}
           fi
 
       - name: Upload test output artifacts
