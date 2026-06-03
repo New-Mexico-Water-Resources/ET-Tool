@@ -137,3 +137,17 @@ gdrive-credentials:
 
 sync-openet:
 	cd misc && pip install -r requirements.txt && python copy_openet_to_s3.py
+
+LOAD_DOTENV := if [ -f .env ]; then set -a; source .env; set +a; fi
+
+unit-tests:
+	$(LOAD_DOTENV); PYTHONPATH=. python -m pytest tests/unit -m unit
+
+integration-tests:
+	$(LOAD_DOTENV); PYTHONPATH=. python -m pytest tests/integration -m integration
+
+data-quality-tests:
+	$(LOAD_DOTENV); PYTHONPATH=. python -m pytest tests/data_quality -m data_quality
+
+test-all:
+	$(LOAD_DOTENV); PYTHONPATH=. python -m pytest tests

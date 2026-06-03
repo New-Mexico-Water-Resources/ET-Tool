@@ -73,7 +73,13 @@ class GEEAWSDataPipeline:
         self.aws_region = aws_region
         self.aws_profile = aws_profile
         self.authenticate(
-            project, gdrive_key_filename, gdrive_client_secrets_filename, aws_access_key_id, aws_secret_access_key, service_account_credentials
+            project,
+            gdrive_key_filename,
+            gdrive_client_secrets_filename,
+            aws_access_key_id,
+            aws_secret_access_key,
+            service_account_credentials,
+            use_gcs=use_gcs,
         )
 
         # Default to ARD_tiles.geojson
@@ -147,6 +153,7 @@ class GEEAWSDataPipeline:
         aws_access_key_id: str,
         aws_secret_access_key: str,
         service_account_credentials: str | None = None,
+        use_gcs: bool = False,
     ):
         """
         Authenticate with the GEE API and Google Drive
@@ -156,6 +163,7 @@ class GEEAWSDataPipeline:
             gdrive_client_secrets_filename (str): path to the gdrive client secrets file
             aws_access_key_id (str): aws access key id
             aws_secret_access_key (str): aws secret access key
+            use_gcs (bool): exports to GCS and skips Google Drive auth
         """
         if service_account_credentials:
             credentials = service_account.Credentials.from_service_account_file(
@@ -170,9 +178,12 @@ class GEEAWSDataPipeline:
             ee.Authenticate()
             ee.Initialize(project=project)
 
-        self.drive = google_drive_login(
-            key_filename=gdrive_key_filename, client_secrets_filename=gdrive_client_secrets_filename
-        )
+        if use_gcs:
+            self.drive = None
+        else:
+            self.drive = google_drive_login(
+                key_filename=gdrive_key_filename, client_secrets_filename=gdrive_client_secrets_filename
+            )
         self.session = boto3.Session(profile_name=self.aws_profile)
         self.s3 = self.session.client(
             "s3",
@@ -361,6 +372,7 @@ class GEEAWSDataPipeline:
         visualization_config: dict | str = "default",
         limit: int | None = None,
         tile_ids: list[str] = None,
+        bands: list[str] = None,
     ):
         """
         Process the tile images for the given date and bands
@@ -375,11 +387,13 @@ class GEEAWSDataPipeline:
         Returns:
             geemap.Map: geemap.Map object with the layer added if visualize is True, otherwise None
         """
+        bands_to_process = bands if bands else self.bands
+
         if map_object is None and visualize:
             map_object = geemap.Map()
 
         # Process each band
-        pbar = tqdm(self.bands, desc="Processing bands", leave=False)
+        pbar = tqdm(bands_to_process, desc="Processing bands", leave=False)
         for band in pbar:
             pbar.set_description(f"Processing band: {band}")
             date = ee.Date(date) if isinstance(date, str) else date

@@ -1,0 +1,91 @@
+name: Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: latest
+          channels: conda-forge
+          channel-priority: strict
+          activate-environment: et-tool-test
+          environment-file: water_rights.yml
+          python-version: "3.9"
+          mamba-version: latest
+          auto-update-conda: true
+
+      - name: Install test dependencies
+        shell: bash -l {0}
+        run: pip install -r tests/requirements.txt
+
+      - name: Run unit tests
+        shell: bash -l {0}
+        env:
+          PYTHONPATH: .
+        run: python -m pytest tests/unit -m unit -v
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    timeout-minutes: 90
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: latest
+          channels: conda-forge
+          channel-priority: strict
+          activate-environment: et-tool-test
+          environment-file: water_rights.yml
+          python-version: "3.9"
+          mamba-version: latest
+          auto-update-conda: true
+
+      - name: Install test dependencies
+        shell: bash -l {0}
+        run: pip install -r tests/requirements.txt
+
+      - name: Run integration tests
+        shell: bash -l {0}
+        env:
+          PYTHONPATH: .
+          S3_INPUT_BUCKET: ose-dev-inputs
+          S3_REGION: us-west-2
+          INTEGRATION_TEST_YEAR: "2021"
+          OPENET_API_KEY: ${{ secrets.OPENET_API_KEY }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python -m pytest tests/integration tests/data_quality -v
+          else
+            python -m pytest tests/integration -v
+          fi
+
+      - name: Upload test output artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: tests/output/
+          retention-days: 14
