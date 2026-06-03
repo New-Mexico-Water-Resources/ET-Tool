@@ -1,6 +1,16 @@
 import { area as turfArea } from "@turf/turf";
 import type { PolygonLocation } from "./store";
 
+const SYNTHETIC_DRAWN_FILE_PATTERN = /^(drawn-shape|Point_[-\d.]+_[-\d.]+)\.geojson$/;
+
+export function isSyntheticDrawnUploadFile(file: File | null | undefined): boolean {
+  return Boolean(file && SYNTHETIC_DRAWN_FILE_PATTERN.test(file.name));
+}
+
+export function uploadFileBaseName(file: File): string {
+  return file.name.replace(/\.[^/.]+$/, "").trim();
+}
+
 export function collectExistingUploadShapes(state: {
   loadedGeoJSON: unknown;
   multipolygons: unknown[];

@@ -14,7 +14,9 @@ import {
   buildPolygonLocationsFromGeojsons,
   collectExistingUploadShapes,
   geojsonsFromPrepareResponse,
+  isSyntheticDrawnUploadFile,
   mergePolygonLocations,
+  uploadFileBaseName,
 } from "./uploadShapes";
 import { area as turfArea } from "@turf/turf";
 import packageJson from "../../package.json";
@@ -1037,8 +1039,26 @@ const useStore = create<Store>()(
 
         get().addUploadShapes(shapes);
 
+        const updates: Partial<{
+          loadedFile: File;
+          bulkGroupName: string;
+          groupJobsTogether: boolean;
+        }> = {};
+
         if (!hadShapes) {
-          set({ loadedFile: file });
+          updates.loadedFile = file;
+        }
+
+        if (!hadShapes && shapes.length > 1 && !isSyntheticDrawnUploadFile(file)) {
+          const groupName = uploadFileBaseName(file);
+          if (groupName) {
+            updates.bulkGroupName = groupName;
+            updates.groupJobsTogether = false;
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          set(updates);
         }
       },
       addUploadGeojson: (geojson, name) => {
