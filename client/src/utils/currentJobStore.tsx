@@ -431,7 +431,7 @@ const useCurrentJobStore = create<Store & Setters & Actions>((set, get) => ({
     try {
       const response = await axiosInstance.get(
         `${API_URL}/historical/download?${params.toString()}`,
-        { responseType: "arraybuffer" }
+        { responseType: "arraybuffer", timeout: 0 }
       );
 
       if (response.data) {

@@ -143,19 +143,31 @@ router.get("/download", async (req, res) => {
       return res.status(404).json({ error: "No geotiff files found for this job" });
     }
 
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    let geojson = null;
+    if (clipped) {
+      geojson = loadJobGeojson(runDirectoryBase, job);
+      if (!geojson) {
+        return res.status(404).json({ error: "GeoJSON not found for this job" });
+      }
+    }
+
     const zipName = clipped ? `${job.name}_all_geotiffs_clipped.zip` : `${job.name}_all_geotiffs.zip`;
+    const archive = archiver("zip", { zlib: { level: clipped ? 1 : 9 } });
+
+    archive.on("error", (error) => {
+      console.error(`Error creating ZIP archive: ${error.message}`);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Error creating ZIP archive" });
+      } else if (!res.writableEnded) {
+        res.end();
+      }
+    });
 
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename=${zipName}`);
     archive.pipe(res);
 
     if (clipped) {
-      const geojson = loadJobGeojson(runDirectoryBase, job);
-      if (!geojson) {
-        return res.status(404).json({ error: "GeoJSON not found for this job" });
-      }
-
       for (const { filePath, archiveName } of files) {
         const buffer = await exportGeotiffFromFile(filePath, geojson);
         archive.append(buffer, { name: archiveName });
@@ -170,17 +182,12 @@ router.get("/download", async (req, res) => {
     }
 
     await archive.finalize();
-
-    archive.on("error", (error) => {
-      console.error(`Error creating ZIP archive: ${error.message}`);
-      if (!res.headersSent) {
-        res.status(500).json({ error: "Error creating ZIP archive" });
-      }
-    });
   } catch (error) {
     console.error(`Error processing request: ${error.message}`);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message || "Internal server error" });
+    } else if (!res.writableEnded) {
+      res.end();
     }
   }
 });

@@ -1,7 +1,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const parseGeoraster = require("georaster");
 const { applyPreviewPolygonClip, isNoData, NODATA_THRESHOLD } = require("./previewClip");
 
@@ -165,7 +165,28 @@ const flattenToFloat64Buffer = (georaster) => {
   return Buffer.from(flat.buffer);
 };
 
-const writeGeorasterBuffer = (georaster, sourcePath, { crop }) => {
+const runWriteGeotiff = (args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn("python3", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `python3 exited with code ${code}`));
+        return;
+      }
+      resolve();
+    });
+  });
+
+const writeGeorasterBuffer = async (georaster, sourcePath, { crop }) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "et-geotiff-"));
   const binPath = path.join(tmpDir, "pixels.bin");
   const outPath = path.join(tmpDir, "output.tif");
@@ -178,14 +199,10 @@ const writeGeorasterBuffer = (georaster, sourcePath, { crop }) => {
       args.push("full");
     }
 
-    const result = spawnSync("python3", args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
-    if (result.status !== 0) {
-      throw new Error(
-        `Failed to write GeoTIFF (${path.basename(sourcePath)}): ${result.stderr || result.stdout || "unknown error"}`
-      );
-    }
-
+    await runWriteGeotiff(args);
     return fs.readFileSync(outPath);
+  } catch (error) {
+    throw new Error(`Failed to write GeoTIFF (${path.basename(sourcePath)}): ${error.message}`);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
