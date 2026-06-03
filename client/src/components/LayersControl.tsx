@@ -30,6 +30,7 @@ import {
   formatElapsedTime,
   squareMetersToAcres,
   submitJobConfirmSx,
+  formatSubmitJobConfirmTitle,
 } from "../utils/helpers";
 import { useConfirm } from "material-ui-confirm";
 import { area as turfArea } from "@turf/turf";
@@ -589,7 +590,7 @@ const LayersControl: FC = () => {
               const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(yearCount)).trim();
 
               confirm({
-                title: "Submit job?",
+                title: formatSubmitJobConfirmTitle(jobName),
                 description: [
                   `Years requested: ${yearCount} (${startYear}–${endYear})`,
                   `Area: ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
@@ -618,6 +619,8 @@ const LayersControl: FC = () => {
               confirm(
                 createBulkSubmitConfirmOptions({
                   jobCount: jobs.length,
+                  groupJobsTogether: groupJobsTogether && jobs.length > 1,
+                  groupName: bulkGroupName.trim() || jobName.trim() || "Untitled Job",
                   yearsPerJob,
                   startYear,
                   endYear,
