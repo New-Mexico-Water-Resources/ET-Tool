@@ -14,6 +14,7 @@ import {
   buildPolygonLocationsFromGeojsons,
   collectExistingUploadShapes,
   geojsonsFromPrepareResponse,
+  mergePolygonLocations,
 } from "./uploadShapes";
 import { area as turfArea } from "@turf/turf";
 import packageJson from "../../package.json";
@@ -984,15 +985,25 @@ const useStore = create<Store>()(
           return;
         }
 
-        const existing = collectExistingUploadShapes(get());
+        const state = get();
+        const existing = collectExistingUploadShapes(state);
+        const previousLocations = state.locations;
         const combined = [...existing, ...newGeojsons];
         const { loadedGeoJSON, multipolygons } = applyUploadShapeList(combined);
+        const inheritFirstName =
+          multipolygons.length > 1 && previousLocations.length === 0 && existing.length > 0
+            ? state.jobName.trim()
+            : undefined;
         const locations =
           multipolygons.length > 0
-            ? buildPolygonLocationsFromGeojsons(
-                multipolygons,
-                get().minimumValidArea,
-                get().maximumValidArea
+            ? mergePolygonLocations(
+                buildPolygonLocationsFromGeojsons(
+                  multipolygons,
+                  state.minimumValidArea,
+                  state.maximumValidArea
+                ),
+                previousLocations,
+                inheritFirstName ? { inheritFirstName } : undefined
               )
             : [];
 

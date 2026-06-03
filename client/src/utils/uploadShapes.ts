@@ -27,6 +27,30 @@ export function applyUploadShapeList(geojsons: unknown[]): {
   return { loadedGeoJSON: null, multipolygons: geojsons };
 }
 
+export function mergePolygonLocations(
+  built: PolygonLocation[],
+  previous: PolygonLocation[],
+  options?: { inheritFirstName?: string }
+): PolygonLocation[] {
+  return built.map((location, index) => {
+    const prev = previous[index];
+    if (prev) {
+      return {
+        ...location,
+        name: prev.name,
+        visible: prev.visible,
+        comments: prev.comments,
+      };
+    }
+
+    if (index === 0 && options?.inheritFirstName) {
+      return { ...location, name: options.inheritFirstName };
+    }
+
+    return location;
+  });
+}
+
 export function buildPolygonLocationsFromGeojsons(
   multipolygons: unknown[],
   minimumValidArea: number,
