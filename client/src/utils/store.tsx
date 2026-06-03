@@ -331,7 +331,14 @@ const useStore = create<Store>()(
       showUploadDialog: true,
       setShowUploadDialog: (showUploadDialog) => set({ showUploadDialog }),
       activeJob: null,
-      setActiveJob: (activeJob) => set({ activeJob }),
+      setActiveJob: (activeJob) => {
+        if (!activeJob) {
+          void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
+            useCurrentJobStore.getState().setShowPreview(false);
+          });
+        }
+        set({ activeJob });
+      },
       jobLocateGeneration: 0,
       activeJobGroup: null,
       downloadingJobGroupId: null,
@@ -621,6 +628,9 @@ const useStore = create<Store>()(
         }
       },
       clearJobGroup: () => {
+        void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
+          useCurrentJobStore.getState().setShowPreview(false);
+        });
         set({
           activeJobGroup: null,
           activeJob: null,
@@ -711,7 +721,7 @@ const useStore = create<Store>()(
           previewStore.setPreviewMonth(1);
           previewStore.setPreviewYear(minStart);
           previewStore.setPreviewVariable("ET");
-          previewStore.setShowPreview(jobs.some((job) => job.status === "Complete"));
+          previewStore.setShowPreview(false);
         } catch (error: any) {
           set({
             errorMessage: error?.message || "Error loading job group",
@@ -722,9 +732,9 @@ const useStore = create<Store>()(
       loadJob: (job) => {
         set({ activeJobGroup: null, activeJob: job, showUploadDialog: false, previewMode: false });
 
-        const syncPreviewVisibility = () => {
+        const resetPreviewVisibility = () => {
           void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
-            useCurrentJobStore.getState().setShowPreview(job.status === "Complete");
+            useCurrentJobStore.getState().setShowPreview(false);
           });
         };
 
@@ -734,7 +744,7 @@ const useStore = create<Store>()(
             multipolygons: [],
             jobLocateGeneration: get().jobLocateGeneration + 1,
           });
-          syncPreviewVisibility();
+          resetPreviewVisibility();
           return;
         }
 
@@ -762,7 +772,7 @@ const useStore = create<Store>()(
               multipolygons,
               jobLocateGeneration: get().jobLocateGeneration + 1,
             });
-            syncPreviewVisibility();
+            resetPreviewVisibility();
           })
           .catch((error) => {
             set({ loadedGeoJSON: null, multipolygons: [], errorMessage: error?.message || "Error loading job" });
@@ -1041,6 +1051,9 @@ const useStore = create<Store>()(
         }
       },
       closeNewJob: () => {
+        void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
+          useCurrentJobStore.getState().setShowPreview(false);
+        });
         set({
           showUploadDialog: false,
           previewMode: false,

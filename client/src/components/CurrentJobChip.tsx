@@ -76,6 +76,7 @@ const CurrentJobChip = () => {
     bulkGeotiffDownloadJobId !== null && bulkGeotiffDownloadJobId === activeJob?.key;
   const queue = useStore((state) => state.queue);
   const backlog = useStore((state) => state.backlog);
+  const jobLocateGeneration = useStore((state) => state.jobLocateGeneration);
 
   const [previewMonth, setPreviewMonth] = useCurrentJobStore((state) => [state.previewMonth, state.setPreviewMonth]);
   const [previewYear, setPreviewYear] = useCurrentJobStore((state) => [state.previewYear, state.setPreviewYear]);
@@ -98,13 +99,7 @@ const CurrentJobChip = () => {
 
   useEffect(() => {
     setShowJobControls(false);
-  }, [activeJob?.key, activeJobGroup?.groupId]);
-
-  useEffect(() => {
-    if (activeJob && showPreview) {
-      setShowJobControls(true);
-    }
-  }, [activeJob?.key, showPreview]);
+  }, [activeJob?.key, activeJobGroup?.groupId, jobLocateGeneration]);
 
   const [dynamicPreviewColorScale, setDynamicPreviewColorScale] = useCurrentJobStore((state) => [
     state.dynamicPreviewColorScale,

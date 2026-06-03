@@ -382,12 +382,13 @@ const ActiveMonthlyMapLayer: FC = () => {
   }, [map, cleanupLayers]);
 
   useEffect(() => {
-    if (!showPreview) {
+    if (!showPreview || !activeJobKey) {
       cleanupLayers();
       return;
     }
 
     if (useStore.getState().activeJobGroup || !previewVariable || !isPreviewReady) {
+      cleanupLayers();
       return;
     }
 
