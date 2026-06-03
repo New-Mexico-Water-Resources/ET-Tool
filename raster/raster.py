@@ -3181,7 +3181,7 @@ class Raster:
         if geometry is None:
             geometry = self.geometry
 
-        if np.size(array) == 1:
+        if np.ndim(array) < 2:
             return array
 
         if nodata is None:

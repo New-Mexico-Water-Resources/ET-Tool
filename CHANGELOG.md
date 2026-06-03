@@ -2,6 +2,7 @@
 - Adds unit, integration, and data quality test cases
 - Updates GitHub CI pipeline to run unit tests on every PR and unit + integration tests on PRs to main
 - Fixes data coverage gap issue discovered with PPT and ET min/max for older time ranges
+- Fixes bug with region that is larger than a single pixel, but doesn't fully cover any pixel
 
 ## 1.38.0 (2026-05-29)
 

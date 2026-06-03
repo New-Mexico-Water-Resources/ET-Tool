@@ -4,34 +4,44 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Cache conda packages
+        uses: actions/cache@v4
+        with:
+          path: ~/conda_pkgs_dir
+          key: conda-unit-${{ runner.os }}-${{ hashFiles('ci/water_rights_ci-linux-64.lock', 'tests/requirements.txt') }}
 
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
           miniforge-version: latest
-          channels: conda-forge
-          channel-priority: strict
           activate-environment: et-tool-test
-          environment-file: water_rights.yml
-          python-version: "3.9"
-          use-mamba: true
-          auto-update-conda: true
+          environment-file: ci/water_rights_ci-linux-64.lock
+          use-only-tar-bz2: true
+          auto-update-conda: false
+          run-post: false
 
       - name: Install test dependencies
         shell: bash -l {0}
-        run: pip install -r tests/requirements.txt
+        run: |
+          pip install area
+          pip install -r tests/requirements.txt
 
       - name: Run unit tests
         shell: bash -l {0}
         env:
           PYTHONPATH: .
+          MPLBACKEND: Agg
         run: python -m pytest tests/unit -m unit -v
 
   integration-tests:
@@ -41,7 +51,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -50,26 +60,33 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
+      - name: Cache conda packages
+        uses: actions/cache@v4
+        with:
+          path: ~/conda_pkgs_dir
+          key: conda-integration-${{ runner.os }}-${{ hashFiles('ci/water_rights-linux-64.lock', 'tests/requirements.txt') }}
+
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
           miniforge-version: latest
-          channels: conda-forge
-          channel-priority: strict
           activate-environment: et-tool-test
-          environment-file: water_rights.yml
-          python-version: "3.9"
-          use-mamba: true
-          auto-update-conda: true
+          environment-file: ci/water_rights-linux-64.lock
+          use-only-tar-bz2: true
+          auto-update-conda: false
+          run-post: false
 
       - name: Install test dependencies
         shell: bash -l {0}
-        run: pip install -r tests/requirements.txt
+        run: |
+          pip install area
+          pip install -r tests/requirements.txt
 
       - name: Run integration tests
         shell: bash -l {0}
         env:
           PYTHONPATH: .
+          MPLBACKEND: Agg
           S3_INPUT_BUCKET: ose-dev-inputs
           S3_REGION: us-west-2
           INTEGRATION_TEST_YEAR: "2021"

@@ -119,6 +119,19 @@ def generate_subset(
         y_min = centroid.y - height_meters / 2
         y_max = centroid.y + height_meters / 2
 
+    min_subset_pixels = 3
+    if target_cols < min_subset_pixels:
+        target_cols = min_subset_pixels
+        width_meters = target_cols * cell_size
+        x_min = centroid.x - width_meters / 2
+        x_max = centroid.x + width_meters / 2
+
+    if target_rows < min_subset_pixels:
+        target_rows = min_subset_pixels
+        height_meters = target_rows * cell_size
+        y_min = centroid.y - height_meters / 2
+        y_max = centroid.y + height_meters / 2
+
     target_affine = Affine(cell_size, 0, x_min, 0, -cell_size, y_max)
 
     target_geometry = RasterGrid.from_affine(affine=target_affine, rows=target_rows, cols=target_cols, crs=target_CRS)
@@ -144,10 +157,18 @@ def generate_subset(
                 target_raster,
             )
 
+    if target_raster is None:
+        raise BlankOutput(
+            f"no data found for date {acquisition_date} variable {variable_name} ROI {ROI_name} from tiles: {', '.join(tiles)}"
+        )
+
     if not allow_blank and np.all(np.isnan(target_raster)):
         raise BlankOutput(
             f"blank output raster for date {acquisition_date} variable {variable_name} ROI {ROI_name} from tiles: {', '.join(tiles)}"
         )
+
+    if isinstance(target_raster, np.ndarray):
+        target_raster = Raster(target_raster, geometry=target_geometry, cmap=ET_COLORMAP)
 
     if not exists(subset_filename):
         logger.info("writing subset: {}".format(subset_filename))
