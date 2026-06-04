@@ -9,48 +9,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type MutableR
 import { createPortal } from "react-dom";
 import { useMap } from "react-leaflet";
 import useStore from "../utils/store";
-
-function parseLatLon(raw: string): { lat: number; lng: number } | null {
-  const t = raw.trim();
-  if (!t) {
-    return null;
-  }
-
-  const commaMatch = t.match(/^(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)$/);
-  if (commaMatch) {
-    const a = parseFloat(commaMatch[1]);
-    const b = parseFloat(commaMatch[2]);
-    return normalizeLatLngPair(a, b);
-  }
-
-  const parts = t.split(/\s+/).filter(Boolean);
-  if (parts.length === 2) {
-    const a = parseFloat(parts[0]);
-    const b = parseFloat(parts[1]);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) {
-      return null;
-    }
-    return normalizeLatLngPair(a, b);
-  }
-
-  return null;
-}
-
-function normalizeLatLngPair(a: number, b: number): { lat: number; lng: number } | null {
-  const asLatFirst = Math.abs(a) <= 90 && Math.abs(b) <= 180;
-  const asLonFirst = Math.abs(b) <= 90 && Math.abs(a) <= 180 && Math.abs(a) > 90;
-
-  if (asLatFirst && !asLonFirst) {
-    return { lat: a, lng: b };
-  }
-  if (asLonFirst || (!asLatFirst && Math.abs(b) <= 90 && Math.abs(a) <= 180)) {
-    return { lat: b, lng: a };
-  }
-  if (asLatFirst) {
-    return { lat: a, lng: b };
-  }
-  return null;
-}
+import { isCoordinateSearchQuery, parseSearchCoordinates } from "../utils/mapSearchCoordinates";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
@@ -201,7 +160,7 @@ const SearchControlInner = ({ map }: { map: L.Map }) => {
     }
 
     const q = query.trim();
-    if (q.length < ADDRESS_SUGGEST_MIN_CHARS || parseLatLon(q)) {
+    if (q.length < ADDRESS_SUGGEST_MIN_CHARS || isCoordinateSearchQuery(q)) {
       suggestAbortRef.current?.abort();
       suggestAbortRef.current = null;
       setSuggestions([]);
@@ -291,9 +250,9 @@ const SearchControlInner = ({ map }: { map: L.Map }) => {
       return;
     }
 
-    const coords = parseLatLon(q);
+    const coords = parseSearchCoordinates(q);
     if (coords) {
-      goTo(coords.lat, coords.lng, `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`);
+      goTo(coords.lat, coords.lng, coords.label);
       return;
     }
 
@@ -336,7 +295,7 @@ const SearchControlInner = ({ map }: { map: L.Map }) => {
       className={expanded ? "map-search-root map-search-root--expanded" : "map-search-root map-search-root--collapsed"}
     >
       {!expanded ? (
-        <Tooltip title="Search by address or lat, lon">
+        <Tooltip title="Search by address, lat/lon, or UTM (e.g. 13 400000 3890000 or 10 4587346N 487349E)">
           <IconButton
             type="button"
             size="small"
@@ -482,7 +441,7 @@ const SearchControlInner = ({ map }: { map: L.Map }) => {
                 fullWidth
                 variant="standard"
                 hiddenLabel
-                placeholder="Address or lat, lon"
+                placeholder="Address, lat/lon, or UTM"
                 InputProps={{
                   ...params.InputProps,
                   disableUnderline: true,
