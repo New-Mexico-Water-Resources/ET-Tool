@@ -22,6 +22,7 @@
     "@turf/turf": "^7.1.0",
     "axios": "^1.7.2",
     "chroma-js": "^3.1.2",
+    "proj4": "^2.20.2",
     "dayjs": "^1.11.13",
     "georaster": "^1.6.0",
     "georaster-layer-for-leaflet": "^3.10.0",
