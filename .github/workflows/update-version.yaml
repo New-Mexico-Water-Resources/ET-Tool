@@ -12,16 +12,23 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '21'
+          node-version: "21"
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: ./client
-        run: yarn install
+        run: pnpm install --frozen-lockfile
 
       - name: Configure Git
         run: |
@@ -41,7 +48,7 @@ jobs:
         id: bump_version
         working-directory: ./client
         run: |
-          NEW_VERSION=$(npm version ${{ steps.version_type.outputs.version_type }})
+          NEW_VERSION=$(pnpm version ${{ steps.version_type.outputs.version_type }})
           git tag -a $NEW_VERSION -m "Bump version to $NEW_VERSION"
           echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
 

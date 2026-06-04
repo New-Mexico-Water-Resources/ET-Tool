@@ -16,7 +16,7 @@
     "@fontsource/roboto": "^5.0.13",
     "@melloware/react-logviewer": "^5.1.1",
     "@mui/icons-material": "^5.15.18",
-    "@mui/material": "^6.0.0-alpha.8",
+    "@mui/material": "6.5.0",
     "@mui/x-data-grid": "^7.7.0",
     "@mui/x-date-pickers": "^7.23.6",
     "@turf/turf": "^7.1.0",

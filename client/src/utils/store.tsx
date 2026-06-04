@@ -20,6 +20,7 @@ import {
 } from "./uploadShapes";
 import { area as turfArea } from "@turf/turf";
 import packageJson from "../../package.json";
+import { fetchCdlReleaseYear, getCachedCdlReleaseYear } from "./cdlYear";
 
 export interface PolygonLocation {
   visible: boolean;
@@ -256,6 +257,8 @@ interface Store {
   fetchDroughtMonitorData: () => void;
   droughtMonitorFetchedDate: string;
   fetchingDroughtMonitorData: boolean;
+  cdlReleaseYear: number | null;
+  fetchCdlReleaseYearIfNeeded: () => void;
 }
 
 const useStore = create<Store>()(
@@ -1439,6 +1442,27 @@ const useStore = create<Store>()(
               fetchingDroughtMonitorData: false,
             });
           });
+      },
+      cdlReleaseYear: getCachedCdlReleaseYear(),
+      fetchCdlReleaseYearIfNeeded: () => {
+        const cached = getCachedCdlReleaseYear();
+        if (cached != null) {
+          if (get().cdlReleaseYear !== cached) {
+            set({ cdlReleaseYear: cached });
+          }
+          return;
+        }
+
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        void fetchCdlReleaseYear(axiosInstance).then((year) => {
+          if (year != null) {
+            set({ cdlReleaseYear: year });
+          }
+        });
       },
     })),
     {

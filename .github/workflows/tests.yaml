@@ -45,6 +45,37 @@ jobs:
           MPLBACKEND: Agg
         run: python -m pytest tests/unit -m unit -v --rootdir=${{ github.workspace }}
 
+  client-build:
+    if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "21"
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ./client
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare changelog for build
+        run: cp CHANGELOG.md client/CHANGELOG.md
+
+      - name: Build client
+        working-directory: ./client
+        run: pnpm build
+
   integration-tests:
     if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main'
     runs-on: ubuntu-latest

@@ -91,10 +91,12 @@ export const submitJobConfirmSx = {
   },
   dialogProps: {
     maxWidth: false,
-    PaperProps: {
-      sx: {
-        width: "max-content",
-        maxWidth: "min(480px, calc(100vw - 32px))",
+    slotProps: {
+      paper: {
+        sx: {
+          width: "max-content",
+          maxWidth: "min(480px, calc(100vw - 32px))",
+        },
       },
     },
   },

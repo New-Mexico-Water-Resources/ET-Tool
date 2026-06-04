@@ -264,3 +264,17 @@ export const MAP_LAYER_OPTIONS = {
 };
 
 export const QUEUE_STATUSES = ["Pending", "In Progress", "WaitingApproval", "Paused"];
+
+export function getCdlDisplayYear(
+  layer: { wmsLayers?: string } | undefined,
+  releaseYear?: number | null
+): number | undefined {
+  if (releaseYear != null) {
+    return releaseYear;
+  }
+  if (!layer) {
+    return undefined;
+  }
+  const match = layer.wmsLayers?.match(/^cdl_(\d{4})$/);
+  return match ? Number(match[1]) : undefined;
+}

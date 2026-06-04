@@ -635,6 +635,8 @@ const ActiveMonthlyMapLayer: FC = () => {
   }
 
   return (
+    showPreview &&
+    activeJob &&
     activePreviewMinValue !== null &&
     activePreviewMinValue !== undefined &&
     activePreviewMinValue !== activePreviewMaxValue && (

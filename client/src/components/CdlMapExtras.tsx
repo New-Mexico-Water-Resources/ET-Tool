@@ -210,9 +210,8 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
             display: "flex",
             flexDirection: "column",
             alignItems: "stretch",
-            gap: 1.25,
-            pr: 1,
-            pb: 1.25,
+            gap: 1,
+            p: 1,
             flexShrink: 0,
             borderBottom: "1px solid var(--st-gray-70)",
             color: "var(--st-gray-20)",
@@ -273,8 +272,7 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
             minHeight: 0,
             overscrollBehavior: "contain",
             overflowY: "auto",
-            py: 1,
-            px: 0,
+            p: 1,
             touchAction: "pan-y",
             color: "var(--st-gray-20)",
             borderColor: "var(--st-gray-70)",
@@ -282,7 +280,7 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
         >
           <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
             {filteredRows.length === 0 ? (
-              <Typography variant="body2" sx={{ px: 2, py: 2, color: "var(--st-gray-40)" }}>
+              <Typography variant="body2" sx={{ py: 1, color: "var(--st-gray-40)" }}>
                 No crops match “{search.trim()}”.
               </Typography>
             ) : (
@@ -293,8 +291,8 @@ export const CdlLegendFab: FC<CdlLegendFabProps> = ({ title, rightPx }) => {
                   sx={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 1.25,
-                    px: 2,
+                    gap: 1,
+                    px: 1,
                     py: 0.5,
                     "&:nth-of-type(even)": { backgroundColor: "rgba(255,255,255,0.06)" },
                   }}
