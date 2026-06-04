@@ -45,3 +45,4 @@ temp_data
 tests/output
 .pnpm-store
 pipelines/fix_manifest_gaps.ipynb
+**/_*.ipynb
