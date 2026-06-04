@@ -14,6 +14,7 @@
 - Fixes CDL tooltip not showing bug
 - Fixes bug causing polygon name to be lost if edited in between polygon creation steps
 - Prevents download of all clipped geotiffs from causing the API to hang
+- Fixes bug with user list not showing for admins
 
 ## 1.38.0 (2026-05-29)
 
