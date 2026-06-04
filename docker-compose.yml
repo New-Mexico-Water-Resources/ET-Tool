@@ -21,7 +21,9 @@ services:
     container_name: water-rights-visualizer-api
     restart: always
     command: "/init-api.sh ${WATER_RIGHTS_SOURCE:-S3}"
-    env_file: ".env"
+    env_file:
+      - .env
+      - .env.secrets
     ports:
       - "5000:5000"
     depends_on:
