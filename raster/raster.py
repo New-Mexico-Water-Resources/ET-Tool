@@ -3181,7 +3181,7 @@ class Raster:
         if geometry is None:
             geometry = self.geometry
 
-        if np.size(array) == 1:
+        if np.ndim(array) < 2:
             return array
 
         if nodata is None:
@@ -3238,6 +3238,13 @@ class Raster:
 
         result.shape = new_shape
         subset_geometry = self.geometry[y_slice, x_slice]
+        if not isinstance(subset_geometry, RasterGeometry):
+            y_start, y_end, _ = y_slice.indices(self.shape[0])
+            x_start, x_end, _ = x_slice.indices(self.shape[1])
+            subset_geometry = self.geometry._subset_index(
+                slice(y_start, y_end, None),
+                slice(x_start, x_end, None),
+            )
         raster = self.contain(result, geometry=subset_geometry)
 
         return raster

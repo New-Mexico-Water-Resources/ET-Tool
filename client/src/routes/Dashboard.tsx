@@ -1,5 +1,5 @@
 import { Alert, Button, Snackbar, Typography } from "@mui/material";
-import { useCallback, useEffect, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo } from "react";
 import { MapContainer, ScaleControl, ZoomControl } from "react-leaflet";
 import useStore, { MapLayer } from "../utils/store";
 
@@ -15,14 +15,30 @@ import LoginButton from "../components/LoginButton";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import UsersList from "../components/UsersList";
 import MapLayersPanel from "../components/MapLayersPanel";
-import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
+import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS, ARD_TILES_DATA_VERSION } from "../utils/constants";
 import ActiveMapLayer from "../components/ActiveMapLayer";
 import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
+import PixelDrawControl from "../components/PixelDrawControl";
+import MapSearchControl from "../components/MapSearchControl";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
+import GroupPreviewMapLayer from "../components/GroupPreviewMapLayer";
 import ColorScale from "../components/ColorScale";
+import { CdlHoverIdentify, CdlLegendFab } from "../components/CdlMapExtras";
 import useCurrentJobStore from "../utils/currentJobStore";
 import dayjs from "dayjs";
+
+const QueuePollingEffect = memo(() => {
+  const pollCount = useStore((s) => s.pollCount);
+  const fetchQueue = useStore((s) => s.fetchQueue);
+  const { isAuthenticated, user } = useAuth0();
+
+  useEffect(() => {
+    fetchQueue();
+  }, [pollCount, isAuthenticated, user?.email_verified, fetchQueue]);
+
+  return null;
+});
 
 const Dashboard = () => {
   const loadedGeoJSON = useStore((state) => state.loadedGeoJSON);
@@ -38,8 +54,6 @@ const Dashboard = () => {
   const setIsMapLayersPanelOpen = useStore((state) => state.setIsMapLayersPanelOpen);
   const isRightPanelOpen = useStore((state) => state.isRightPanelOpen);
 
-  const [pollCount, increasePollCount] = useStore((state) => [state.pollCount, state.increasePollCount]);
-  const fetchQueue = useStore((state) => state.fetchQueue);
   const reverifyEmail = useStore((state) => state.reverifyEmail);
 
   const { isAuthenticated, user, loginWithRedirect } = useAuth0();
@@ -49,10 +63,12 @@ const Dashboard = () => {
   const fetchARDTiles = useStore((state) => state.fetchARDTiles);
   const showARDTiles = useStore((state) => state.showARDTiles);
   const ardTiles = useStore((state) => state.ardTiles);
+  const ardTilesDataVersion = useStore((state) => state.ardTilesDataVersion);
   const fetchDroughtMonitorData = useStore((state) => state.fetchDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
   const activeJob = useStore((state) => state.activeJob);
+  const activeJobGroup = useStore((state) => state.activeJobGroup);
   const setActiveJob = useStore((state) => state.setActiveJob);
 
   const setLoadedGeoJSON = useStore((state) => state.setLoadedGeoJSON);
@@ -87,6 +103,7 @@ const Dashboard = () => {
   const comparisonMode = useStore((state) => state.comparisonMode);
 
   const showPreview = useCurrentJobStore((state) => state.showPreview);
+  const jobLocateGeneration = useStore((state) => state.jobLocateGeneration);
 
   const minColor = useMemo(() => {
     if (refreshType === "static") {
@@ -128,11 +145,22 @@ const Dashboard = () => {
     return !!activeMapLayer?.showColorScale;
   }, [activeMapLayer?.showColorScale]);
 
+  const showWmsLegend = useMemo(
+    () => !!(activeMapLayer?.wmsLegend && activeMapLayer?.wmsLayers),
+    [activeMapLayer?.wmsLegend, activeMapLayer?.wmsLayers]
+  );
+
+  const showRightMapLegend = showColorScale || showWmsLegend;
+
   useEffect(() => {
-    if (showARDTiles && !Object.keys(ardTiles).length) {
+    const needsFetch =
+      showARDTiles &&
+      (!Object.keys(ardTiles).length || ardTilesDataVersion !== ARD_TILES_DATA_VERSION);
+
+    if (needsFetch) {
       fetchARDTiles();
     }
-  }, [showARDTiles, ardTiles, fetchARDTiles]);
+  }, [showARDTiles, ardTiles, ardTilesDataVersion, fetchARDTiles]);
 
   const loadVersion = useStore((state) => state.loadVersion);
 
@@ -167,10 +195,6 @@ const Dashboard = () => {
     };
   }, [handleKeyPress]);
 
-  useEffect(() => {
-    fetchQueue();
-  }, [pollCount, isAuthenticated, user?.email_verified]);
-
   // Poll for email verification
   useEffect(() => {
     const interval = setInterval(() => {
@@ -197,7 +221,7 @@ const Dashboard = () => {
     loadVersion();
 
     const interval = setInterval(() => {
-      increasePollCount();
+      useStore.getState().increasePollCount();
     }, 5000);
 
     return () => clearInterval(interval);
@@ -213,7 +237,7 @@ const Dashboard = () => {
           const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
           drawActions.forEach((action) => {
             if (action instanceof HTMLElement && action) {
-              action.style.right = showColorScale ? "78px" : "38px";
+              action.style.right = showRightMapLegend ? "78px" : "38px";
             }
           });
         }
@@ -227,13 +251,13 @@ const Dashboard = () => {
           const drawActions = document.querySelectorAll(".leaflet-touch .leaflet-right .leaflet-draw-actions");
           drawActions.forEach((action) => {
             if (action instanceof HTMLElement && action) {
-              action.style.right = showColorScale ? "78px" : "38px";
+              action.style.right = showRightMapLegend ? "78px" : "38px";
             }
           });
         }
       });
     }
-  }, [isRightPanelOpen, showColorScale]);
+  }, [isRightPanelOpen, showRightMapLegend]);
 
   const loadedGeoJSONTooltipText = useMemo(() => {
     if (!activeJob) {
@@ -254,8 +278,9 @@ const Dashboard = () => {
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+      <QueuePollingEffect />
       <NavToolbar />
-      {isAuthenticated && multipolygons.length <= 1 && <CurrentJobChip />}
+      {isAuthenticated && activeJob && (activeJobGroup || multipolygons.length <= 1) && <CurrentJobChip />}
       {isAuthenticated && showUploadDialog && <LayersControl />}
       {(!isAuthenticated || (!canReadJobs && userInfo)) && (
         <div
@@ -360,103 +385,121 @@ const Dashboard = () => {
       <JobQueue />
       {<MapLayersPanel />}
       {isAdmin && <UsersList />}
-      <MapContainer
-        className="map-container"
-        center={[34.5199, -105.8701]}
-        zoom={7}
-        zoomControl={false}
-        scrollWheelZoom={true}
-        maxZoom={activeMapLayer.maxZoom}
-        crs={CRS.EPSG3857}
+      <div
+        style={{
+          position: "relative",
+          width: "100vw",
+          height: "calc(100vh - 45px)",
+        }}
       >
-        <ActiveMonthlyMapLayer />
-        <ActiveMapLayer />
-        <ZoomControl position="topright" />
-        <DrawControls />
-        <ScaleControl position="bottomleft" />
+        <MapContainer
+          className="map-container"
+          style={{ width: "100%", height: "100%" }}
+          center={[34.5199, -105.8701]}
+          zoom={7}
+          zoomControl={false}
+          scrollWheelZoom={true}
+          maxZoom={activeMapLayer.maxZoom}
+          crs={CRS.EPSG3857}
+        >
+          {!activeJobGroup && <ActiveMonthlyMapLayer />}
+          <GroupPreviewMapLayer />
+          <ActiveMapLayer />
+          {showWmsLegend && <CdlHoverIdentify />}
+          <ZoomControl position="topright" />
+          <DrawControls />
+          <PixelDrawControl />
+          <MapSearchControl />
+          <ScaleControl position="bottomleft" />
 
-        {showColorScale && (
-          <ColorScale
-            label={`${activeMapLayer?.name} (${
-              tileDate
+          {showColorScale && (
+            <ColorScale
+              label={`${activeMapLayer?.name} (${tileDate
                 ? new Date(tileDate).toLocaleString("default", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
                 : new Date(activeMapLayer?.time).toLocaleString("default", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })
-            })`}
-            maxValue={maxColor}
-            minValue={minColor}
-            colorScale={colorScale}
-            style={{ right: isRightPanelOpen ? "350px" : "50px", transition: "right 0.1s ease" }}
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+                })`}
+              maxValue={maxColor}
+              minValue={minColor}
+              colorScale={colorScale}
+              style={{ right: isRightPanelOpen ? "350px" : "50px", transition: "right 0.1s ease" }}
+            />
+          )}
+          {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
+          {showAllCompletedJobs &&
+            allGeoJSONs &&
+            allGeoJSONs.length > 0 &&
+            allGeoJSONs.map((geojson) => {
+              if (!geojson?.geojson) {
+                return null;
+              }
+
+              let dateTooltip = "";
+              if (geojson.status === "Complete") {
+                dateTooltip = `Completed: ${dayjs(geojson.ended).format("MM/DD/YYYY")}`;
+              } else if (geojson.started) {
+                dateTooltip = `Started: ${dayjs(geojson.started).format("MM/DD/YYYY")}`;
+              } else {
+                dateTooltip = `Submitted: ${dayjs(geojson.submitted).format("MM/DD/YYYY")}`;
+              }
+
+              const tooltipText = `Name: ${geojson?.name || "N/A"}\n${dateTooltip}\nStatus: ${geojson?.status || "N/A"
+                }\nRequested by: ${geojson?.user?.name || "Unknown"}`;
+
+              return (
+                <GeoJSONLayer
+                  key={geojson.key}
+                  data={geojson.geojson}
+                  validateBounds={false}
+                  fitToBounds={false}
+                  showLabels={true}
+                  showAreaLabel={true}
+                  tooltipText={tooltipText}
+                  onSelect={() => {
+                    const newJob = { ...geojson };
+                    newJob.loaded_geo_json = geojson.geojson;
+                    setActiveJob(newJob);
+                    setLoadedGeoJSON(newJob.loaded_geo_json);
+                    closeNewJob();
+                  }}
+                />
+              );
+            })}
+          {visibleReferenceGeoJSONs.map((layer) => (
+            <GeoJSONLayer
+              key={layer.name}
+              data={layer.droughtMonitor ? droughtMonitorData : layer.data}
+              isDroughtMonitor={layer.droughtMonitor}
+              validateBounds={false}
+              fitToBounds={false}
+              showLabels={true}
+            />
+          ))}
+          <GeoJSONLayer
+            data={loadedGeoJSON}
+            tooltipText={loadedGeoJSONTooltipText}
+            showLabels={!showPreview}
+            showAreaLabel={!showPreview}
+            outline={showPreview}
+            fitToBounds={!showPreview}
+            locateGeneration={jobLocateGeneration}
+          />
+          <MultiGeoJSONLayer data={multipolygons} locations={locations} />
+        </MapContainer>
+        {showWmsLegend && (
+          <CdlLegendFab
+            title={`${activeMapLayer?.name ?? "USDA Crop and Land-Cover"} Legend`}
+            rightPx={isRightPanelOpen ? 350 : 50}
           />
         )}
-        {ardTiles && showARDTiles && <GeoJSONLayer data={ardTiles} validateBounds={false} fitToBounds={false} />}
-        {showAllCompletedJobs &&
-          allGeoJSONs &&
-          allGeoJSONs.length > 0 &&
-          allGeoJSONs.map((geojson) => {
-            if (!geojson?.geojson) {
-              return null;
-            }
-
-            let dateTooltip = "";
-            if (geojson.status === "Complete") {
-              dateTooltip = `Completed: ${dayjs(geojson.ended).format("MM/DD/YYYY")}`;
-            } else if (geojson.started) {
-              dateTooltip = `Started: ${dayjs(geojson.started).format("MM/DD/YYYY")}`;
-            } else {
-              dateTooltip = `Submitted: ${dayjs(geojson.submitted).format("MM/DD/YYYY")}`;
-            }
-
-            const tooltipText = `Name: ${geojson?.name || "N/A"}\n${dateTooltip}\nStatus: ${
-              geojson?.status || "N/A"
-            }\nRequested by: ${geojson?.user?.name || "Unknown"}`;
-
-            return (
-              <GeoJSONLayer
-                key={geojson.key}
-                data={geojson.geojson}
-                validateBounds={false}
-                fitToBounds={false}
-                showLabels={true}
-                showAreaLabel={true}
-                tooltipText={tooltipText}
-                onSelect={() => {
-                  const newJob = { ...geojson };
-                  newJob.loaded_geo_json = geojson.geojson;
-                  setActiveJob(newJob);
-                  setLoadedGeoJSON(newJob.loaded_geo_json);
-                  closeNewJob();
-                }}
-              />
-            );
-          })}
-        {visibleReferenceGeoJSONs.map((layer) => (
-          <GeoJSONLayer
-            key={layer.name}
-            data={layer.droughtMonitor ? droughtMonitorData : layer.data}
-            isDroughtMonitor={layer.droughtMonitor}
-            validateBounds={false}
-            fitToBounds={false}
-            showLabels={true}
-          />
-        ))}
-        <GeoJSONLayer
-          data={loadedGeoJSON}
-          tooltipText={loadedGeoJSONTooltipText}
-          showLabels={!showPreview}
-          showAreaLabel={!showPreview}
-          outline={showPreview}
-          fitToBounds={!showPreview}
-        />
-        <MultiGeoJSONLayer data={multipolygons} locations={locations} />
-      </MapContainer>
+      </div>
       <Snackbar
         open={successMessage.length > 0}
         autoHideDuration={5000}

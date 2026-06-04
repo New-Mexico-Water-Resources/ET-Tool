@@ -247,8 +247,11 @@ def generate_stack(
                 # # Correct the PET for the month, then fill in the month
                 days_in_month = get_days_in_month(year, month)
                 middle_day_of_month = datetime(year, month, days_in_month // 2).date()
-                avg_hours_of_sunlight = calculate_hours_of_sunlight(ROI_latlon, middle_day_of_month)
-                PET_sparse_stack[month - 1, :, :] = PET_subset / 24 * avg_hours_of_sunlight
+                if not source.daylight_corrected:
+                    avg_hours_of_sunlight = calculate_hours_of_sunlight(ROI_latlon, middle_day_of_month)
+                    PET_sparse_stack[month - 1, :, :] = PET_subset / 24 * avg_hours_of_sunlight
+                else:
+                    PET_sparse_stack[month - 1, :, :] = PET_subset
             elif daily_interpolation and source and source.monthly:
                 # Fill in the rest of the month
                 day_of_year, last_doy = get_one_month_slice(year, month)

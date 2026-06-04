@@ -9,7 +9,7 @@ dotenv.config();
 // Load .env.keys
 dotenv.config({ path: path.join(__dirname, "..", ".env.secrets") });
 
-const port = 5000;
+const port = process.env.API_PORT || 5000;
 const server_directory = __dirname;
 const project_directory = path.dirname(__dirname);
 // const run_directory_base = '~/data/water_rights_runs';
@@ -23,8 +23,8 @@ const client_id = process.env.AUTH0_CLIENT_ID;
 const issuer_base_url = process.env.AUTH0_ISSUER_BASE_URL;
 const auth0_domain = process.env.AUTH0_DOMAIN;
 const auth0_audience = process.env.AUTH0_AUDIENCE;
-const auth0_management_client_id = process.env.AUTHO_MGMT_CLIENT_ID;
-const auth0_management_client_secret = process.env.AUTHO_MGMT_CLIENT_SECRET;
+const auth0_management_client_id = process.env.AUTH0_MGMT_CLIENT_ID;
+const auth0_management_client_secret = process.env.AUTH0_MGMT_CLIENT_SECRET;
 const auth0_new_user_role = process.env.AUTH0_NEW_USER_ROLE;
 const dev_mode = process.env.DEV_MODE === "true";
 

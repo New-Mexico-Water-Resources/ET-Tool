@@ -39,6 +39,14 @@ router.post("/start_run", async (req, res) => {
   let start_year = req.body.startYear;
   let end_year = req.body.endYear;
   let geojson = req.body.geojson;
+  let group_id = req.body.groupId;
+  let group_name = req.body.groupName;
+  if (group_id) {
+    group_id = String(group_id).replace(/[^a-zA-Z0-9_-]/g, "");
+  }
+  if (group_name) {
+    group_name = String(group_name).replace(/[^a-zA-Z0-9_+. -]/g, "");
+  }
   let epoch = Date.now();
   let key = name + "_" + start_year + "_" + end_year + "_" + epoch;
 
@@ -159,6 +167,13 @@ router.post("/start_run", async (req, res) => {
     end_year: parseInt(end_year),
     user: userInfo,
   };
+
+  if (group_id) {
+    entry.group_id = group_id;
+    if (group_name) {
+      entry.group_name = group_name;
+    }
+  }
 
   let db = await constants.connectToDatabase();
   let collection = db.collection(constants.report_queue_collection);

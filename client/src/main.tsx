@@ -4,6 +4,9 @@ import { Auth0Provider } from "@auth0/auth0-react";
 
 import App from "./App.tsx";
 import "./index.css";
+import { configureLeafletDefaultIcons } from "./utils/leafletIcons.ts";
+
+configureLeafletDefaultIcons();
 import { authConfig } from "./utils/constants.tsx";
 import { AuthProvider } from "./utils/authContext.tsx";
 

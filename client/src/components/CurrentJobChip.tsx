@@ -1,4 +1,7 @@
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Button,
   FormControl,
   InputLabel,
@@ -10,27 +13,54 @@ import {
   Menu,
   Slider,
   TextField,
+  Checkbox,
+  FormControlLabel,
+  CircularProgress,
 } from "@mui/material";
 import PaletteIcon from "@mui/icons-material/Palette";
 import CloseIcon from "@mui/icons-material/Close";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import useStore, { JobStatus } from "../utils/store";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 
 import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import "../scss/CurrentJobChip.scss";
-import useCurrentJobStore, { PreviewVariableType } from "../utils/currentJobStore";
-import { OPENET_TRANSITION_DATE, POST_OPENET_VARIABLE_OPTIONS, PRE_OPENET_VARIABLE_OPTIONS } from "../utils/constants";
+import useCurrentJobStore, {
+  ClipToPolygonMode,
+  PreviewUnitsType,
+  PreviewVariableType,
+} from "../utils/currentJobStore";
+import { OPENET_TRANSITION_DATE } from "../utils/constants";
+import {
+  POST_OPENET_VARIABLE_OPTIONS,
+  PRE_OPENET_VARIABLE_OPTIONS,
+  VARIABLE_DISPLAY_NAMES,
+} from "../utils/previewCalculations";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useAtomValue } from "jotai";
 import { tooltipAtom } from "../utils/atoms";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
+  const activeJobGroup = useStore((state) => state.activeJobGroup);
+  const clearJobGroup = useStore((state) => state.clearJobGroup);
+  const loadJobGroup = useStore((state) => state.loadJobGroup);
+  const downloadJobGroup = useStore((state) => state.downloadJobGroup);
+  const downloadJobGroupGeojson = useStore((state) => state.downloadJobGroupGeojson);
+  const downloadingJobGroupId = useStore((state) => state.downloadingJobGroupId);
+  const [locations, setLocations] = useStore((state) => [state.locations, state.setLocations]);
+  const multipolygons = useStore((state) => state.multipolygons);
   const closeNewJob = useStore((state) => state.closeNewJob);
+  const isGroupMode = Boolean(activeJobGroup);
+  const hasPreviewClipGeometry = isGroupMode ? multipolygons.length > 0 : Boolean(activeJob?.loaded_geo_json);
   const [previewMode, setPreviewMode] = useStore((state) => [state.previewMode, state.setPreviewMode]);
   const setShowUploadDialog = useStore((state) => state.setShowUploadDialog);
   const loadJob = useStore((state) => state.loadJob);
@@ -38,8 +68,15 @@ const CurrentJobChip = () => {
   const downloadJob = useStore((state) => state.downloadJob);
   const downloadGeotiff = useCurrentJobStore((state) => state.downloadGeotiff);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
+  const previewGeotiffDownloadJobId = useCurrentJobStore((state) => state.previewGeotiffDownloadJobId);
+  const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
+  const isPreviewGeotiffDownloading =
+    previewGeotiffDownloadJobId !== null && previewGeotiffDownloadJobId === activeJob?.key;
+  const isBulkGeotiffDownloading =
+    bulkGeotiffDownloadJobId !== null && bulkGeotiffDownloadJobId === activeJob?.key;
   const queue = useStore((state) => state.queue);
   const backlog = useStore((state) => state.backlog);
+  const jobLocateGeneration = useStore((state) => state.jobLocateGeneration);
 
   const [previewMonth, setPreviewMonth] = useCurrentJobStore((state) => [state.previewMonth, state.setPreviewMonth]);
   const [previewYear, setPreviewYear] = useCurrentJobStore((state) => [state.previewYear, state.setPreviewYear]);
@@ -48,6 +85,7 @@ const CurrentJobChip = () => {
     state.previewVariable,
     state.setPreviewVariable,
   ]);
+  const [previewUnits, setPreviewUnits] = useCurrentJobStore((state) => [state.previewUnits, state.setPreviewUnits]);
   const [previewDay, setPreviewDay] = useCurrentJobStore((state) => [state.previewDay, state.setPreviewDay]);
   const currentJobChipRef = useRef<HTMLDivElement>(null);
   const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
@@ -59,18 +97,30 @@ const CurrentJobChip = () => {
   const [showJobControls, setShowJobControls] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
 
+  useEffect(() => {
+    setShowJobControls(false);
+  }, [activeJob?.key, activeJobGroup?.groupId, jobLocateGeneration]);
+
   const [dynamicPreviewColorScale, setDynamicPreviewColorScale] = useCurrentJobStore((state) => [
     state.dynamicPreviewColorScale,
     state.setDynamicPreviewColorScale,
   ]);
   const [previewMinValue, setPreviewMinValue] = useCurrentJobStore((state) => [state.previewMin, state.setPreviewMin]);
   const [previewMaxValue, setPreviewMaxValue] = useCurrentJobStore((state) => [state.previewMax, state.setPreviewMax]);
+  const [previewOpacity, setPreviewOpacity] = useCurrentJobStore((state) => [state.previewOpacity, state.setPreviewOpacity]);
+  const [clipToPolygon, setClipToPolygon] = useCurrentJobStore((state) => [state.clipToPolygon, state.setClipToPolygon]);
+  const [clipToPolygonMode, setClipToPolygonMode] = useCurrentJobStore((state) => [
+    state.clipToPolygonMode,
+    state.setClipToPolygonMode,
+  ]);
 
   const tooltip = useAtomValue(tooltipAtom);
 
   const canPreview = useMemo(() => {
     return !!previewYear && Number(previewYear) && !!previewMonth && Number(previewMonth);
   }, [previewYear, previewMonth]);
+
+  const hasPreviewScaleValue = (value: number | string | null) => value !== null && value !== "";
 
   const displayVariableOptions = useMemo(() => {
     if (activeJob?.start_year && Number(activeJob.start_year) < OPENET_TRANSITION_DATE) {
@@ -80,22 +130,28 @@ const CurrentJobChip = () => {
     return POST_OPENET_VARIABLE_OPTIONS;
   }, [activeJob?.start_year]);
 
-  const formattedPreviewDate = useMemo(() => {
-    return `${new Date(Number(previewYear), Number(previewMonth) - 1).toLocaleString("default", {
-      month: "short",
-    })} ${previewYear}`;
-  }, [previewMonth, previewYear]);
-
   const liveJob = useMemo(() => {
+    if (isGroupMode) {
+      return null;
+    }
+
     let job = queue.find((job) => job.key === activeJob?.key);
     if (!job) {
       job = backlog.find((job) => job.key === activeJob?.key);
     }
 
     return job;
-  }, [queue, backlog, activeJob?.key]);
+  }, [queue, backlog, activeJob?.key, isGroupMode]);
+
+  const isGroupDownloading = Boolean(
+    isGroupMode && activeJobGroup && downloadingJobGroupId === activeJobGroup.groupId
+  );
 
   useEffect(() => {
+    if (isGroupMode) {
+      return;
+    }
+
     const interval = setInterval(() => {
       if (activeJob && activeJob?.status !== "Complete") {
         const jobStatusRequest = fetchJobStatus(activeJob.key, activeJob.name);
@@ -118,7 +174,7 @@ const CurrentJobChip = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [activeJob, liveJob, setActiveJob, fetchJobStatus]);
+  }, [activeJob, liveJob, setActiveJob, fetchJobStatus, isGroupMode]);
 
   useEffect(() => {
     if (activeJob?.start_year && activeJob?.end_year) {
@@ -184,7 +240,6 @@ const CurrentJobChip = () => {
     return (activeJob.end_year - activeJob.start_year + 1) * 12;
   }, [activeJob?.start_year, activeJob?.end_year]);
 
-  // Memoize the month/year calculation to avoid recalculation on every render
   const monthYearFromSlider = useMemo(() => {
     const yearOffset = Math.floor(sliderValue / 12);
     const monthOffset = sliderValue % 12;
@@ -194,7 +249,6 @@ const CurrentJobChip = () => {
     };
   }, [sliderValue, activeJob?.start_year]);
 
-  // Update preview month/year only when slider value changes
   useEffect(() => {
     if (monthYearFromSlider.year && monthYearFromSlider.month) {
       setPreviewYear(monthYearFromSlider.year);
@@ -202,12 +256,22 @@ const CurrentJobChip = () => {
     }
   }, [monthYearFromSlider, setPreviewYear, setPreviewMonth]);
 
+  useEffect(() => {
+    if (!activeJob?.start_year || !previewYear || !previewMonth || totalMonths <= 0) {
+      return;
+    }
+    const idx = (Number(previewYear) - Number(activeJob.start_year)) * 12 + (Number(previewMonth) - 1);
+    const clamped = Math.max(0, Math.min(totalMonths - 1, idx));
+    setSliderValue((prev) => (prev === clamped ? prev : clamped));
+  }, [previewMonth, previewYear, activeJob?.start_year, totalMonths]);
+
   const handleSliderChange = (_: Event, newValue: number | number[]) => {
-    if (typeof newValue !== "number") return;
+    if (typeof newValue !== "number") {
+      return;
+    }
     setSliderValue(newValue);
   };
 
-  // Memoize the value label formatter to avoid recreation on every render
   const valueLabelFormat = useCallback(
     (value: number) => {
       const yearOffset = Math.floor(value / 12);
@@ -218,6 +282,10 @@ const CurrentJobChip = () => {
     },
     [activeJob?.start_year]
   );
+
+  const visibleLayerCount = useMemo(() => {
+    return locations.filter((location) => location.visible).length;
+  }, [locations]);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -242,6 +310,40 @@ const CurrentJobChip = () => {
     };
   }, [isPlaying, totalMonths]);
 
+  const stepPreviewMonth = useCallback(
+    (delta: number) => {
+      if (totalMonths <= 0) {
+        return;
+      }
+      setIsPlaying(false);
+      setShowPreview(true);
+      setSliderValue((prev) => {
+        const next = prev + delta;
+        if (next < 0) {
+          return 0;
+        }
+        if (next >= totalMonths) {
+          return totalMonths - 1;
+        }
+        return next;
+      });
+    },
+    [totalMonths, setShowPreview]
+  );
+
+  const toggleShowPreview = useCallback(() => {
+    tooltip?.close();
+    if (isPlaying) {
+      setIsPlaying(false);
+      setTimeout(() => {
+        setShowPreview(false);
+        tooltip?.close();
+      }, 500);
+    } else {
+      setShowPreview(!showPreview);
+    }
+  }, [isPlaying, showPreview, setShowPreview, tooltip]);
+
   return (
     <>
       <div className="current-job" ref={currentJobChipRef}>
@@ -256,14 +358,18 @@ const CurrentJobChip = () => {
             minWidth: activeJob ? "225px" : "auto",
           }}
         >
-          {activeJob ? activeJob.name : "No active job"}
+          {isGroupMode ? activeJobGroup?.groupName : activeJob ? activeJob.name : "No active job"}
           {activeJob && (
             <IconButton
               size="small"
               sx={{ color: "var(--st-gray-30)", padding: 0, marginLeft: "auto" }}
               className="close-btn"
               onClick={() => {
-                setActiveJob(null);
+                if (isGroupMode) {
+                  clearJobGroup();
+                } else {
+                  setActiveJob(null);
+                }
                 closeNewJob();
               }}
             >
@@ -280,7 +386,104 @@ const CurrentJobChip = () => {
           </Typography>
         )}
 
-        {activeJob && (
+        {isGroupMode && activeJobGroup && (
+          <Typography variant="body2" style={{ color: "var(--st-gray-40)" }}>
+            Jobs in group: <b>{activeJobGroup.jobs.length}</b>
+          </Typography>
+        )}
+
+        {isGroupMode && locations.length > 0 && (
+          <div
+            className="group-layers-panel"
+            style={{
+              maxHeight: "140px",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              border: "1px solid var(--st-gray-80)",
+              borderRadius: "6px",
+              marginTop: "4px",
+            }}
+          >
+            <Accordion
+              disableGutters
+              elevation={0}
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                backgroundColor: "transparent",
+                color: "var(--st-gray-20)",
+                "&:before": { display: "none" },
+                "&.Mui-focusVisible": { outline: "none", boxShadow: "none" },
+                "&:focus": { outline: "none" },
+                "&:focus-visible": { outline: "none", boxShadow: "none" },
+                overflow: "hidden",
+                "& .MuiCollapse-root.MuiCollapse-entered": {
+                  overflow: "auto",
+                  minHeight: 0,
+                  flex: "1 1 auto",
+                },
+              }}
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon sx={{ color: "var(--st-gray-40)" }} />}
+                sx={{
+                  flexShrink: 0,
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                  minHeight: "32px",
+                  px: 1,
+                  backgroundColor: "var(--st-gray-90)",
+                  "& .MuiAccordionSummary-content": { my: 0.5 },
+                  "&.Mui-focusVisible": {
+                    outline: "none",
+                    boxShadow: "none",
+                    backgroundColor: "var(--st-gray-90)",
+                  },
+                  "&:focus": { outline: "none" },
+                  "&:focus-visible": { outline: "none", boxShadow: "none" },
+                  "& .MuiAccordionSummary-expandIconWrapper": { color: "var(--st-gray-40)" },
+                }}
+              >
+                <Typography variant="caption" sx={{ color: "var(--st-gray-40)" }}>
+                  Layers ({visibleLayerCount}/{locations.length})
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails
+                sx={{
+                  pt: 0,
+                  pb: 0.5,
+                  px: 1,
+                }}
+              >
+                {locations.map((location) => (
+                  <FormControlLabel
+                    key={location.id}
+                    sx={{ color: "var(--st-gray-20)", ml: 0, display: "flex" }}
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={location.visible}
+                        onChange={(event) => {
+                          const nextLocations = locations.map((row) =>
+                            row.id === location.id ? { ...row, visible: event.target.checked } : row
+                          );
+                          setLocations(nextLocations);
+                        }}
+                      />
+                    }
+                    label={location.name}
+                  />
+                ))}
+              </AccordionDetails>
+            </Accordion>
+          </div>
+        )}
+
+        {activeJob && !isGroupMode && (
           <Tooltip title={jobStatus?.status || "N/A"}>
             <Typography
               variant="body2"
@@ -302,7 +505,7 @@ const CurrentJobChip = () => {
           </Tooltip>
         )}
 
-        {activeJob && activeJobProperties.length > 0 && (
+        {activeJob && !isGroupMode && activeJobProperties.length > 0 && (
           <div
             onClick={() => setShowProperties(!showProperties)}
             style={{
@@ -360,13 +563,11 @@ const CurrentJobChip = () => {
             <div
               className="job-controls-header"
               onClick={() => {
-                if (showJobControls) {
-                  setShowJobControls(false);
-                  setShowPreview(false);
-                } else {
-                  setShowJobControls(true);
+                if (!showJobControls) {
                   setShowPreview(true);
                 }
+
+                setShowJobControls(!showJobControls)
               }}
               style={{
                 cursor: "pointer",
@@ -393,7 +594,7 @@ const CurrentJobChip = () => {
                     backgroundColor: "var(--st-gray-90)",
                     zIndex: 1000,
                     borderRadius: "8px",
-                    marginBottom: 16,
+                    marginBottom: 8,
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "8px" }}>
@@ -407,7 +608,8 @@ const CurrentJobChip = () => {
                             sx={{ width: "120px", "& .MuiInputLabel-root": { fontSize: "12px" } }}
                             placeholder="Min"
                             size="small"
-                            value={previewMinValue}
+                            value={previewMinValue ?? ""}
+                            InputLabelProps={{ shrink: hasPreviewScaleValue(previewMinValue) }}
                             onChange={(e) => setPreviewMinValue(e.target.value)}
                           />
                         </FormControl>
@@ -422,7 +624,8 @@ const CurrentJobChip = () => {
                             sx={{ width: "120px", "& .MuiInputLabel-root": { fontSize: "12px" } }}
                             placeholder="Max"
                             size="small"
-                            value={previewMaxValue}
+                            value={previewMaxValue ?? ""}
+                            InputLabelProps={{ shrink: hasPreviewScaleValue(previewMaxValue) }}
                             onChange={(e) => setPreviewMaxValue(e.target.value)}
                           />
                           <Tooltip
@@ -451,21 +654,71 @@ const CurrentJobChip = () => {
                         </FormControl>
                       </div>
                     </div>
-                    <FormControl sx={{ flex: 1 }}>
-                      <InputLabel size="small">Variable</InputLabel>
-                      <Select
-                        label="Variable"
-                        size="small"
-                        value={previewVariable}
-                        onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
-                      >
-                        {displayVariableOptions.map((variable) => (
-                          <MenuItem key={variable} value={variable}>
-                            {variable}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <FormControl sx={{ flex: 1 }}>
+                        <InputLabel size="small">Variable</InputLabel>
+                        <Select
+                          label="Variable"
+                          size="small"
+                          value={previewVariable}
+                          onChange={(e) => setPreviewVariable(e.target.value as PreviewVariableType)}
+                        >
+                          {displayVariableOptions.map((variable) => (
+                            <MenuItem key={variable} value={variable}>
+                              {VARIABLE_DISPLAY_NAMES[variable as keyof typeof VARIABLE_DISPLAY_NAMES] || variable}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <FormControl sx={{ flex: 1 }}>
+                        <InputLabel size="small">Units</InputLabel>
+                        <Select
+                          label="Units"
+                          size="small"
+                          value={previewUnits}
+                          onChange={(e) => setPreviewUnits(e.target.value as PreviewUnitsType)}
+                        >
+                          <MenuItem value="mm">mm</MenuItem>
+                          <MenuItem value="inches">inches</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </div>
+                    {hasPreviewClipGeometry && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <FormControlLabel
+                          sx={{ margin: 0, marginLeft: "-4px" }}
+                          control={
+                            <Checkbox
+                              size="small"
+                              checked={clipToPolygon}
+                              onChange={(e) => setClipToPolygon(e.target.checked)}
+                              sx={{ color: "var(--st-gray-40)", "&.Mui-checked": { color: "primary.main" } }}
+                            />
+                          }
+                          label={
+                            <Typography variant="caption" sx={{ color: "var(--st-gray-40)" }}>
+                              Clip to polygon
+                            </Typography>
+                          }
+                        />
+                        <FormControl size="small" disabled={!clipToPolygon} sx={{ minWidth: "110px", flex: 1 }}>
+                          <Select
+                            size="small"
+                            value={clipToPolygonMode}
+                            disabled={!clipToPolygon}
+                            onChange={(e) => setClipToPolygonMode(e.target.value as ClipToPolygonMode)}
+                            sx={{
+                              "& .MuiSelect-select": { fontSize: "12px", py: "4px" },
+                              color: clipToPolygon ? "var(--st-gray-30)" : "var(--st-gray-60)",
+                            }}
+                          >
+                            <MenuItem value="inclusive">Inclusive</MenuItem>
+                            <MenuItem value="exclusive">Exclusive</MenuItem>
+                            <MenuItem value="inverse">Inverse</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </div>
+                    )}
                   </div>
                   {availableDays &&
                     availableDays.length > 0 &&
@@ -524,8 +777,20 @@ const CurrentJobChip = () => {
                     )}
                   </div>
                   {canPreview && (
-                    <div style={{ padding: "0 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <Tooltip title="Previous month">
+                          <span>
+                            <IconButton
+                              onClick={() => stepPreviewMonth(-1)}
+                              size="small"
+                              disabled={totalMonths <= 1 || sliderValue <= 0}
+                              sx={{ color: "primary.main", padding: 0 }}
+                            >
+                              <ChevronLeftIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                         <IconButton
                           onClick={() => {
                             if (!isPlaying) {
@@ -538,48 +803,77 @@ const CurrentJobChip = () => {
                             }
                           }}
                           size="small"
-                          sx={{ color: "primary.main" }}
+                          sx={{ color: "primary.main", padding: 0 }}
                         >
                           {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
                         </IconButton>
+                        <Tooltip title="Next month">
+                          <span>
+                            <IconButton
+                              onClick={() => stepPreviewMonth(1)}
+                              size="small"
+                              disabled={totalMonths <= 1 || sliderValue >= totalMonths - 1}
+                              sx={{ color: "primary.main", padding: 0 }}
+                            >
+                              <ChevronRightIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                         <Slider
                           value={sliderValue}
                           min={0}
-                          max={totalMonths - 1}
+                          max={Math.max(0, totalMonths - 1)}
                           onChange={handleSliderChange}
                           valueLabelDisplay="auto"
                           valueLabelFormat={valueLabelFormat}
                           marks
-                          sx={{ color: "primary", "& .MuiSlider-valueLabel": { backgroundColor: "#334155" } }}
+                          sx={{
+                            flex: 1,
+                            color: "primary",
+                            "& .MuiSlider-valueLabel": { backgroundColor: "#334155" },
+                            marginLeft: "8px",
+                          }}
                         />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingLeft: "4px" }}>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: showPreview ? "var(--st-gray-40)" : "var(--st-gray-60)",
+                            minWidth: "52px",
+                          }}
+                        >
+                          Opacity
+                        </Typography>
+                        <Slider
+                          size="small"
+                          disabled={!showPreview}
+                          value={Math.round(previewOpacity * 100)}
+                          min={0}
+                          max={100}
+                          onChange={(_, v) => setPreviewOpacity((typeof v === "number" ? v : v[0]) / 100)}
+                          valueLabelDisplay={showPreview ? "auto" : "off"}
+                          valueLabelFormat={(v) => `${v}%`}
+                          sx={{
+                            flex: 1,
+                            color: "primary",
+                            "& .MuiSlider-valueLabel": { backgroundColor: "#334155" },
+                          }}
+                        />
+                        <Tooltip title={showPreview ? "Hide preview" : "Show preview"}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={toggleShowPreview}
+                              sx={{ color: showPreview ? "primary.main" : "var(--st-gray-50)", padding: "4px" }}
+                            >
+                              {showPreview ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                       </div>
                     </div>
                   )}
-                  <Tooltip title={!canPreview ? `Select a variable and month/year to preview` : ""}>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <Button
-                        variant="contained"
-                        color="secondary"
-                        size="small"
-                        sx={{ flex: 1 }}
-                        onClick={() => {
-                          tooltip?.close();
-                          if (isPlaying) {
-                            setIsPlaying(false);
-                            setTimeout(() => {
-                              setShowPreview(false);
-                              tooltip?.close();
-                            }, 500);
-                          } else {
-                            setShowPreview(!showPreview);
-                          }
-                        }}
-                        disabled={!canPreview}
-                      >
-                        {showPreview ? "Hide" : "Show"} Preview
-                      </Button>
-                    </div>
-                  </Tooltip>
                 </div>
               )}
             </div>
@@ -593,7 +887,11 @@ const CurrentJobChip = () => {
               variant="contained"
               color="secondary"
               onClick={() => {
-                loadJob(activeJob);
+                if (isGroupMode && activeJobGroup) {
+                  void loadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName);
+                } else {
+                  loadJob(activeJob);
+                }
               }}
             >
               <MapIcon fontSize="inherit" />
@@ -604,12 +902,18 @@ const CurrentJobChip = () => {
               size="small"
               variant="contained"
               color="secondary"
+              disabled={isGroupDownloading}
               onClick={(evt) => {
+                if (isGroupMode && activeJobGroup) {
+                  setDownloadAnchorEl(evt.currentTarget);
+                  setDownloadMenuOpen(true);
+                  return;
+                }
                 setDownloadAnchorEl(evt.currentTarget);
                 setDownloadMenuOpen(true);
               }}
             >
-              <DownloadIcon fontSize="inherit" />
+              {isGroupDownloading ? <CircularProgress size={14} /> : <DownloadIcon fontSize="inherit" />}
               Download
             </Button>
             <Menu
@@ -618,68 +922,102 @@ const CurrentJobChip = () => {
               onClose={() => setDownloadMenuOpen(false)}
               sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
             >
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
-              >
-                Map Data
-              </Typography>
-              <MenuItem
-                sx={{ backgroundColor: "var(--st-gray-80)" }}
-                disableRipple
-                onClick={() => {
-                  if (!activeJob?.loaded_geo_json) {
-                    return;
-                  }
+              {!isGroupMode && (
+                <>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+                  >
+                    Map Data
+                  </Typography>
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
+                    disableRipple
+                    onClick={() => {
+                      if (!activeJob?.loaded_geo_json) {
+                        return;
+                      }
 
-                  const blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
+                      const blob = new Blob([JSON.stringify(activeJob.loaded_geo_json)], { type: "application/json" });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
 
-                  const shortName = activeJob.name.replace(/[(),]/g, "");
-                  const escapedName = encodeURIComponent(shortName);
-                  a.download = `${escapedName}.geojson`;
-                  a.click();
-                }}
-              >
-                GeoJSON
-              </MenuItem>
+                      const shortName = activeJob.name.replace(/[(),]/g, "");
+                      const escapedName = encodeURIComponent(shortName);
+                      a.download = `${escapedName}.geojson`;
+                      a.click();
+                    }}
+                  >
+                    GeoJSON
+                  </MenuItem>
 
-              {canPreview && previewMonth && previewYear && (
-                <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
-                  disableRipple
-                  onClick={() => {
-                    if (!previewVariable || !previewMonth || !previewYear) {
-                      console.error("Missing preview variable, month, or year");
-                      return;
-                    }
+                  {canPreview && previewMonth && previewYear && previewVariable && (
+                    <MenuItem
+                      sx={{ backgroundColor: "var(--st-gray-80)" }}
+                      disableRipple
+                      disabled={isPreviewGeotiffDownloading}
+                      onClick={() => {
+                        downloadGeotiff(activeJob.key);
+                      }}
+                    >
+                      {isPreviewGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                      Interactive Preview GeoTIFF
+                    </MenuItem>
+                  )}
 
-                    downloadGeotiff(activeJob.key, previewVariable, Number(previewMonth), Number(previewYear));
-                  }}
-                >
-                  {formattedPreviewDate} {previewVariable} GeoTIFF
-                </MenuItem>
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    disableRipple
+                    onClick={() => {
+                      if (!previewVariable || !previewMonth || !previewYear) {
+                        console.error("Missing preview variable, month, or year");
+                        return;
+                      }
+
+                      downloadAllGeotiffs(activeJob.key);
+                    }}
+                  >
+                    All GeoTIFFs
+                  </MenuItem>
+
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)" }}
+                    disableRipple
+                    disabled={isBulkGeotiffDownloading}
+                    onClick={() => {
+                      downloadAllGeotiffs(activeJob.key, { clipped: true });
+                    }}
+                  >
+                    {isBulkGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                    All GeoTIFFs (clipped)
+                  </MenuItem>
+                </>
               )}
-
-              <MenuItem
-                sx={{ backgroundColor: "var(--st-gray-80)" }}
-                disableRipple
-                onClick={() => {
-                  if (!previewVariable || !previewMonth || !previewYear) {
-                    console.error("Missing preview variable, month, or year");
-                    return;
-                  }
-
-                  downloadAllGeotiffs(activeJob.key);
-                }}
-              >
-                All GeoTIFFs
-              </MenuItem>
-
-              <MenuItem sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }} />
+              {isGroupMode && activeJobGroup && (
+                <>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
+                  >
+                    Map Data
+                  </Typography>
+                  <MenuItem
+                    sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
+                    disableRipple
+                    disabled={isGroupDownloading}
+                    onClick={() => {
+                      downloadJobGroupGeojson(activeJobGroup.jobs, activeJobGroup.groupName);
+                      setDownloadMenuOpen(false);
+                    }}
+                  >
+                    {isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                    GeoJSON
+                  </MenuItem>
+                </>
+              )}
               <Typography
                 variant="body2"
                 color="text.secondary"
@@ -689,35 +1027,56 @@ const CurrentJobChip = () => {
               </Typography>
               {totalMonths > 0 && (
                 <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
                   disableRipple
+                  disabled={isGroupMode && isGroupDownloading}
                   onClick={() => {
-                    downloadJob(activeJob.key, "metric");
+                    if (isGroupMode && activeJobGroup) {
+                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "metric");
+                    } else {
+                      downloadJob(activeJob.key, "metric");
+                    }
+                    setDownloadMenuOpen(false);
                   }}
                 >
-                  Report (mm/month)
+                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                  {isGroupMode ? "All Reports (mm/month)" : "Report (mm/month)"}
                 </MenuItem>
               )}
               {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
+                  disabled={isGroupMode && isGroupDownloading}
                   onClick={() => {
-                    downloadJob(activeJob.key, "imperial");
+                    if (isGroupMode && activeJobGroup) {
+                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "imperial");
+                    } else {
+                      downloadJob(activeJob.key, "imperial");
+                    }
+                    setDownloadMenuOpen(false);
                   }}
                 >
-                  Report (in/month)
+                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                  {isGroupMode ? "All Reports (in/month)" : "Report (in/month)"}
                 </MenuItem>
               )}
               {totalMonths > 0 && (
                 <MenuItem
                   sx={{ backgroundColor: "var(--st-gray-80)" }}
                   disableRipple
+                  disabled={isGroupMode && isGroupDownloading}
                   onClick={() => {
-                    downloadJob(activeJob.key, "acre-feet");
+                    if (isGroupMode && activeJobGroup) {
+                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "acre-feet");
+                    } else {
+                      downloadJob(activeJob.key, "acre-feet");
+                    }
+                    setDownloadMenuOpen(false);
                   }}
                 >
-                  Report (acre-feet/month)
+                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+                  {isGroupMode ? "All Reports (acre-feet/month)" : "Report (acre-feet/month)"}
                 </MenuItem>
               )}
             </Menu>

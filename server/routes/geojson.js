@@ -29,11 +29,21 @@ router.get("/geojson", async (req, res) => {
 });
 
 router.get("/ard_tiles", (req, res) => {
-  let waterRightsDir = path.join(project_directory, "water_rights_visualizer");
+  const ard_tiles_filename = path.join(project_directory, "water_rights_visualizer", "ARD_tiles.geojson");
 
-  let ard_tiles_filename = path.join(waterRightsDir, "ARD_tiles.geojson");
-  let ard_tiles = fs.readFileSync(ard_tiles_filename, "utf8");
-  res.status(200).send(ard_tiles);
+  try {
+    if (!fs.existsSync(ard_tiles_filename)) {
+      console.error("ARD tiles file not found:", ard_tiles_filename);
+      res.status(404).send("ARD tiles file not found");
+      return;
+    }
+
+    const ard_tiles = fs.readFileSync(ard_tiles_filename, "utf8");
+    res.status(200).send(ard_tiles);
+  } catch (err) {
+    console.error("Error reading ARD tiles:", err);
+    res.status(500).send("Error reading ARD tiles");
+  }
 });
 
 module.exports = router;

@@ -2,6 +2,7 @@ import { FC, useEffect, useState } from "react";
 import { useMap } from "react-leaflet";
 import Leaflet from "leaflet";
 import useStore from "../utils/store";
+import useCurrentJobStore from "../utils/currentJobStore";
 import { area as turfArea } from "@turf/turf";
 
 const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locations }) => {
@@ -12,6 +13,7 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
   const setLocations = useStore((state) => state.setLocations);
   const minimumValidArea = useStore((state) => state.minimumValidArea);
   const maximumValidArea = useStore((state) => state.maximumValidArea);
+  const showPreview = useCurrentJobStore((state) => state.showPreview);
 
   const [selectedMapLayer, setSelectedMapLayer] = useState<number | null>(null);
 
@@ -68,9 +70,8 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
 
         const style: Record<string, any> = {};
         if (!location.visible) {
-          style.fillOpacity = 0.5;
-          style.color = "black";
-          style.fillColor = "black";
+          style.opacity = 0;
+          style.fillOpacity = 0;
         }
 
         if (!isValidArea && location.visible) {
@@ -79,39 +80,58 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
           style.fillOpacity = 0.5;
         }
 
-        const geoJsonLayer = new Leaflet.GeoJSON(layer, { style });
-        geoJsonLayer.on({
-          dblclick: () => {
-            setSelectedMapLayer(location.id);
-            map.fitBounds(geoJsonLayer.getBounds());
-          },
-          click: () => {
-            setSelectedMapLayer(location.id);
-          },
+        if (showPreview && location.visible) {
+          style.color = "#3488FF";
+          style.fillColor = "transparent";
+          style.fillOpacity = 0;
+          style.weight = 2;
+        }
+
+        const previewOutline = showPreview && location.visible;
+        const geoJsonLayer = new Leaflet.GeoJSON(layer, {
+          style,
+          interactive: !previewOutline,
         });
 
-        const roundedAcres = Math.round(location.acres * 100) / 100;
-        const roundedLat = location?.lat ? Math.round(location.lat * 1000000) / 1000000 : "NaN";
-        const roundedLong = location?.long ? Math.round(location.long * 1000000) / 1000000 : "NaN";
+        if (!previewOutline) {
+          geoJsonLayer.on({
+            dblclick: () => {
+              setSelectedMapLayer(location.id);
+              map.fitBounds(geoJsonLayer.getBounds());
+            },
+            click: () => {
+              setSelectedMapLayer(location.id);
+            },
+          });
 
-        geoJsonLayer.bindTooltip(
-          `<div style='padding:1px 3px 1px 3px;display:flex;flex-direction:column;'>
+          const roundedAcres = Math.round(location.acres * 100) / 100;
+          const roundedLat = location?.lat ? Math.round(location.lat * 1000000) / 1000000 : "NaN";
+          const roundedLong = location?.long ? Math.round(location.long * 1000000) / 1000000 : "NaN";
+
+          geoJsonLayer.bindTooltip(
+            `<div style='padding:1px 3px 1px 3px;display:flex;flex-direction:column;'>
             <b>${location.name}</b>
             <b>Acres: ${roundedAcres}</b>
             <b>Coordinates: ${roundedLat}, ${roundedLong}</b>
             <b>Comments: ${location.comments || "None"}</b>
             ${location.crop ? `<b>Crop: ${location.crop}</b>` : ""}
           </div>`,
-          {
-            direction: "right",
-            permanent: false,
-            sticky: true,
-            offset: [10, 0],
-            opacity: 0.75,
-            className: "custom-tooltip",
-          }
-        );
+            {
+              direction: "right",
+              permanent: false,
+              sticky: true,
+              offset: [10, 0],
+              opacity: 1,
+              className: "custom-tooltip",
+            }
+          );
+        }
+
         geoJsonLayer.addTo(map);
+
+        if (previewOutline) {
+          geoJsonLayer.bringToBack();
+        }
 
         if (!bounds) {
           bounds = geoJsonLayer.getBounds();
@@ -134,7 +154,7 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
         destructor();
       });
     };
-  }, [data, map, loadedGeoJSON, locations]);
+  }, [data, map, loadedGeoJSON, locations, showPreview, minimumValidArea, maximumValidArea]);
 
   return null;
 };

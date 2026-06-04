@@ -16,24 +16,33 @@ import ClearAllIcon from "@mui/icons-material/ClearAll";
 import SelectAllIcon from "@mui/icons-material/SelectAll";
 import MapIcon from "@mui/icons-material/Map";
 import CloseIcon from "@mui/icons-material/Close";
-import useStore, { PolygonLocation } from "../utils/store";
+import useStore from "../utils/store";
 import { ChangeEvent, FC, useCallback, useMemo, useState } from "react";
+import { createBulkSubmitConfirmOptions } from "./BulkJobSubmitConfirm";
+import BulkJobGroupOptions from "./BulkJobGroupOptions";
 import { FixedSizeList as List } from "react-window";
 
 import "../scss/LayersControl.scss";
 import { useDropzone } from "react-dropzone";
 import AutoSizer from "react-virtualized-auto-sizer";
-import { formatElapsedTime } from "../utils/helpers";
+import {
+  estimateSubmitDurationMsFromYearRuns,
+  formatElapsedTime,
+  squareMetersToAcres,
+  submitJobConfirmSx,
+  formatSubmitJobConfirmTitle,
+} from "../utils/helpers";
 import { useConfirm } from "material-ui-confirm";
 import { area as turfArea } from "@turf/turf";
 
 import ErrorIcon from "@mui/icons-material/Error";
 import EditIcon from "@mui/icons-material/Edit";
+import AddUploadShapes from "./AddUploadShapes";
 
 const LayersControl: FC = () => {
   const minimumValidArea = useStore((state) => state.minimumValidArea);
   const maximumValidArea = useStore((state) => state.maximumValidArea);
-  const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
+  const activeJob = useStore((state) => state.activeJob);
 
   const [multipolygons, setMultipolygons] = useStore((state) => [state.multipolygons, state.setMultipolygons]);
   const [loadedGeoJSON, setLoadedGeoJSON] = useStore((state) => [state.loadedGeoJSON, state.setLoadedGeoJSON]);
@@ -89,8 +98,6 @@ const LayersControl: FC = () => {
   const prepareMultipolygonJob = useStore((state) => state.prepareMultipolygonJob);
   const submitMultipolygonJob = useStore((state) => state.submitMultipolygonJob);
   const closeNewJob = useStore((state) => state.closeNewJob);
-  const prepareGeoJSON = useStore((state) => state.prepareGeoJSON);
-
   const userInfo = useStore((state) => state.userInfo);
   const canWriteJobs = useMemo(() => userInfo?.permissions.includes("write:jobs"), [userInfo?.permissions]);
 
@@ -104,8 +111,10 @@ const LayersControl: FC = () => {
     return jobName && loadedFile && multipolygons.length > 0 && startYear <= endYear;
   }, [jobName, loadedFile, multipolygons, startYear, endYear]);
 
+  const [groupJobsTogether, bulkGroupName] = useStore((state) => [state.groupJobsTogether, state.bulkGroupName]);
+
   const isBulkJob = useMemo(() => {
-    return canSubmitBulkJob && multipolygons.length > 1;
+    return Boolean(canSubmitBulkJob && multipolygons.length > 1);
   }, [canSubmitBulkJob, multipolygons]);
 
   const isValidArea = useMemo(() => {
@@ -129,87 +138,18 @@ const LayersControl: FC = () => {
     return Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i);
   }, [startYear, endYear]);
 
-  const generateRows = useCallback((multipolygons: any[]) => {
-    const rows: PolygonLocation[] = multipolygons.map((geojson, index) => {
-      let defaultName = `${geojson?.properties?.County || ""} Part ${index + 1}`;
-      defaultName = defaultName.trim();
-
-      const name = geojson?.features?.[0]?.properties?.name || defaultName;
-
-      let lat = geojson?.geometry?.coordinates[0][0][0];
-      let long = geojson?.geometry?.coordinates[0][0][1];
-
-      if (!lat || !long) {
-        // Get from first point in polygon
-        lat = geojson?.features?.[0]?.geometry?.coordinates[0][0][0];
-        long = geojson?.features?.[0]?.geometry?.coordinates[0][0][1];
-      }
-
-      const area = turfArea(geojson);
-      const areaInAcres = area / 4046.86;
-
-      const isValidArea = area > minimumValidArea && area < maximumValidArea;
-
-      return {
-        visible: isValidArea,
-        name: name,
-        acres: areaInAcres,
-        comments: geojson?.properties?.Comments,
-        county: geojson?.properties?.County,
-        polygon_So: geojson?.properties?.Polygon_So,
-        shapeArea: area,
-        shapeLeng: geojson?.properties?.Shape_Leng,
-        source: geojson?.properties?.Source,
-        wUR_Basin: geojson?.properties?.WUR_Basin,
-        id: index,
-        lat: lat,
-        long: long,
-        crop: geojson?.properties?.CDL_Crop || "",
-        isValidArea: isValidArea,
-      };
-    });
-
-    setRows(rows);
-  }, []);
+  const ingestUploadFile = useStore((state) => state.ingestUploadFile);
 
   const confirm = useConfirm();
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    acceptedFiles.forEach((file) => {
-      const reader = new FileReader();
-
-      reader.onabort = () => console.log("file reading was aborted");
-      reader.onerror = () => console.log("file reading has failed");
-      reader.onload = () => {
-        setLoadedFile(file);
-        if (!jobName) {
-          const fileName = (file?.name || "").replace(/\.[^/.]+$/, "").trim();
-          setJobName(fileName);
-        }
-
-        const prepareRequest = prepareGeoJSON(file);
-        if (!prepareRequest) {
-          // User not authenticated
-          console.error("User not authenticated, cannot prepare GeoJSON.");
-          return;
-        }
-
-        prepareRequest.then((geojson) => {
-          if (geojson.data && !geojson?.data?.multipolygon) {
-            setLoadedGeoJSON(geojson.data);
-            setMultipolygons([]);
-            setRows([]);
-            setActiveJob(null);
-          } else if (geojson?.data?.multipolygon && geojson?.data?.geojsons?.length > 0) {
-            setMultipolygons(geojson.data.geojsons);
-            generateRows(geojson.data.geojsons);
-            setActiveJob(null);
-          }
-        });
-      };
-      reader.readAsText(file);
-    });
-  }, []);
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      acceptedFiles.forEach((file) => {
+        void ingestUploadFile(file);
+      });
+    },
+    [ingestUploadFile]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -530,45 +470,77 @@ const LayersControl: FC = () => {
           </AutoSizer>
         </div>
       )}
-      <div className="dropzone-container" style={{ height: !loadedFile && rows.length === 0 ? 400 : 200, width: "318px" }}>
-        {loadedFile && (
-          <div className="cancel-job">
-            <IconButton
-              onClick={(evt) => {
-                evt.preventDefault();
-                setLoadedFile(null);
-                setLoadedGeoJSON(null);
-                setMultipolygons([]);
-              }}
-            >
-              <CloseIcon sx={{ color: "var(--st-gray-50)", ":hover": { color: "var(--st-gray-10)" } }} />
-            </IconButton>
-          </div>
-        )}
-        <div className={`dropzone-area ${isDragActive ? "drag-active" : ""}`} {...getRootProps()} style={{ padding: "8px" }}>
-          <input {...getInputProps()} />
-          {loadedFile ? (
-            <div
-              className="loaded-file"
-              style={{ margin: "8px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
-            >
-              <MapIcon style={{ color: "var(--st-gray-20)" }} />
-              <p style={{ color: "var(--st-gray-20)", marginBottom: 0, textAlign: "center" }}>{loadedFile.name}</p>
-              <p style={{ color: "var(--st-gray-50)", margin: 0, fontSize: "12px" }}>
-                Area: {roundedLoadedGeoJSONArea} Acres
-              </p>
+      {!isBulkJob && (
+        <div
+          className={`dropzone-container${isBulkJob && loadedFile ? " dropzone-container--compact" : ""}`}
+          style={{
+            height: !loadedFile && rows.length === 0 ? 400 : isBulkJob && loadedFile ? 88 : 200,
+            width: "100%",
+          }}
+        >
+          {loadedFile && (
+            <div className="cancel-job">
+              <IconButton
+                onClick={(evt) => {
+                  evt.preventDefault();
+                  setLoadedFile(null);
+                  setLoadedGeoJSON(null);
+                  setMultipolygons([]);
+                  setRows([]);
+                }}
+              >
+                <CloseIcon sx={{ color: "var(--st-gray-50)", ":hover": { color: "var(--st-gray-10)" } }} />
+              </IconButton>
             </div>
-          ) : (
-            <p style={{ color: "var(--st-gray-40)", textAlign: "center" }}>
-              Drag & drop <br /> or <strong>browse</strong> to upload
-              <p style={{ fontSize: "12px" }}>
-                Supports:
-                <br /> .geojson, .zip (zipped shapefiles), .kml
-              </p>
-            </p>
           )}
+          <div
+            className={`dropzone-area ${isDragActive ? "drag-active" : ""}`}
+            {...getRootProps()}
+            style={isBulkJob && loadedFile ? { padding: "6px 8px" } : { padding: "8px" }}
+          >
+            <input {...getInputProps()} />
+            {loadedFile ? (
+              isBulkJob ? (
+                <div className="loaded-file loaded-file--stacked">
+                  <div className="loaded-file-name">
+                    <MapIcon style={{ color: "var(--st-gray-20)", flexShrink: 0 }} />
+                    <p>{loadedFile.name}</p>
+                  </div>
+                  <p className="loaded-file-area">Area: {roundedLoadedGeoJSONArea} Acres</p>
+                </div>
+              ) : (
+                <div
+                  className="loaded-file"
+                  style={{ margin: "8px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
+                >
+                  <MapIcon style={{ color: "var(--st-gray-20)" }} />
+                  <p style={{ color: "var(--st-gray-20)", marginBottom: 0, textAlign: "center" }}>{loadedFile.name}</p>
+                  <p style={{ color: "var(--st-gray-50)", margin: 0, fontSize: "12px" }}>
+                    Area: {roundedLoadedGeoJSONArea} Acres
+                  </p>
+                </div>
+              )
+            ) : (
+              <p style={{ color: "var(--st-gray-40)", textAlign: "center" }}>
+                Drag & drop <br /> or <strong>browse</strong> to upload
+                <p style={{ fontSize: "12px" }}>
+                  Supports:
+                  <br /> .geojson, .zip (zipped shapefiles), .kml
+                </p>
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+      {isBulkJob && (
+        <Typography
+          variant="caption"
+          sx={{ color: "var(--st-gray-50)", fontSize: "11px", ml: "8px", mb: "4px", display: "block" }}
+        >
+          Total Area: {roundedLoadedGeoJSONArea} acres
+        </Typography>
+      )}
+      <AddUploadShapes />
       <div className="message-container" style={{ display: "flex", maxWidth: "300px" }}>
         {!canWriteJobs && (
           <Typography
@@ -582,6 +554,7 @@ const LayersControl: FC = () => {
           </Typography>
         )}
       </div>
+      <BulkJobGroupOptions visible={isBulkJob} />
       <div
         className="bottom-buttons"
         style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end" }}
@@ -611,27 +584,56 @@ const LayersControl: FC = () => {
           }}
           onClick={() => {
             if (canSubmitJob) {
-              submitJob();
-              closeNewJob();
-            } else if (canSubmitBulkJob) {
-              const jobs = prepareMultipolygonJob();
-              const totalNumberOfYears = jobs.reduce((acc, job) => acc + job.end_year - job.start_year + 1, 0);
-
-              // Rough estimate of 5 minutes per year
-              const estimatedTimePerYear = 5;
-              const estimatedTimeMS = totalNumberOfYears * estimatedTimePerYear * 60 * 1000;
-              const estimatedTime = formatElapsedTime(estimatedTimeMS).trim();
+              const yearCount = endYear - startYear + 1;
+              const areaSqM = loadedGeoJSON ? turfArea(loadedGeoJSON) : 0;
+              const acres = squareMetersToAcres(areaSqM);
+              const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(yearCount)).trim();
 
               confirm({
-                title: "Submit Bulk Job",
-                description: `Are you sure you want to submit ${jobs.length} jobs (ETA: ${estimatedTime})?`,
-                confirmationButtonProps: { color: "primary", variant: "contained" },
-                cancellationButtonProps: { color: "secondary", variant: "contained" },
-                titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
+                title: formatSubmitJobConfirmTitle(jobName),
+                description: [
+                  `Years requested: ${yearCount} (${startYear}–${endYear})`,
+                  `Area: ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
+                  `Estimated processing time: ~${estimatedTime}`,
+                ].join("\n"),
+                ...submitJobConfirmSx,
               }).then(() => {
-                submitMultipolygonJob(jobs);
+                submitJob();
+                closeNewJob();
+              });
+            } else if (canSubmitBulkJob) {
+              const jobs = prepareMultipolygonJob();
+              if (jobs.length === 0) {
+                return;
+              }
+
+              const yearsPerJob = endYear - startYear + 1;
+              const totalYearRuns = jobs.reduce((acc, job) => acc + (job.end_year - job.start_year + 1), 0);
+              const areaSqM = rows.reduce(
+                (acc, row) => (row.visible ? acc + turfArea(multipolygons[row.id]) : acc),
+                0
+              );
+              const acres = squareMetersToAcres(areaSqM);
+              const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(totalYearRuns)).trim();
+
+              confirm(
+                createBulkSubmitConfirmOptions({
+                  jobCount: jobs.length,
+                  groupJobsTogether: groupJobsTogether && jobs.length > 1,
+                  groupName: bulkGroupName.trim() || jobName.trim() || "Untitled Job",
+                  yearsPerJob,
+                  startYear,
+                  endYear,
+                  totalYearRuns,
+                  acres,
+                  estimatedTime,
+                })
+              ).then(() => {
+                const resolvedGroupName = bulkGroupName.trim() || jobName.trim() || "Untitled Job";
+                submitMultipolygonJob(jobs, {
+                  groupTogether: groupJobsTogether && jobs.length > 1,
+                  groupName: resolvedGroupName,
+                });
                 closeNewJob();
               });
             }

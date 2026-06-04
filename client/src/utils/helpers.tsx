@@ -36,6 +36,21 @@ export const formatElapsedTime = (elapsedTime: number): string => {
   return formattedTimeRemaining;
 };
 
+const SQ_METERS_PER_ACRE = 4046.86;
+
+export const JOB_SUBMIT_MINUTES_PER_YEAR = 7.5;
+
+export function squareMetersToAcres(sqMeters: number): number {
+  if (!(sqMeters > 0)) {
+    return 0;
+  }
+  return Math.round((sqMeters / SQ_METERS_PER_ACRE) * 100) / 100;
+}
+
+export function estimateSubmitDurationMsFromYearRuns(yearRunCount: number): number {
+  return Math.max(0, yearRunCount) * JOB_SUBMIT_MINUTES_PER_YEAR * 60 * 1000;
+}
+
 export const formJobForQueue = (jobName: string, startYear: number, endYear: number, geojson: any): any => {
   let strippedName = jobName.replace(/[^a-zA-Z0-9]/g, "_");
   let jobKey = `${strippedName}_${startYear}_${endYear}_${Date.now()}`;
@@ -61,5 +76,40 @@ export const formJobForQueue = (jobName: string, startYear: number, endYear: num
 
   return newJob;
 };
+
+export const submitJobConfirmSx = {
+  titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+  contentProps: {
+    sx: {
+      backgroundColor: "var(--st-gray-90)",
+      color: "var(--st-gray-10)",
+      whiteSpace: "pre-line",
+      pt: 2,
+      pb: 1.5,
+      "& .MuiDialogContentText-root": { marginBottom: 0 },
+    },
+  },
+  dialogProps: {
+    maxWidth: false,
+    PaperProps: {
+      sx: {
+        width: "max-content",
+        maxWidth: "min(480px, calc(100vw - 32px))",
+      },
+    },
+  },
+  dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)", pt: 0 } },
+  confirmationButtonProps: { color: "primary", variant: "contained" },
+  cancellationButtonProps: { color: "secondary", variant: "contained" },
+} as const;
+
+export function formatSubmitJobConfirmTitle(jobName: string): string {
+  const name = jobName.trim() || "Untitled Job";
+  return `Submit job "${name}"?`;
+}
+
+export function formatSubmitBulkJobsConfirmTitle(jobCount: number): string {
+  return `Submit ${jobCount} job${jobCount === 1 ? "" : "s"}?`;
+}
 
 export default {};

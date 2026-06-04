@@ -1,11 +1,18 @@
 import { FC, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useMap } from "react-leaflet";
 // @ts-expect-error - No type definitions available
-import parseGeoraster from "georaster";
-// @ts-expect-error - No type definitions available
 import GeoRasterLayer from "georaster-layer-for-leaflet";
-import useCurrentJobStore from "../utils/currentJobStore";
+import useCurrentJobStore, { ClipToPolygonMode } from "../utils/currentJobStore";
 import { ET_COLORMAP, MAP_LAYER_OPTIONS } from "../utils/constants";
+import { getPreviewColormap, getPreviewDisplayName } from "../utils/previewCalculations";
+import {
+  formatPreviewValue,
+  getPreviewValueAtLatLng,
+  isNoData,
+  getPreviewLayerScale,
+  shouldUpdatePreviewScaleStore,
+} from "../utils/previewGeoraster";
+import { applyPreviewPolygonClip, isPreviewLocationVisible } from "../utils/previewPolygonClip";
 import { Tooltip, LeafletMouseEvent } from "leaflet";
 import useStore, { MapLayer } from "../utils/store";
 
@@ -14,7 +21,6 @@ import ColorScale from "./ColorScale";
 import { useAtom } from "jotai";
 import { tooltipAtom } from "../utils/atoms";
 
-// Add CSS to disable transitions on Leaflet layers
 const style = document.createElement("style");
 style.textContent = `
   .active-monthly-map-layer .leaflet-tile {
@@ -25,30 +31,14 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Add CSS for crossfade effect
-const styleCrossfade = document.createElement("style");
-styleCrossfade.textContent = `
-  .active-monthly-map-layer {
-    transition: opacity 0.3s ease-in-out !important;
-  }
-  .active-monthly-map-layer.fade-out {
-    opacity: 0 !important;
-  }
-  .active-monthly-map-layer.fade-in {
-    opacity: 1 !important;
-  }
-`;
-document.head.appendChild(styleCrossfade);
-
-// Helper function to convert hex to RGB
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
     ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16),
-      }
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16),
+    }
     : null;
 };
 
@@ -90,65 +80,58 @@ interface GeoRaster {
   width: number;
   height: number;
   values: number[][][];
+  mins: number[];
+  maxs: number[];
 }
 
-// Helper function to get value at lat/lng from georaster
-const getValueAtLatLng = (georaster: GeoRaster, lat: number, lng: number) => {
-  // Calculate pixel coordinates
-  const x = Math.floor((lng - georaster.xmin) / georaster.pixelWidth);
-  const y = Math.floor((georaster.ymax - lat) / georaster.pixelHeight);
-
-  // Check if coordinates are within bounds
-  if (x < 0 || x >= georaster.width || y < 0 || y >= georaster.height) {
-    return null;
-  }
-
-  // Get value from the 2D array
-  return georaster.values[0][y][x];
-};
+const PREVIEW_LAYER_HOLD_MS = 180;
+const PREVIEW_LAYER_SWAP_FALLBACK_MS = 700;
 
 const ActiveMonthlyMapLayer: FC = () => {
   const map = useMap();
+  const activeJobGroup = useStore((state) => state.activeJobGroup);
   const [previewJobId, setPreviewJobId] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [, setIsLoading] = useState<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const layerRef = useRef<GeoRasterLayer | null>(null);
+  const pendingLayerRef = useRef<GeoRasterLayer | null>(null);
+  const swapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swapHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tooltipRef = useRef<Tooltip | null>(null);
   const mousemoveHandlerRef = useRef<((e: LeafletMouseEvent) => void) | null>(null);
   const mouseoutHandlerRef = useRef<(() => void) | null>(null);
-  const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+  const loadGenerationRef = useRef(0);
+  const rawGeorasterRef = useRef<GeoRaster | null>(null);
+  const displayedGeorasterRef = useRef<GeoRaster | null>(null);
+  const previewDataFetchKeyRef = useRef("");
   const [tooltip, setTooltip] = useAtom(tooltipAtom);
 
-  // Get preview state from currentJobStore
   const showPreview = useCurrentJobStore((state) => state.showPreview);
-  const setShowPreview = useCurrentJobStore((state) => state.setShowPreview);
   const previewMonth = useCurrentJobStore((state) => state.previewMonth);
   const setPreviewMonth = useCurrentJobStore((state) => state.setPreviewMonth);
   const previewYear = useCurrentJobStore((state) => state.previewYear);
   const setPreviewYear = useCurrentJobStore((state) => state.setPreviewYear);
   const previewVariable = useCurrentJobStore((state) => state.previewVariable);
   const setPreviewVariable = useCurrentJobStore((state) => state.setPreviewVariable);
-  const fetchMonthlyGeojson = useCurrentJobStore((state) => state.fetchMonthlyGeojson);
+  const fetchPreviewGeoraster = useCurrentJobStore((state) => state.fetchPreviewGeoraster);
   const setAvailableDays = useCurrentJobStore((state) => state.setAvailableDays);
 
   const isSidebarOpen = useStore((state) => state.isRightPanelOpen);
 
   const activeJob = useStore((state) => state.activeJob);
+  const activeJobKey = activeJob?.key;
 
   const [dynamicPreviewColorScale, setDynamicPreviewColorScale] = useCurrentJobStore((state) => [
     state.dynamicPreviewColorScale,
     state.setDynamicPreviewColorScale,
   ]);
-  const [activePreviewMinValue, setActivePreviewMinValue] = useCurrentJobStore((state) => [
-    state.previewMin,
-    state.setPreviewMin,
-  ]);
-  const [activePreviewMaxValue, setActivePreviewMaxValue] = useCurrentJobStore((state) => [
-    state.previewMax,
-    state.setPreviewMax,
-  ]);
+  const activePreviewMinValue = useCurrentJobStore((state) => state.previewMin);
+  const activePreviewMaxValue = useCurrentJobStore((state) => state.previewMax);
+  const previewOpacity = useCurrentJobStore((state) => state.previewOpacity);
+  const setPreviewOpacity = useCurrentJobStore((state) => state.setPreviewOpacity);
+  const clipToPolygon = useCurrentJobStore((state) => state.clipToPolygon);
+  const clipToPolygonMode = useCurrentJobStore((state) => state.clipToPolygonMode);
 
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const mapLayerHasColorScale = useMemo(() => {
@@ -156,18 +139,48 @@ const ActiveMonthlyMapLayer: FC = () => {
     return !!mapLayer?.showColorScale;
   }, [mapLayerKey]);
 
-  // Clean up function to remove all layers and event listeners
-  const cleanupLayers = useCallback(() => {
-    // Clear any pending fade timeouts
-    if (fadeTimeoutRef.current) {
-      clearTimeout(fadeTimeoutRef.current);
-      fadeTimeoutRef.current = null;
+  const isPreviewReady = useMemo(() => {
+    if (!activeJob?.key || activeJob.key !== previewJobId) {
+      return false;
     }
+    if (activeJob.start_year == null || activeJob.end_year == null) {
+      return false;
+    }
+    if (!previewMonth || !previewYear) {
+      return false;
+    }
+    const year = Number(previewYear);
+    const month = Number(previewMonth);
+    if (Number.isNaN(year) || Number.isNaN(month)) {
+      return false;
+    }
+    return year >= Number(activeJob.start_year) && year <= Number(activeJob.end_year);
+  }, [activeJob, previewJobId, previewMonth, previewYear]);
+
+  const clearSwapTimers = useCallback(() => {
+    if (swapTimeoutRef.current) {
+      clearTimeout(swapTimeoutRef.current);
+      swapTimeoutRef.current = null;
+    }
+    if (swapHoldTimeoutRef.current) {
+      clearTimeout(swapHoldTimeoutRef.current);
+      swapHoldTimeoutRef.current = null;
+    }
+  }, []);
+
+  const cleanupLayers = useCallback(() => {
+    clearSwapTimers();
 
     // Remove existing layer if any
     if (layerRef.current) {
       map.removeLayer(layerRef.current);
       layerRef.current = null;
+    }
+
+    // Remove pending layer if any (created while swapping, not yet visible)
+    if (pendingLayerRef.current) {
+      map.removeLayer(pendingLayerRef.current);
+      pendingLayerRef.current = null;
     }
 
     // Remove existing tooltip if any
@@ -187,20 +200,49 @@ const ActiveMonthlyMapLayer: FC = () => {
       map.off("mouseout", mouseoutHandlerRef.current);
       mouseoutHandlerRef.current = null;
     }
-  }, [map]);
+  }, [map, clearSwapTimers]);
 
-  // Function to create a new layer with crossfade
-  const createLayerWithCrossfade = async (georaster: GeoRaster, minValue: number, maxValue: number, colormap: string[]) => {
-    // Create the new layer
+  const applyClipToRawGeoraster = useCallback(
+    (georaster: GeoRaster, jobGeoJson: unknown, clipEnabled: boolean, clipMode: ClipToPolygonMode) => {
+      if (clipEnabled && jobGeoJson) {
+        return applyPreviewPolygonClip(georaster, jobGeoJson, clipMode);
+      }
+      return georaster;
+    },
+    []
+  );
+
+  const createPreviewLayer = (
+    georaster: GeoRaster,
+    minValue: number,
+    maxValue: number,
+    colormap: string[],
+    loadGeneration: number,
+    deferSwap: boolean
+  ) => {
+    const pixelValuesToColorFn = (value: number | number[]) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      if (isNoData(raw)) {
+        return undefined;
+      }
+      const normalizedValue = (raw - minValue) / (maxValue - minValue);
+      return getInterpolatedColor(normalizedValue, colormap);
+    };
+
+    clearSwapTimers();
+
+    // If we already have a layer waiting to be swapped in, drop it
+    if (pendingLayerRef.current) {
+      map.removeLayer(pendingLayerRef.current);
+      pendingLayerRef.current = null;
+    }
+
+    const layerOpacity = useCurrentJobStore.getState().previewOpacity;
     const newLayer = new GeoRasterLayer({
-      georaster: georaster,
-      opacity: 0,
+      georaster,
+      opacity: layerOpacity,
       resolution: 256,
-      pixelValuesToColorFn: (value: number) => {
-        const normalizedValue = (value - minValue) / (maxValue - minValue);
-        return getInterpolatedColor(normalizedValue, colormap);
-      },
-      debugLevel: 1,
+      pixelValuesToColorFn,
       transition: false,
       noWrap: true,
       zIndex: 1,
@@ -208,71 +250,125 @@ const ActiveMonthlyMapLayer: FC = () => {
       updateWhenIdle: false,
       updateWhenZooming: false,
       updateWhenMoving: false,
-      className: "active-monthly-map-layer fade-in",
+      className: "active-monthly-map-layer",
     }) as unknown as GeoRasterLayer;
 
-    // Add the new layer to the map
+    const oldLayer = layerRef.current;
     newLayer.addTo(map);
 
-    // If there's an existing layer, fade it out
-    if (layerRef.current) {
-      const oldLayer = layerRef.current;
-      const oldLayerElement = oldLayer.getContainer();
-
-      if (oldLayerElement) {
-        // Add fade-out class to old layer
-        oldLayerElement.classList.add("fade-out");
-
-        // After fade-out completes, remove the old layer
-        fadeTimeoutRef.current = setTimeout(() => {
-          map.removeLayer(oldLayer);
-        }, 300);
-      } else {
-        // If no element found, just remove the layer
+    if (!deferSwap || !oldLayer) {
+      if (oldLayer && map.hasLayer(oldLayer)) {
         map.removeLayer(oldLayer);
       }
+      layerRef.current = newLayer;
+      pendingLayerRef.current = null;
+      return newLayer;
     }
 
-    // Fade in the new layer
-    setTimeout(() => {
-      newLayer.setOpacity(1);
-    }, 10);
+    pendingLayerRef.current = newLayer;
+
+    // Render the new month underneath while the previous month stays on top
+    oldLayer.setZIndex(2);
+    oldLayer.bringToFront();
+
+    let swapCommitted = false;
+
+    const discardPendingLayer = () => {
+      clearSwapTimers();
+      if (map.hasLayer(newLayer)) {
+        map.removeLayer(newLayer);
+      }
+      if (pendingLayerRef.current === newLayer) {
+        pendingLayerRef.current = null;
+      }
+    };
+
+    const commitSwap = () => {
+      if (swapCommitted) {
+        return;
+      }
+
+      if (loadGeneration !== loadGenerationRef.current) {
+        discardPendingLayer();
+        return;
+      }
+
+      swapCommitted = true;
+      clearSwapTimers();
+
+      if (oldLayer && map.hasLayer(oldLayer)) {
+        map.removeLayer(oldLayer);
+      }
+
+      layerRef.current = newLayer;
+      if (pendingLayerRef.current === newLayer) {
+        pendingLayerRef.current = null;
+      }
+    };
+
+    const scheduleSwap = () => {
+      if (swapCommitted || swapHoldTimeoutRef.current) {
+        return;
+      }
+
+      swapHoldTimeoutRef.current = setTimeout(() => {
+        swapHoldTimeoutRef.current = null;
+        commitSwap();
+      }, PREVIEW_LAYER_HOLD_MS);
+    };
+
+    const onNewLayerReady = () => {
+      if (swapCommitted) {
+        return;
+      }
+
+      if (loadGeneration !== loadGenerationRef.current) {
+        discardPendingLayer();
+        return;
+      }
+
+      scheduleSwap();
+    };
+
+    newLayer.once("load", onNewLayerReady);
+    swapTimeoutRef.current = setTimeout(onNewLayerReady, PREVIEW_LAYER_SWAP_FALLBACK_MS);
 
     return newLayer;
   };
 
   useEffect(() => {
-    if (activeJob?.id !== previewJobId) {
-      setPreviewJobId(activeJob?.id || "");
-      setPreviewMonth(1);
-      setPreviewYear(activeJob?.start_year || null);
-      setPreviewVariable("ET");
-      setShowPreview(false);
-      setActivePreviewMinValue(0);
-      setActivePreviewMaxValue(0);
-      setDynamicPreviewColorScale(true);
-      cleanupLayers();
-      setAvailableDays([]);
+    if (!activeJobKey || activeJobKey === previewJobId) {
+      return;
     }
+
+    setPreviewJobId(activeJobKey);
+    setPreviewMonth(1);
+    setPreviewYear(activeJob?.start_year || null);
+    setPreviewVariable("ET");
+    setDynamicPreviewColorScale(true);
+    setPreviewOpacity(1);
+    rawGeorasterRef.current = null;
+    displayedGeorasterRef.current = null;
+    previewDataFetchKeyRef.current = "";
+    cleanupLayers();
+    setAvailableDays([]);
   }, [
-    activeJob,
+    activeJobKey,
+    activeJob?.start_year,
     previewJobId,
     setPreviewMonth,
     setPreviewYear,
     setPreviewVariable,
-    setShowPreview,
     setAvailableDays,
     setDynamicPreviewColorScale,
-    setActivePreviewMinValue,
-    setActivePreviewMaxValue,
+    setPreviewOpacity,
+    cleanupLayers,
   ]);
 
   useEffect(() => {
-    // Clean up when component unmounts
     return () => {
       cleanupLayers();
 
-      // Clean up any pending operations
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
@@ -285,34 +381,27 @@ const ActiveMonthlyMapLayer: FC = () => {
     };
   }, [map, cleanupLayers]);
 
-  // Add a new useEffect to handle tooltip visibility when showPreview changes
   useEffect(() => {
-    if (!showPreview) {
+    if (!showPreview || !activeJobKey) {
       cleanupLayers();
-      setActivePreviewMaxValue(0);
-      setActivePreviewMinValue(0);
+      return;
     }
-  }, [showPreview, cleanupLayers, setActivePreviewMaxValue, setActivePreviewMinValue]);
 
-  useEffect(() => {
+    if (useStore.getState().activeJobGroup || !previewVariable || !isPreviewReady) {
+      cleanupLayers();
+      return;
+    }
+
+    const loadGeneration = ++loadGenerationRef.current;
+
     const loadGeoTiff = async () => {
-      // If already loading, cancel the previous request
-      if (isLoading) {
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
-        if (loadTimeoutRef.current) {
-          clearTimeout(loadTimeoutRef.current);
-        }
+      if (loadGeneration !== loadGenerationRef.current) {
+        return;
       }
 
-      // Create a new abort controller for this request
-      abortControllerRef.current = new AbortController();
+      const previewState = useCurrentJobStore.getState();
+      const { activeJob: currentJob } = useStore.getState();
 
-      // Set loading state
-      setIsLoading(true);
-
-      // Clean up existing tooltips and event listeners before loading new data
       if (tooltipRef.current) {
         map.removeLayer(tooltipRef.current);
         tooltipRef.current = null;
@@ -328,151 +417,222 @@ const ActiveMonthlyMapLayer: FC = () => {
         mouseoutHandlerRef.current = null;
       }
 
-      // Only proceed if preview is enabled and we have all required data
-      if (!showPreview || !previewMonth || !previewYear || !previewVariable) {
-        setIsLoading(false);
+      const dataFetchKey = [
+        currentJob?.key,
+        previewState.previewMonth,
+        previewState.previewYear,
+        previewState.previewVariable,
+      ].join("|");
+
+      const dataChanged = previewDataFetchKeyRef.current !== dataFetchKey;
+      const deferSwap = dataChanged;
+
+      let displayGeoraster = displayedGeorasterRef.current;
+
+      if (dataChanged) {
+        setIsLoading(true);
+        const requestJobKey = currentJob?.key;
+
+        try {
+          const georaster = (await fetchPreviewGeoraster()) as GeoRaster | null;
+
+          if (loadGeneration !== loadGenerationRef.current) {
+            return;
+          }
+
+          if (!georaster) {
+            rawGeorasterRef.current = null;
+            displayedGeorasterRef.current = null;
+            previewDataFetchKeyRef.current = "";
+            const stillCurrent =
+              !useStore.getState().activeJobGroup &&
+              useStore.getState().activeJob?.key === requestJobKey;
+            if (stillCurrent) {
+              console.warn("Preview data is not available for this job and date");
+            }
+            return;
+          }
+
+          rawGeorasterRef.current = georaster;
+          previewDataFetchKeyRef.current = dataFetchKey;
+
+          const clipState = useCurrentJobStore.getState();
+          displayGeoraster = applyClipToRawGeoraster(
+            georaster,
+            currentJob?.loaded_geo_json,
+            clipState.clipToPolygon,
+            clipState.clipToPolygonMode
+          );
+          displayedGeorasterRef.current = displayGeoraster;
+        } catch (error: unknown) {
+          const err = error as Error;
+          if (err.name !== "AbortError") {
+            console.error("Error loading GeoTIFF:", err);
+          }
+          return;
+        } finally {
+          if (loadGeneration === loadGenerationRef.current) {
+            setIsLoading(false);
+          }
+        }
+      } else if (rawGeorasterRef.current) {
+        const clipState = useCurrentJobStore.getState();
+        displayGeoraster = applyClipToRawGeoraster(
+          rawGeorasterRef.current,
+          currentJob?.loaded_geo_json,
+          clipState.clipToPolygon,
+          clipState.clipToPolygonMode
+        );
+        displayedGeorasterRef.current = displayGeoraster;
+      }
+
+      if (!displayGeoraster || loadGeneration !== loadGenerationRef.current) {
         return;
       }
 
-      try {
-        // Fetch the GeoTIFF data
-        const arrayBuffer = await fetchMonthlyGeojson();
+      const scaleState = useCurrentJobStore.getState();
+      const scale = getPreviewLayerScale(
+        displayGeoraster.mins[0],
+        displayGeoraster.maxs[0],
+        scaleState.dynamicPreviewColorScale,
+        scaleState.previewMin,
+        scaleState.previewMax
+      );
 
-        if (!arrayBuffer) {
-          console.error("Failed to fetch GeoTIFF data");
-          setIsLoading(false);
-          return;
-        }
-
-        // Parse the GeoTIFF data
-        const georaster = await parseGeoraster(arrayBuffer);
-
-        // Determine colormap based on variable type
-        const colormap = ET_COLORMAP;
-
-        let minValue = georaster.mins[0];
-        let maxValue = georaster.maxs[0];
-
-        if (
-          dynamicPreviewColorScale ||
-          activePreviewMinValue === null ||
-          activePreviewMaxValue === null ||
-          activePreviewMinValue === activePreviewMaxValue
-        ) {
-          if (minValue === maxValue) {
-            minValue = 0;
-            maxValue = Math.max(maxValue, 300);
-          }
-
-          setActivePreviewMinValue(minValue);
-          setActivePreviewMaxValue(maxValue);
-        } else {
-          minValue = Number(activePreviewMinValue);
-          maxValue = Number(activePreviewMaxValue);
-        }
-
-        // Create the new layer with crossfade
-        const layer = await createLayerWithCrossfade(georaster, minValue, maxValue, colormap);
-
-        let currentTooltip = tooltip;
-
-        // Create tooltip
-        if (!currentTooltip) {
-          currentTooltip = new Tooltip({
-            permanent: false,
-            direction: "top",
-            offset: [0, -10],
-            className: "custom-tooltip",
-          });
-
-          setTooltip(currentTooltip);
-        }
-
-        // Add mouse move handler to update tooltip
-        const mousemoveHandler = (e: LeafletMouseEvent) => {
-          // Close any existing tooltips first
-          if (tooltipRef.current) {
-            map.removeLayer(tooltipRef.current);
-            tooltipRef.current = null;
-          }
-
-          const value = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
-
-          let variableName: string = previewVariable;
-          if (previewVariable === "PET" && previewYear && Number(previewYear) >= OPENET_TRANSITION_DATE) {
-            variableName = "ETo (Unadjusted)";
-          }
-
-          if (value !== null && value !== undefined) {
-            const units = "mm/month";
-            currentTooltip
-              ?.setLatLng(e.latlng)
-              .setContent(
-                `<div style="text-align: center">${activeJob?.name} (${new Date(
-                  Number(previewYear),
-                  Number(previewMonth) - 1
-                ).toLocaleString("default", {
-                  month: "short",
-                })} ${previewYear})<br><b>${variableName}: ${value.toFixed(2)} ${units}</b></div>`
-              )
-              .openOn(map);
-          } else {
-            currentTooltip?.close();
-          }
-        };
-
-        // Add mouse move handler
-        map.on("mousemove", mousemoveHandler);
-
-        // Close tooltip on mouse out
-        const mouseoutHandler = () => {
-          currentTooltip?.close();
-        };
-
-        map.on("mouseout", mouseoutHandler);
-
-        // Store references to the current layer and handlers
-        layerRef.current = layer;
-        tooltipRef.current = tooltip;
-        mousemoveHandlerRef.current = mousemoveHandler;
-        mouseoutHandlerRef.current = mouseoutHandler;
-      } catch (error: unknown) {
-        const err = error as Error;
-        if (err.name === "AbortError") {
-          console.log("Fetch aborted");
-        } else {
-          console.error("Error loading GeoTIFF:", err);
-        }
-      } finally {
-        setIsLoading(false);
+      if (
+        scale.shouldUpdateStore &&
+        shouldUpdatePreviewScaleStore(scaleState.previewMin, scaleState.previewMax, scale.min, scale.max)
+      ) {
+        scaleState.setPreviewMin(scale.min);
+        scaleState.setPreviewMax(scale.max);
       }
+
+      const renderState = useCurrentJobStore.getState();
+      const colormap = getPreviewColormap(renderState.previewVariable!);
+      const layer = createPreviewLayer(
+        displayGeoraster,
+        scale.min,
+        scale.max,
+        colormap,
+        loadGeneration,
+        deferSwap
+      );
+
+      if (loadGeneration !== loadGenerationRef.current) {
+        map.removeLayer(layer);
+        if (pendingLayerRef.current === layer) {
+          pendingLayerRef.current = null;
+        }
+        return;
+      }
+
+      let currentTooltip = tooltip;
+
+      if (!currentTooltip) {
+        currentTooltip = new Tooltip({
+          permanent: false,
+          direction: "top",
+          offset: [0, -10],
+          className: "custom-tooltip",
+        });
+        setTooltip(currentTooltip);
+      }
+
+      const mousemoveHandler = (e: LeafletMouseEvent) => {
+        const hoverState = useCurrentJobStore.getState();
+        const hoverJob = useStore.getState().activeJob;
+        const value = getPreviewValueAtLatLng(displayGeoraster, e.latlng.lat, e.latlng.lng);
+        const insideClip =
+          !hoverState.clipToPolygon ||
+          !hoverJob?.loaded_geo_json ||
+          isPreviewLocationVisible(
+            e.latlng.lng,
+            e.latlng.lat,
+            displayGeoraster,
+            hoverJob.loaded_geo_json,
+            hoverState.clipToPolygonMode
+          );
+
+        let variableName = getPreviewDisplayName(hoverState.previewVariable!);
+        if (
+          hoverState.previewVariable === "PET" &&
+          hoverState.previewYear &&
+          Number(hoverState.previewYear) >= OPENET_TRANSITION_DATE
+        ) {
+          variableName = "ETo (Unadjusted)";
+        }
+
+        if (insideClip && value !== null && value !== undefined && !isNoData(value)) {
+          const formattedValue = formatPreviewValue(value, hoverState.previewUnits);
+          currentTooltip
+            ?.setLatLng(e.latlng)
+            .setContent(
+              `<div style="text-align: center">${hoverJob?.name} (${new Date(
+                Number(hoverState.previewYear),
+                Number(hoverState.previewMonth) - 1
+              ).toLocaleString("default", {
+                month: "short",
+              })} ${hoverState.previewYear})<br><b>${variableName}: ${formattedValue.value.toFixed(2)} ${formattedValue.units}</b></div>`
+            )
+            .openOn(map);
+        } else {
+          currentTooltip?.close();
+        }
+      };
+
+      map.on("mousemove", mousemoveHandler);
+
+      const mouseoutHandler = () => {
+        currentTooltip?.close();
+      };
+
+      map.on("mouseout", mouseoutHandler);
+
+      mousemoveHandlerRef.current = mousemoveHandler;
+      mouseoutHandlerRef.current = mouseoutHandler;
     };
 
-    // Debounce the loadGeoTiff function to prevent rapid consecutive calls
-    loadTimeoutRef.current = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       loadGeoTiff();
     }, 20);
 
     return () => {
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-        // Clear any tooltips or old layers
-        if (tooltipRef.current) {
-          tooltipRef.current.close();
-        }
+      clearTimeout(timeoutId);
+      if (tooltipRef.current) {
+        tooltipRef.current.close();
       }
     };
   }, [
     showPreview,
+    isPreviewReady,
+    previewJobId,
+    activeJobKey,
+    activeJob?.loaded_geo_json,
+    activeJob?.name,
     previewMonth,
     previewYear,
     previewVariable,
-    map,
-    fetchMonthlyGeojson,
+    dynamicPreviewColorScale,
     activePreviewMinValue,
     activePreviewMaxValue,
-    dynamicPreviewColorScale,
+    clipToPolygon,
+    clipToPolygonMode,
+    activeJobGroup,
+    fetchPreviewGeoraster,
+    map,
+    tooltip,
+    setTooltip,
+    cleanupLayers,
   ]);
+
+  useEffect(() => {
+    layerRef.current?.setOpacity(previewOpacity);
+    pendingLayerRef.current?.setOpacity(previewOpacity);
+  }, [previewOpacity]);
+
+  if (activeJobGroup) {
+    return null;
+  }
 
   return (
     activePreviewMinValue !== null &&
@@ -484,7 +644,7 @@ const ActiveMonthlyMapLayer: FC = () => {
         })} ${previewYear})`}
         minValue={Number(activePreviewMinValue)}
         maxValue={Number(activePreviewMaxValue)}
-        colorScale={ET_COLORMAP}
+        colorScale={previewVariable ? getPreviewColormap(previewVariable) : ET_COLORMAP}
         style={{
           right: isSidebarOpen ? (mapLayerHasColorScale ? "400px" : "350px") : mapLayerHasColorScale ? "100px" : "50px",
           transition: "right 0.1s ease",

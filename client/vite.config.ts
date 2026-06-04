@@ -9,6 +9,14 @@ export default defineConfig({
     fs: {
       allow: [".."],
     },
+    proxy: {
+      "/cdl-wms": {
+        target: "https://nassgeodata.gmu.edu",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/cdl-wms/, ""),
+      },
+    },
   },
   build: {
     rollupOptions: {

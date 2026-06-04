@@ -1,14 +1,22 @@
-FROM node:21 AS build
+FROM node:21-bookworm
 
 WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-numpy \
+        python3-rasterio \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -c "import rasterio, numpy"
 
 COPY package.json package-lock.json ./
 RUN npm install
 
 COPY init-api.sh /init-api.sh
-
 RUN chmod +x /init-api.sh
 
-COPY . .
+COPY server ./server
+COPY water_rights_visualizer/ARD_tiles.geojson ./water_rights_visualizer/ARD_tiles.geojson
 
 EXPOSE 5000

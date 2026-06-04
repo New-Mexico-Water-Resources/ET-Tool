@@ -1,0 +1,7 @@
+known_missing_entries:
+  - variable: ET
+    tile: "010012"
+    month: "1991-01-01"
+  - variable: ET_MIN
+    tile: "010012"
+    month: "1991-01-01"

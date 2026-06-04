@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from "react";
-import { TileLayer, useMap } from "react-leaflet";
+import { memo, useEffect, useMemo } from "react";
+import L from "leaflet";
+import { TileLayer, WMSTileLayer, useMap } from "react-leaflet";
 import { MAP_LAYER_OPTIONS } from "../utils/constants";
 import useStore, { MapLayer } from "../utils/store";
 
@@ -18,6 +19,29 @@ const injectTimeIntoLayer = (layer: MapLayer, time: string) => {
   return injectLayer(layer, "time", time);
 };
 
+const formatUtcDateShort = (d: Date) =>
+  d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+const formatCompositePeriod = (endIso: string, inclusiveDays: number) => {
+  const [y, m, d] = endIso.split("-").map(Number);
+  if (!y || !m || !d) return endIso;
+  const end = new Date(Date.UTC(y, m - 1, d));
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (inclusiveDays - 1));
+  return `${formatUtcDateShort(start)} - ${formatUtcDateShort(end)}`;
+};
+
+const injectCompositePeriodAttribution = (layer: MapLayer, tileDate: string): MapLayer => {
+  const days = layer.compositePeriodDays;
+  if (!days || !tileDate || !layer.attribution.includes("{compositePeriod}")) {
+    return layer;
+  }
+  return {
+    ...layer,
+    attribution: layer.attribution.replace("{compositePeriod}", formatCompositePeriod(tileDate, days)),
+  };
+};
+
 const ActiveMapLayer = () => {
   const map = useMap();
 
@@ -28,20 +52,30 @@ const ActiveMapLayer = () => {
   const tileDate = useStore((state) => state.tileDate);
   const comparisonMode = useStore((state) => state.comparisonMode);
 
+  const effectiveTileDate = useMemo(() => {
+    let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer | undefined;
+    if (!mapLayer) {
+      mapLayer = MAP_LAYER_OPTIONS["Google Satellite"] as MapLayer;
+    }
+    return tileDate || mapLayer.time || "";
+  }, [mapLayerKey, tileDate]);
+
   const activeMapLayer = useMemo(() => {
     let mapLayer = (MAP_LAYER_OPTIONS as any)?.[mapLayerKey] as MapLayer;
     if (!mapLayer) {
       mapLayer = MAP_LAYER_OPTIONS["Google Satellite"];
     }
 
-    let layer = injectTimeIntoLayer(mapLayer, tileDate);
+    let layer = injectTimeIntoLayer(mapLayer, effectiveTileDate);
     layer = injectLayer(layer, "refresh", refreshType);
     layer = injectLayer(layer, "minColor", minColor);
     layer = injectLayer(layer, "maxColor", maxColor);
     layer = injectLayer(layer, "mode", comparisonMode);
+    layer = injectLayer(layer, "maxZoom", layer.maxZoom);
+    layer = injectCompositePeriodAttribution(layer, effectiveTileDate);
 
     return layer;
-  }, [mapLayerKey, tileDate, refreshType, minColor, maxColor, comparisonMode]);
+  }, [mapLayerKey, effectiveTileDate, refreshType, minColor, maxColor, comparisonMode]);
 
   useEffect(() => {
     if (activeMapLayer?.maxZoom) {
@@ -58,11 +92,12 @@ const ActiveMapLayer = () => {
     if (activeMapLayer.backgroundProvider && (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider]) {
       const backgroundLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.backgroundProvider] as MapLayer;
 
-      let layer = injectTimeIntoLayer(backgroundLayer, tileDate);
+      let layer = injectTimeIntoLayer(backgroundLayer, effectiveTileDate);
       layer = injectLayer(layer, "refresh", refreshType);
       layer = injectLayer(layer, "minColor", minColor);
       layer = injectLayer(layer, "maxColor", maxColor);
       layer = injectLayer(layer, "mode", comparisonMode);
+      layer = injectLayer(layer, "maxZoom", layer.maxZoom);
 
       return (
         <TileLayer
@@ -80,16 +115,17 @@ const ActiveMapLayer = () => {
     }
 
     return null;
-  }, [activeMapLayer, tileDate, refreshType, minColor, maxColor, comparisonMode]);
+  }, [activeMapLayer, effectiveTileDate, refreshType, minColor, maxColor, comparisonMode]);
 
   const LabelsLayer = useMemo(() => {
     if (activeMapLayer.backgroundProvider && (MAP_LAYER_OPTIONS as any)[activeMapLayer.labelsProvider]) {
       const labelsLayer = (MAP_LAYER_OPTIONS as any)[activeMapLayer.labelsProvider] as MapLayer;
-      let layer = injectTimeIntoLayer(labelsLayer, tileDate);
+      let layer = injectTimeIntoLayer(labelsLayer, effectiveTileDate);
       layer = injectLayer(layer, "refresh", refreshType);
       layer = injectLayer(layer, "minColor", minColor);
       layer = injectLayer(layer, "maxColor", maxColor);
       layer = injectLayer(layer, "mode", comparisonMode);
+      layer = injectLayer(layer, "maxZoom", layer.maxZoom);
 
       return (
         <TileLayer
@@ -107,25 +143,60 @@ const ActiveMapLayer = () => {
     }
 
     return null;
-  }, [activeMapLayer, tileDate, refreshType, minColor, maxColor, comparisonMode]);
+  }, [activeMapLayer, effectiveTileDate, refreshType, minColor, maxColor, comparisonMode]);
+
+  const basemapInstanceKey = useMemo(
+    () => `${activeMapLayer.url}\0${activeMapLayer.wmsLayers ?? ""}`,
+    [activeMapLayer.url, activeMapLayer.wmsLayers]
+  );
+
+  const wmsTileParams = useMemo(() => {
+    if (!activeMapLayer.wmsLayers) {
+      return null;
+    }
+
+    return {
+      layers: activeMapLayer.wmsLayers,
+      format: "image/png" as const,
+      transparent: false,
+      version: "1.1.1" as const,
+    };
+  }, [activeMapLayer.wmsLayers]);
 
   return (
     <>
-      <TileLayer
-        key={activeMapLayer.name + tileDate + refreshType + minColor + maxColor + comparisonMode}
-        url={activeMapLayer.url}
-        attribution={activeMapLayer.attribution}
-        maxNativeZoom={activeMapLayer.maxZoom}
-        maxZoom={activeMapLayer.maxZoom}
-        subdomains={activeMapLayer.subdomains || []}
-        bounds={activeMapLayer?.bounds}
-        tms={activeMapLayer?.tms || false}
-        zIndex={1}
-      />
+      {activeMapLayer.wmsLayers ? (
+        <WMSTileLayer
+          key={basemapInstanceKey}
+          url={activeMapLayer.url}
+          params={wmsTileParams!}
+          crs={L.CRS.EPSG4326}
+          attribution={activeMapLayer.attribution}
+          maxZoom={activeMapLayer.maxZoom}
+          maxNativeZoom={activeMapLayer.maxZoom}
+          zIndex={1}
+          updateWhenIdle
+          keepBuffer={4}
+        />
+      ) : (
+        <TileLayer
+          key={basemapInstanceKey}
+          url={activeMapLayer.url}
+          attribution={activeMapLayer.attribution}
+          maxNativeZoom={activeMapLayer.maxZoom}
+          maxZoom={activeMapLayer.maxZoom}
+          subdomains={activeMapLayer.subdomains || []}
+          bounds={activeMapLayer?.bounds}
+          tms={activeMapLayer?.tms || false}
+          zIndex={1}
+          updateWhenIdle
+          keepBuffer={4}
+        />
+      )}
       {BackgroundTileLayer}
       {LabelsLayer}
     </>
   );
 };
 
-export default ActiveMapLayer;
+export default memo(ActiveMapLayer);

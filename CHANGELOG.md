@@ -1,3 +1,62 @@
+## 1.39.0 (2026-06-03)
+
+### Features
+- Adds unit, integration, and data quality test cases
+- Updates GitHub CI pipeline to run unit tests on every PR and unit + integration tests on PRs to main
+- Adds search support for UTM coordinates
+- Improved wording for confirmation dialog
+
+### Bug Fixes
+- Fixes data coverage gap issue discovered with PPT and ET min/max for older time ranges
+- Fixes bug with region that is larger than a single pixel, but doesn't fully cover any pixel
+- Fixes caching issue with ARD tile layer showing old version for some users
+- Hides interactive preview on dialog close
+- Fixes CDL tooltip not showing bug
+- Fixes bug causing polygon name to be lost if edited in between polygon creation steps
+- Prevents download of all clipped geotiffs from causing the API to hang
+
+## 1.38.0 (2026-05-29)
+
+### Bug Fixes
+- Fixes issue with month-summed gridMET ETo values being erroneously daylight corrected, resulting in roughly half the expected ETo output
+
+## 1.37.0 (2026-05-27)
+
+### Features
+  - **Updated Data Sources**
+    - Fetches new OpenET Ensemble ET, PRISM PPT, and gridMET ETo data for 2025
+    - Updates resolution of PRISM PPT for full data range from 4 km to 800 m
+    - Adds 2 new tiles for full data range to fully cover the bottom southwest corner of the state
+  - **Improved Interactive Preview**
+    - Interactive preview now includes opacity slider, single month stepping, unit selection, and optional polygon clipping
+    - New geotiff exporting options to export the exact interactive preview geotiff and export a clipped version of all geotiffs
+    - If viewing previously run jobs (under Map Layers) and you have the interactive preview visible, you can now click on other areas and immediately see the preview for faster comparison
+  - **New Map Layers**
+    - Adds new USDA Cropland Data Layer, Google Hybrid imagery, and NDVI basemaps
+    - USDA Cropland Data Layer includes searchable legend and allows hovering over an area to view the crop type
+  - Renames All jobs to "Previously Run Jobs"
+  - **Job Groups**
+    - When submitting a multi-polygon job, they can now optionally be kept together in a group
+    - Job groups can be previewed together simultaneously, downloaded together, and deleted together
+  - Adds ability to add polygons one at a time to create your own job group
+    - Job groups can be created either via upload or by drawing multiple polygons on the map
+  - Changes PET in interactive preview to ETo
+  - New Search button to quickly zoom to locations via address or lat/lon coordinate
+  - Adds confirmation dialog before submitting a new job along with an ETA
+  - Moves per-year report files into an annual subfolder in the job output
+
+### Bug Fixes
+  - Fixes issue with locate button not always zooming to location
+  - Fixes tile layer flickering when switching basemaps
+  - Fixes log viewer auto-scroll bug causing the logs to always jump to the bottom when new data came in
+
+## 1.36.0 (2026-01-14)
+
+### Data Output Changes
+- Removed "Adjusted PET" column from CSV output
+- Renamed "Uncorrected PET" column to "ETo (AF/month)" in CSV output
+- Updated ETo data source caveats in PDF documentation to clarify data update cadence
+
 ## 1.35.0 (2025-11-13)
 
 ### Bug Fixes
