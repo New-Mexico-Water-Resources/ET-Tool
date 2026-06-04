@@ -1,7 +1,7 @@
 {
   "name": "water-rights-visualizer",
   "private": true,
-  "version": "1.38.2",
+  "version": "1.39.0",
   "type": "module",
   "scripts": {
     "dev": "cp ../CHANGELOG.md ./CHANGELOG.md && vite",
