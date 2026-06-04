@@ -30,6 +30,7 @@ import {
   formatElapsedTime,
   squareMetersToAcres,
   submitJobConfirmSx,
+  formatSubmitJobConfirmTitle,
 } from "../utils/helpers";
 import { useConfirm } from "material-ui-confirm";
 import { area as turfArea } from "@turf/turf";
@@ -469,66 +470,76 @@ const LayersControl: FC = () => {
           </AutoSizer>
         </div>
       )}
-      <div
-        className={`dropzone-container${isBulkJob && loadedFile ? " dropzone-container--compact" : ""}`}
-        style={{
-          height: !loadedFile && rows.length === 0 ? 400 : isBulkJob && loadedFile ? 88 : 200,
-          width: "100%",
-        }}
-      >
-        {loadedFile && (
-          <div className="cancel-job">
-            <IconButton
-              onClick={(evt) => {
-                evt.preventDefault();
-                setLoadedFile(null);
-                setLoadedGeoJSON(null);
-                setMultipolygons([]);
-                setRows([]);
-              }}
-            >
-              <CloseIcon sx={{ color: "var(--st-gray-50)", ":hover": { color: "var(--st-gray-10)" } }} />
-            </IconButton>
-          </div>
-        )}
+      {!isBulkJob && (
         <div
-          className={`dropzone-area ${isDragActive ? "drag-active" : ""}`}
-          {...getRootProps()}
-          style={isBulkJob && loadedFile ? { padding: "6px 8px" } : { padding: "8px" }}
+          className={`dropzone-container${isBulkJob && loadedFile ? " dropzone-container--compact" : ""}`}
+          style={{
+            height: !loadedFile && rows.length === 0 ? 400 : isBulkJob && loadedFile ? 88 : 200,
+            width: "100%",
+          }}
         >
-          <input {...getInputProps()} />
-          {loadedFile ? (
-            isBulkJob ? (
-              <div className="loaded-file loaded-file--stacked">
-                <div className="loaded-file-name">
-                  <MapIcon style={{ color: "var(--st-gray-20)", flexShrink: 0 }} />
-                  <p>{loadedFile.name}</p>
-                </div>
-                <p className="loaded-file-area">Area: {roundedLoadedGeoJSONArea} Acres</p>
-              </div>
-            ) : (
-              <div
-                className="loaded-file"
-                style={{ margin: "8px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
+          {loadedFile && (
+            <div className="cancel-job">
+              <IconButton
+                onClick={(evt) => {
+                  evt.preventDefault();
+                  setLoadedFile(null);
+                  setLoadedGeoJSON(null);
+                  setMultipolygons([]);
+                  setRows([]);
+                }}
               >
-                <MapIcon style={{ color: "var(--st-gray-20)" }} />
-                <p style={{ color: "var(--st-gray-20)", marginBottom: 0, textAlign: "center" }}>{loadedFile.name}</p>
-                <p style={{ color: "var(--st-gray-50)", margin: 0, fontSize: "12px" }}>
-                  Area: {roundedLoadedGeoJSONArea} Acres
-                </p>
-              </div>
-            )
-          ) : (
-            <p style={{ color: "var(--st-gray-40)", textAlign: "center" }}>
-              Drag & drop <br /> or <strong>browse</strong> to upload
-              <p style={{ fontSize: "12px" }}>
-                Supports:
-                <br /> .geojson, .zip (zipped shapefiles), .kml
-              </p>
-            </p>
+                <CloseIcon sx={{ color: "var(--st-gray-50)", ":hover": { color: "var(--st-gray-10)" } }} />
+              </IconButton>
+            </div>
           )}
+          <div
+            className={`dropzone-area ${isDragActive ? "drag-active" : ""}`}
+            {...getRootProps()}
+            style={isBulkJob && loadedFile ? { padding: "6px 8px" } : { padding: "8px" }}
+          >
+            <input {...getInputProps()} />
+            {loadedFile ? (
+              isBulkJob ? (
+                <div className="loaded-file loaded-file--stacked">
+                  <div className="loaded-file-name">
+                    <MapIcon style={{ color: "var(--st-gray-20)", flexShrink: 0 }} />
+                    <p>{loadedFile.name}</p>
+                  </div>
+                  <p className="loaded-file-area">Area: {roundedLoadedGeoJSONArea} Acres</p>
+                </div>
+              ) : (
+                <div
+                  className="loaded-file"
+                  style={{ margin: "8px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
+                >
+                  <MapIcon style={{ color: "var(--st-gray-20)" }} />
+                  <p style={{ color: "var(--st-gray-20)", marginBottom: 0, textAlign: "center" }}>{loadedFile.name}</p>
+                  <p style={{ color: "var(--st-gray-50)", margin: 0, fontSize: "12px" }}>
+                    Area: {roundedLoadedGeoJSONArea} Acres
+                  </p>
+                </div>
+              )
+            ) : (
+              <p style={{ color: "var(--st-gray-40)", textAlign: "center" }}>
+                Drag & drop <br /> or <strong>browse</strong> to upload
+                <p style={{ fontSize: "12px" }}>
+                  Supports:
+                  <br /> .geojson, .zip (zipped shapefiles), .kml
+                </p>
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+      {isBulkJob && (
+        <Typography
+          variant="caption"
+          sx={{ color: "var(--st-gray-50)", fontSize: "11px", ml: "8px", mb: "4px", display: "block" }}
+        >
+          Total Area: {roundedLoadedGeoJSONArea} acres
+        </Typography>
+      )}
       <AddUploadShapes />
       <div className="message-container" style={{ display: "flex", maxWidth: "300px" }}>
         {!canWriteJobs && (
@@ -579,7 +590,7 @@ const LayersControl: FC = () => {
               const estimatedTime = formatElapsedTime(estimateSubmitDurationMsFromYearRuns(yearCount)).trim();
 
               confirm({
-                title: "Submit job?",
+                title: formatSubmitJobConfirmTitle(jobName),
                 description: [
                   `Years requested: ${yearCount} (${startYear}–${endYear})`,
                   `Area: ${acres.toLocaleString(undefined, { maximumFractionDigits: 2 })} acres`,
@@ -608,6 +619,8 @@ const LayersControl: FC = () => {
               confirm(
                 createBulkSubmitConfirmOptions({
                   jobCount: jobs.length,
+                  groupJobsTogether: groupJobsTogether && jobs.length > 1,
+                  groupName: bulkGroupName.trim() || jobName.trim() || "Untitled Job",
                   yearsPerJob,
                   startYear,
                   endYear,

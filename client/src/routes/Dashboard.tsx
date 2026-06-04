@@ -15,10 +15,19 @@ import LoginButton from "../components/LoginButton";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import UsersList from "../components/UsersList";
 import MapLayersPanel from "../components/MapLayersPanel";
-import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
+import {
+  MAP_LAYER_OPTIONS,
+  ET_COLORMAP,
+  DIFF_COLORMAP,
+  REFERENCE_GEOJSONS,
+  ARD_TILES_DATA_VERSION,
+  getCdlDisplayYear,
+} from "../utils/constants";
+import { formatCdlLegendTitle } from "../utils/cdlYear";
 import ActiveMapLayer from "../components/ActiveMapLayer";
 import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
+import PixelDrawControl from "../components/PixelDrawControl";
 import MapSearchControl from "../components/MapSearchControl";
 import ActiveMonthlyMapLayer from "../components/ActiveMonthlyMapLayer";
 import GroupPreviewMapLayer from "../components/GroupPreviewMapLayer";
@@ -62,6 +71,7 @@ const Dashboard = () => {
   const fetchARDTiles = useStore((state) => state.fetchARDTiles);
   const showARDTiles = useStore((state) => state.showARDTiles);
   const ardTiles = useStore((state) => state.ardTiles);
+  const ardTilesDataVersion = useStore((state) => state.ardTilesDataVersion);
   const fetchDroughtMonitorData = useStore((state) => state.fetchDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
@@ -101,6 +111,8 @@ const Dashboard = () => {
   const comparisonMode = useStore((state) => state.comparisonMode);
 
   const showPreview = useCurrentJobStore((state) => state.showPreview);
+  const previewMin = useCurrentJobStore((state) => state.previewMin);
+  const previewMax = useCurrentJobStore((state) => state.previewMax);
   const jobLocateGeneration = useStore((state) => state.jobLocateGeneration);
 
   const minColor = useMemo(() => {
@@ -148,13 +160,47 @@ const Dashboard = () => {
     [activeMapLayer?.wmsLegend, activeMapLayer?.wmsLayers]
   );
 
+  const authToken = useStore((s) => s.authToken);
+  const cdlReleaseYear = useStore((s) => s.cdlReleaseYear);
+  const fetchCdlReleaseYearIfNeeded = useStore((s) => s.fetchCdlReleaseYearIfNeeded);
+
+  useEffect(() => {
+    if (!authToken) {
+      return;
+    }
+    fetchCdlReleaseYearIfNeeded();
+  }, [authToken, fetchCdlReleaseYearIfNeeded]);
+
+  const cdlLegendTitle = useMemo(() => {
+    const year = getCdlDisplayYear(activeMapLayer, cdlReleaseYear);
+    return formatCdlLegendTitle(year);
+  }, [activeMapLayer, cdlReleaseYear]);
+
+  const showPreviewColorScale = useMemo(() => {
+    if (!showPreview || previewMin == null || previewMax == null || previewMin === previewMax) {
+      return false;
+    }
+    return true;
+  }, [showPreview, previewMin, previewMax]);
+
+  const cdlLegendRightPx = useMemo(() => {
+    if (!showPreviewColorScale) {
+      return isRightPanelOpen ? 350 : 50;
+    }
+    return isRightPanelOpen ? 384 : 100;
+  }, [isRightPanelOpen, showPreviewColorScale]);
+
   const showRightMapLegend = showColorScale || showWmsLegend;
 
   useEffect(() => {
-    if (showARDTiles && !Object.keys(ardTiles).length) {
+    const needsFetch =
+      showARDTiles &&
+      (!Object.keys(ardTiles).length || ardTilesDataVersion !== ARD_TILES_DATA_VERSION);
+
+    if (needsFetch) {
       fetchARDTiles();
     }
-  }, [showARDTiles, ardTiles, fetchARDTiles]);
+  }, [showARDTiles, ardTiles, ardTilesDataVersion, fetchARDTiles]);
 
   const loadVersion = useStore((state) => state.loadVersion);
 
@@ -402,6 +448,7 @@ const Dashboard = () => {
           {showWmsLegend && <CdlHoverIdentify />}
           <ZoomControl position="topright" />
           <DrawControls />
+          <PixelDrawControl />
           <MapSearchControl />
           <ScaleControl position="bottomleft" />
 
@@ -487,10 +534,7 @@ const Dashboard = () => {
           <MultiGeoJSONLayer data={multipolygons} locations={locations} />
         </MapContainer>
         {showWmsLegend && (
-          <CdlLegendFab
-            title={`${activeMapLayer?.name ?? "USDA Crop and Land-Cover"} Legend`}
-            rightPx={isRightPanelOpen ? 350 : 50}
-          />
+          <CdlLegendFab title={cdlLegendTitle} rightPx={cdlLegendRightPx} />
         )}
       </div>
       <Snackbar

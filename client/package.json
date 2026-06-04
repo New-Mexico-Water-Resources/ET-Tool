@@ -1,7 +1,7 @@
 {
   "name": "water-rights-visualizer",
   "private": true,
-  "version": "1.38.0",
+  "version": "1.38.2",
   "type": "module",
   "scripts": {
     "dev": "cp ../CHANGELOG.md ./CHANGELOG.md && vite",
@@ -16,12 +16,13 @@
     "@fontsource/roboto": "^5.0.13",
     "@melloware/react-logviewer": "^5.1.1",
     "@mui/icons-material": "^5.15.18",
-    "@mui/material": "^6.0.0-alpha.8",
+    "@mui/material": "6.5.0",
     "@mui/x-data-grid": "^7.7.0",
     "@mui/x-date-pickers": "^7.23.6",
     "@turf/turf": "^7.1.0",
     "axios": "^1.7.2",
     "chroma-js": "^3.1.2",
+    "proj4": "^2.20.2",
     "dayjs": "^1.11.13",
     "georaster": "^1.6.0",
     "georaster-layer-for-leaflet": "^3.10.0",

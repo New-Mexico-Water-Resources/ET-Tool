@@ -33,8 +33,8 @@ docker run -d --name et-tool-mongo -p 27017:27017 mongo
 Then, spin up the Frontend by navigating to the `client` directory and running:
 
 ```bash
-yarn install
-yarn dev
+pnpm install
+pnpm dev
 ```
 
 Next, spin up the Backend by navigating to the root directory and running:

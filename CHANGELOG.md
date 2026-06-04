@@ -1,3 +1,20 @@
+## 1.39.0 (2026-06-03)
+
+### Features
+- Adds unit, integration, and data quality test cases
+- Updates GitHub CI pipeline to run unit tests on every PR and unit + integration tests on PRs to main
+- Adds search support for UTM coordinates
+- Improved wording for confirmation dialog
+
+### Bug Fixes
+- Fixes data coverage gap issue discovered with PPT and ET min/max for older time ranges
+- Fixes bug with region that is larger than a single pixel, but doesn't fully cover any pixel
+- Fixes caching issue with ARD tile layer showing old version for some users
+- Hides interactive preview on dialog close
+- Fixes CDL tooltip not showing bug
+- Fixes bug causing polygon name to be lost if edited in between polygon creation steps
+- Prevents download of all clipped geotiffs from causing the API to hang
+
 ## 1.38.0 (2026-05-29)
 
 ### Bug Fixes
@@ -8,7 +25,7 @@
 ### Features
   - **Updated Data Sources**
     - Fetches new OpenET Ensemble ET, PRISM PPT, and gridMET ETo data for 2025
-    - Updates resolution of PRISM PPT for full data range from 2 km to 500 m
+    - Updates resolution of PRISM PPT for full data range from 4 km to 800 m
     - Adds 2 new tiles for full data range to fully cover the bottom southwest corner of the state
   - **Improved Interactive Preview**
     - Interactive preview now includes opacity slider, single month stepping, unit selection, and optional polygon clipping

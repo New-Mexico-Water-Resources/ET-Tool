@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import axios, { AxiosInstance } from "axios";
-import { API_URL, DATA_END_YEAR, ROLES } from "./constants";
+import { API_URL, ARD_TILES_DATA_VERSION, DATA_END_YEAR, ROLES } from "./constants";
 import { formatElapsedTime, formJobForQueue } from "./helpers";
 import {
   combineGeojsonsToFeatureCollection,
@@ -14,9 +14,13 @@ import {
   buildPolygonLocationsFromGeojsons,
   collectExistingUploadShapes,
   geojsonsFromPrepareResponse,
+  isSyntheticDrawnUploadFile,
+  mergePolygonLocations,
+  uploadFileBaseName,
 } from "./uploadShapes";
 import { area as turfArea } from "@turf/turf";
 import packageJson from "../../package.json";
+import { fetchCdlReleaseYear, getCachedCdlReleaseYear } from "./cdlYear";
 
 export interface PolygonLocation {
   visible: boolean;
@@ -235,6 +239,7 @@ interface Store {
   toggleAllCompletedJobs: () => void;
   allCompletedJobs: any[];
   ardTiles: Record<string, any>;
+  ardTilesDataVersion: number;
   visibleReferenceLayers: string[];
   setVisibleReferenceLayers: (visibleReferenceLayers: string[]) => void;
   fetchARDTiles: () => void;
@@ -252,6 +257,8 @@ interface Store {
   fetchDroughtMonitorData: () => void;
   droughtMonitorFetchedDate: string;
   fetchingDroughtMonitorData: boolean;
+  cdlReleaseYear: number | null;
+  fetchCdlReleaseYearIfNeeded: () => void;
 }
 
 const useStore = create<Store>()(
@@ -331,7 +338,14 @@ const useStore = create<Store>()(
       showUploadDialog: true,
       setShowUploadDialog: (showUploadDialog) => set({ showUploadDialog }),
       activeJob: null,
-      setActiveJob: (activeJob) => set({ activeJob }),
+      setActiveJob: (activeJob) => {
+        if (!activeJob) {
+          void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
+            useCurrentJobStore.getState().setShowPreview(false);
+          });
+        }
+        set({ activeJob });
+      },
       jobLocateGeneration: 0,
       activeJobGroup: null,
       downloadingJobGroupId: null,
@@ -621,6 +635,9 @@ const useStore = create<Store>()(
         }
       },
       clearJobGroup: () => {
+        void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
+          useCurrentJobStore.getState().setShowPreview(false);
+        });
         set({
           activeJobGroup: null,
           activeJob: null,
@@ -711,7 +728,7 @@ const useStore = create<Store>()(
           previewStore.setPreviewMonth(1);
           previewStore.setPreviewYear(minStart);
           previewStore.setPreviewVariable("ET");
-          previewStore.setShowPreview(jobs.some((job) => job.status === "Complete"));
+          previewStore.setShowPreview(false);
         } catch (error: any) {
           set({
             errorMessage: error?.message || "Error loading job group",
@@ -722,9 +739,9 @@ const useStore = create<Store>()(
       loadJob: (job) => {
         set({ activeJobGroup: null, activeJob: job, showUploadDialog: false, previewMode: false });
 
-        const syncPreviewVisibility = () => {
+        const resetPreviewVisibility = () => {
           void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
-            useCurrentJobStore.getState().setShowPreview(job.status === "Complete");
+            useCurrentJobStore.getState().setShowPreview(false);
           });
         };
 
@@ -734,7 +751,7 @@ const useStore = create<Store>()(
             multipolygons: [],
             jobLocateGeneration: get().jobLocateGeneration + 1,
           });
-          syncPreviewVisibility();
+          resetPreviewVisibility();
           return;
         }
 
@@ -762,7 +779,7 @@ const useStore = create<Store>()(
               multipolygons,
               jobLocateGeneration: get().jobLocateGeneration + 1,
             });
-            syncPreviewVisibility();
+            resetPreviewVisibility();
           })
           .catch((error) => {
             set({ loadedGeoJSON: null, multipolygons: [], errorMessage: error?.message || "Error loading job" });
@@ -974,15 +991,25 @@ const useStore = create<Store>()(
           return;
         }
 
-        const existing = collectExistingUploadShapes(get());
+        const state = get();
+        const existing = collectExistingUploadShapes(state);
+        const previousLocations = state.locations;
         const combined = [...existing, ...newGeojsons];
         const { loadedGeoJSON, multipolygons } = applyUploadShapeList(combined);
+        const inheritFirstName =
+          multipolygons.length > 1 && previousLocations.length === 0 && existing.length > 0
+            ? state.jobName.trim()
+            : undefined;
         const locations =
           multipolygons.length > 0
-            ? buildPolygonLocationsFromGeojsons(
-                multipolygons,
-                get().minimumValidArea,
-                get().maximumValidArea
+            ? mergePolygonLocations(
+                buildPolygonLocationsFromGeojsons(
+                  multipolygons,
+                  state.minimumValidArea,
+                  state.maximumValidArea
+                ),
+                previousLocations,
+                inheritFirstName ? { inheritFirstName } : undefined
               )
             : [];
 
@@ -1016,8 +1043,26 @@ const useStore = create<Store>()(
 
         get().addUploadShapes(shapes);
 
+        const updates: Partial<{
+          loadedFile: File;
+          bulkGroupName: string;
+          groupJobsTogether: boolean;
+        }> = {};
+
         if (!hadShapes) {
-          set({ loadedFile: file });
+          updates.loadedFile = file;
+        }
+
+        if (!hadShapes && shapes.length > 1 && !isSyntheticDrawnUploadFile(file)) {
+          const groupName = uploadFileBaseName(file);
+          if (groupName) {
+            updates.bulkGroupName = groupName;
+            updates.groupJobsTogether = false;
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          set(updates);
         }
       },
       addUploadGeojson: (geojson, name) => {
@@ -1041,6 +1086,9 @@ const useStore = create<Store>()(
         }
       },
       closeNewJob: () => {
+        void import("./currentJobStore").then(({ default: useCurrentJobStore }) => {
+          useCurrentJobStore.getState().setShowPreview(false);
+        });
         set({
           showUploadDialog: false,
           previewMode: false,
@@ -1314,6 +1362,7 @@ const useStore = create<Store>()(
       visibleReferenceLayers: [],
       setVisibleReferenceLayers: (visibleReferenceLayers) => set({ visibleReferenceLayers }),
       ardTiles: {},
+      ardTilesDataVersion: 0,
       fetchARDTiles: () => {
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {
@@ -1323,7 +1372,10 @@ const useStore = create<Store>()(
         axiosInstance
           .get(`${API_URL}/ard_tiles`)
           .then((response) => {
-            set({ ardTiles: response.data });
+            set({
+              ardTiles: response.data,
+              ardTilesDataVersion: ARD_TILES_DATA_VERSION,
+            });
           })
           .catch((error) => {
             console.error("Error fetching ARD tiles", error);
@@ -1391,6 +1443,27 @@ const useStore = create<Store>()(
             });
           });
       },
+      cdlReleaseYear: getCachedCdlReleaseYear(),
+      fetchCdlReleaseYearIfNeeded: () => {
+        const cached = getCachedCdlReleaseYear();
+        if (cached != null) {
+          if (get().cdlReleaseYear !== cached) {
+            set({ cdlReleaseYear: cached });
+          }
+          return;
+        }
+
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        void fetchCdlReleaseYear(axiosInstance).then((year) => {
+          if (year != null) {
+            set({ cdlReleaseYear: year });
+          }
+        });
+      },
     })),
     {
       name: "et-visualizer-state",
@@ -1399,9 +1472,19 @@ const useStore = create<Store>()(
         sortAscending: state.sortAscending,
         changelog: state.changelog,
         ardTiles: state.ardTiles,
+        ardTilesDataVersion: state.ardTilesDataVersion,
         mapLayerKey: state.mapLayerKey,
         showARDTiles: state.showARDTiles,
       }),
+      migrate: (persistedState) => {
+        const state = persistedState as Record<string, unknown>;
+        if (state.ardTilesDataVersion !== ARD_TILES_DATA_VERSION) {
+          delete state.ardTiles;
+          state.ardTilesDataVersion = 0;
+        }
+        return state;
+      },
+      version: 1,
     }
   )
 );

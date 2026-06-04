@@ -1,7 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const path = require("path");
-const fs = require("fs");
 const constants = require("../../constants");
 const { ManagementClient } = require("auth0");
 
@@ -9,60 +7,81 @@ const cachedUsers = {
   data: [],
   lastUpdated: 0,
   page: 0,
+  total: 0,
 };
 
 const DEEP_CACHE_DURATION = 2 * 60000; // 2 minutes
 const SHALLOW_CACHE_DURATION = 600000; // 10 minutes
 
-const managementClient = new ManagementClient({
-  domain: constants.auth0_domain,
-  clientId: constants.auth0_management_client_id,
-  clientSecret: constants.auth0_management_client_secret,
-  scope: "read:users write:admin",
-  audience: `https://${constants.auth0_domain}/api/v2/`,
-  grantType: "client_credentials",
-});
+function hasManagementApiCredentials() {
+  return Boolean(
+    constants.auth0_domain &&
+      constants.auth0_management_client_id &&
+      constants.auth0_management_client_secret
+  );
+}
 
-async function fetchUsers(requestedPage) {
+function createManagementClient() {
+  return new ManagementClient({
+    domain: constants.auth0_domain,
+    clientId: constants.auth0_management_client_id,
+    clientSecret: constants.auth0_management_client_secret,
+    scope: "read:users read:roles write:admin",
+    audience: `https://${constants.auth0_domain}/api/v2/`,
+    grantType: "client_credentials",
+  });
+}
+
+let managementClient = null;
+
+function getManagementClient() {
+  if (!hasManagementApiCredentials()) {
+    throw new Error("Auth0 Management API credentials are not configured");
+  }
+
+  if (!managementClient) {
+    managementClient = createManagementClient();
+  }
+
+  return managementClient;
+}
+
+if (!hasManagementApiCredentials()) {
+  console.warn(
+    "Auth0 Management API credentials are missing. Set AUTH0_MGMT_CLIENT_ID and AUTH0_MGMT_CLIENT_SECRET."
+  );
+}
+
+async function fetchUsers(requestedPage, client) {
   try {
-    const allUsers = [];
-    // let page = 0;
-    // while (true) {
     const {
       data: { users, total },
-    } = await managementClient.users.getAll({
+    } = await client.users.getAll({
       include_totals: true,
-      // page: page++,
       page: requestedPage,
       per_page: 25,
     });
 
-    allUsers.push(...users);
+    const usersWithPermissions = await Promise.all(
+      users.map(async (user) => {
+        const permissionsResponse = await client.users.getPermissions({ id: user.user_id });
+        user.permissions = (permissionsResponse?.data || []).map((permission) => permission.permission_name);
 
-    // if (allUsers.length >= total) {
-    //   break;
-    // }
+        const rolesResponse = await client.users.getRoles({ id: user.user_id });
+        user.roles = (rolesResponse?.data || []).map((role) => ({ name: role.name, id: role.id }));
+        return user;
+      })
+    );
 
-    // if (page >= 20) {
-    //   break;
-    // }
-    // }
-
-    let usersWithPermissions = await allUsers.map(async (user) => {
-      // Fetch user permissions
-      let permissionsResponse = await managementClient.users.getPermissions({ id: user.user_id });
-      user.permissions = (permissionsResponse?.data || []).map((permission) => permission.permission_name);
-
-      let rolesResponse = await managementClient.users.getRoles({ id: user.user_id });
-      user.roles = (rolesResponse?.data || []).map((role) => ({ name: role.name, id: role.id }));
-      return user;
-    });
-
-    return Promise.all(usersWithPermissions);
+    return { users: usersWithPermissions, total };
   } catch (error) {
     console.error("Error fetching users from Auth0:", error);
     throw error;
   }
+}
+
+function sendUsersResponse(res, users, total, page) {
+  res.status(200).send({ users, total, page });
 }
 
 router.get("/users", async (req, res) => {
@@ -72,37 +91,51 @@ router.get("/users", async (req, res) => {
     return;
   }
 
-  let page = req.query.page || 0;
+  if (!hasManagementApiCredentials()) {
+    res.status(503).send({ error: "Auth0 Management API is not configured on this server" });
+    return;
+  }
+
+  const page = Number.parseInt(req.query.page, 10) || 0;
 
   try {
-    let lastUpdateTimeString = new Date(cachedUsers?.lastUpdated || 0).toLocaleString();
-    // If users were fetched less than 2 minutes ago, return cached users without any additional requests
+    const client = getManagementClient();
+    const lastUpdateTimeString = new Date(cachedUsers?.lastUpdated || 0).toLocaleString();
+
     if (cachedUsers.lastUpdated > Date.now() - DEEP_CACHE_DURATION && cachedUsers.page === page) {
-      res.status(200).send({ users: cachedUsers.data, total: cachedUsers.data.length, page: page });
       console.log("Returning cached users, last updated", `\x1b[32m${lastUpdateTimeString}\x1b[0m`);
+      sendUsersResponse(res, cachedUsers.data, cachedUsers.total, page);
       return;
     }
 
-    // If users were fetched less than 10 minute ago, check user count and return cached users if count is the same
-    let allUsers = await managementClient.users.getAll({ include_totals: true, per_page: 1 });
-    if (cachedUsers.lastUpdated > Date.now() - SHALLOW_CACHE_DURATION && cachedUsers.data.length === allUsers.data.total) {
+    const allUsers = await client.users.getAll({ include_totals: true, per_page: 1 });
+    const totalUsers = allUsers.data.total;
+
+    if (
+      cachedUsers.lastUpdated > Date.now() - SHALLOW_CACHE_DURATION &&
+      cachedUsers.total === totalUsers &&
+      cachedUsers.page === page
+    ) {
       console.log("Returning cached users, count is the same, last updated", `\x1b[32m${lastUpdateTimeString}\x1b[0m`);
-      res.status(200).send(cachedUsers.data);
+      sendUsersResponse(res, cachedUsers.data, cachedUsers.total, page);
       return;
     }
 
-    const users = await fetchUsers(page);
+    const { users, total } = await fetchUsers(page, client);
     cachedUsers.data = users;
+    cachedUsers.total = total;
+    cachedUsers.page = page;
     cachedUsers.lastUpdated = Date.now();
-    res.status(200).send({ users: users, total: allUsers.data.total, page: page });
+    sendUsersResponse(res, users, total, page);
   } catch (error) {
     if (error?.errorCode === "too_many_requests") {
       console.log("Too many requests to Auth0:", error);
-      res.status(429).send({ error: `Too many requests to Auth0, rate limit reached.` });
+      res.status(429).send({ error: "Too many requests to Auth0, rate limit reached." });
       return;
-    } else {
-      res.status(500).send({ error: "Failed to fetch users" });
     }
+
+    console.error("Failed to fetch users:", error?.message || error);
+    res.status(500).send({ error: "Failed to fetch users" });
   }
 });
 
@@ -120,7 +153,7 @@ router.delete("/delete_user", async (req, res) => {
   }
 
   try {
-    await managementClient.users.delete({ id: userId });
+    await getManagementClient().users.delete({ id: userId });
     res.status(200).send("User deleted");
   } catch (error) {
     console.error("Failed to delete user from Auth0:", error);
@@ -143,23 +176,24 @@ router.post("/update_user", async (req, res) => {
   }
 
   try {
+    const client = getManagementClient();
+
     if (!roles || roles.length === 0) {
       roles = [constants.auth0_new_user_role];
     }
 
-    // Get current user roles, assign new roles, delete old roles
-    let response = await managementClient.users.getRoles({ id: userId });
+    let response = await client.users.getRoles({ id: userId });
     let currentRoles = response.data;
     let currentRoleIds = currentRoles.map((role) => role.id);
     let newRoleIds = roles.filter((roleId) => !currentRoleIds.includes(roleId));
     let oldRoleIds = currentRoleIds.filter((roleId) => !roles.includes(roleId));
 
     if (newRoleIds.length > 0) {
-      await managementClient.users.assignRoles({ id: userId }, { roles: newRoleIds });
+      await client.users.assignRoles({ id: userId }, { roles: newRoleIds });
     }
 
     if (oldRoleIds.length > 0) {
-      await managementClient.users.deleteRoles({ id: userId }, { roles: oldRoleIds });
+      await client.users.deleteRoles({ id: userId }, { roles: oldRoleIds });
     }
 
     res.status(200).send({ message: "User updated" });
@@ -182,7 +216,7 @@ router.post("/reverify_email", async (req, res) => {
   }
 
   try {
-    await managementClient.jobs.verifyEmail({ user_id: userId });
+    await getManagementClient().jobs.verifyEmail({ user_id: userId });
     res.status(200).send({ message: "Verification email sent" });
   } catch (error) {
     console.error("Failed to send verification email from Auth0:", error);

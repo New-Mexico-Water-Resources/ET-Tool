@@ -1,15 +1,13 @@
 import nm_geojson from "../assets/geojsons/nm.json";
 import nm_counties_geojson from "../assets/geojsons/nm_counties.json";
 
-/** Optional production same-origin proxy for CDL WMS (enables canvas identify on hover). Dev defaults to Vite `/cdl-wms`. */
 const NASS_CDL_WMS_URL =
-  import.meta.env.VITE_CDL_WMS_URL ||
-  (import.meta.env.DEV
-    ? "/cdl-wms/CropScapeService/wms_cdlall.cgi"
-    : "https://nassgeodata.gmu.edu/CropScapeService/wms_cdlall.cgi");
+  import.meta.env.VITE_CDL_WMS_URL || "/cdl-wms/CropScapeService/wms_cdlall.cgi";
 
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
 export const TILE_SERVER_URL = import.meta.env.VITE_TILE_SERVER_URL || "/ts_v1/tiles";
+
+export const ARD_TILES_DATA_VERSION = 2;
 
 export const authConfig = {
   domain: import.meta.env.VITE_AUTH0_DOMAIN || "",
@@ -266,3 +264,17 @@ export const MAP_LAYER_OPTIONS = {
 };
 
 export const QUEUE_STATUSES = ["Pending", "In Progress", "WaitingApproval", "Paused"];
+
+export function getCdlDisplayYear(
+  layer: { wmsLayers?: string } | undefined,
+  releaseYear?: number | null
+): number | undefined {
+  if (releaseYear != null) {
+    return releaseYear;
+  }
+  if (!layer) {
+    return undefined;
+  }
+  const match = layer.wmsLayers?.match(/^cdl_(\d{4})$/);
+  return match ? Number(match[1]) : undefined;
+}

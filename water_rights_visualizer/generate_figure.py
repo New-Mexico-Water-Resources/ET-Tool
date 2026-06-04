@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import calendar
 import pandas as pd
 import rasterio
+from rasterio.transform import array_bounds
 import seaborn as sns
 import json
 from affine import Affine
@@ -162,8 +163,16 @@ def generate_figure(
 
         # Create a colormap for the evapotranspiration data
         cmap = LinearSegmentedColormap.from_list("ET", ET_COLORS)
-        im = ax.imshow(monthly, vmin=et_vmin, vmax=et_vmax, cmap=cmap)
-        ax.add_patch(generate_patch(ROI_latlon, affine))
+        left, bottom, right, top = array_bounds(monthly.shape[0], monthly.shape[1], affine)
+        im = ax.imshow(
+            monthly,
+            vmin=et_vmin,
+            vmax=et_vmax,
+            cmap=cmap,
+            extent=(left, right, bottom, top),
+            origin="upper",
+        )
+        ax.add_patch(generate_patch(ROI_latlon))
         ax.set_title(subfigure_title, loc="left", fontsize=axis_label_fontsize / 2, pad=4)
 
         # Set the thickness of the border around the subplot

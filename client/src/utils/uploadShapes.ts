@@ -1,6 +1,16 @@
 import { area as turfArea } from "@turf/turf";
 import type { PolygonLocation } from "./store";
 
+const SYNTHETIC_DRAWN_FILE_PATTERN = /^(drawn-shape|Point_[-\d.]+_[-\d.]+)\.geojson$/;
+
+export function isSyntheticDrawnUploadFile(file: File | null | undefined): boolean {
+  return Boolean(file && SYNTHETIC_DRAWN_FILE_PATTERN.test(file.name));
+}
+
+export function uploadFileBaseName(file: File): string {
+  return file.name.replace(/\.[^/.]+$/, "").trim();
+}
+
 export function collectExistingUploadShapes(state: {
   loadedGeoJSON: unknown;
   multipolygons: unknown[];
@@ -25,6 +35,30 @@ export function applyUploadShapeList(geojsons: unknown[]): {
     return { loadedGeoJSON: geojsons[0], multipolygons: [] };
   }
   return { loadedGeoJSON: null, multipolygons: geojsons };
+}
+
+export function mergePolygonLocations(
+  built: PolygonLocation[],
+  previous: PolygonLocation[],
+  options?: { inheritFirstName?: string }
+): PolygonLocation[] {
+  return built.map((location, index) => {
+    const prev = previous[index];
+    if (prev) {
+      return {
+        ...location,
+        name: prev.name,
+        visible: prev.visible,
+        comments: prev.comments,
+      };
+    }
+
+    if (index === 0 && options?.inheritFirstName) {
+      return { ...location, name: options.inheritFirstName };
+    }
+
+    return location;
+  });
 }
 
 export function buildPolygonLocationsFromGeojsons(

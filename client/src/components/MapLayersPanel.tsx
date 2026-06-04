@@ -31,6 +31,7 @@ import useStore, { MapLayer } from "../utils/store";
 
 import "../scss/MapLayersPanel.scss";
 import { MAP_LAYER_OPTIONS, REFERENCE_GEOJSONS } from "../utils/constants";
+import { CDL_MAP_LAYER_NAME, formatCdlBasemapSidebarLabel } from "../utils/cdlYear";
 import { parseGibsDescribeDomainsXml } from "../utils/gibsDomainDates";
 import dayjs from "dayjs";
 import { useSetAtom } from "jotai";
@@ -57,6 +58,26 @@ const MapLayersPanel: FC = () => {
   const mapLayerOptions = useMemo(() => Object.values(MAP_LAYER_OPTIONS) as MapLayer[], []);
   const mapLayerKey = useStore((state) => state.mapLayerKey);
   const setMapLayerKey = useStore((state) => state.setMapLayerKey);
+  const authToken = useStore((state) => state.authToken);
+  const cdlReleaseYear = useStore((state) => state.cdlReleaseYear);
+  const fetchCdlReleaseYearIfNeeded = useStore((state) => state.fetchCdlReleaseYearIfNeeded);
+
+  useEffect(() => {
+    if (!authToken) {
+      return;
+    }
+    fetchCdlReleaseYearIfNeeded();
+  }, [authToken, fetchCdlReleaseYearIfNeeded]);
+
+  const basemapLabel = useCallback(
+    (layer: MapLayer) => {
+      if (layer.name === CDL_MAP_LAYER_NAME && layer.wmsLegend && layer.wmsLayers) {
+        return formatCdlBasemapSidebarLabel(cdlReleaseYear);
+      }
+      return layer.name;
+    },
+    [cdlReleaseYear]
+  );
 
   const tileDate = useStore((state) => state.tileDate);
   const setTileDate = useStore((state) => state.setTileDate);
@@ -489,7 +510,12 @@ const MapLayersPanel: FC = () => {
               .map((option) => {
                 return (
                   <div key={option.name}>
-                    <FormControlLabel key={option.name} value={option.name} control={<Radio />} label={option.name} />
+                    <FormControlLabel
+                      key={option.name}
+                      value={option.name}
+                      control={<Radio />}
+                      label={basemapLabel(option)}
+                    />
                     <div
                       style={{
                         borderLeft: "1px solid var(--st-gray-70)",

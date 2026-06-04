@@ -91,10 +91,12 @@ export const submitJobConfirmSx = {
   },
   dialogProps: {
     maxWidth: false,
-    PaperProps: {
-      sx: {
-        width: "max-content",
-        maxWidth: "min(480px, calc(100vw - 32px))",
+    slotProps: {
+      paper: {
+        sx: {
+          width: "max-content",
+          maxWidth: "min(480px, calc(100vw - 32px))",
+        },
       },
     },
   },
@@ -102,5 +104,14 @@ export const submitJobConfirmSx = {
   confirmationButtonProps: { color: "primary", variant: "contained" },
   cancellationButtonProps: { color: "secondary", variant: "contained" },
 } as const;
+
+export function formatSubmitJobConfirmTitle(jobName: string): string {
+  const name = jobName.trim() || "Untitled Job";
+  return `Submit job "${name}"?`;
+}
+
+export function formatSubmitBulkJobsConfirmTitle(jobCount: number): string {
+  return `Submit ${jobCount} job${jobCount === 1 ? "" : "s"}?`;
+}
 
 export default {};
