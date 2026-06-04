@@ -1,8 +1,19 @@
 ## 1.39.0 (2026-06-03)
+
+### Features
 - Adds unit, integration, and data quality test cases
 - Updates GitHub CI pipeline to run unit tests on every PR and unit + integration tests on PRs to main
+- Adds search support for UTM coordinates
+- Improved wording for confirmation dialog
+
+### Bug Fixes
 - Fixes data coverage gap issue discovered with PPT and ET min/max for older time ranges
 - Fixes bug with region that is larger than a single pixel, but doesn't fully cover any pixel
+- Fixes caching issue with ARD tile layer showing old version for some users
+- Hides interactive preview on dialog close
+- Fixes CDL tooltip not showing bug
+- Fixes bug causing polygon name to be lost if edited in between polygon creation steps
+- Prevents download of all clipped geotiffs from causing the API to hang
 
 ## 1.38.0 (2026-05-29)
 
