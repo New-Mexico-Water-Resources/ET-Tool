@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import axios, { AxiosInstance } from "axios";
-import { API_URL, DATA_END_YEAR, ROLES } from "./constants";
+import { API_URL, ARD_TILES_DATA_VERSION, DATA_END_YEAR, ROLES } from "./constants";
 import { formatElapsedTime, formJobForQueue } from "./helpers";
 import {
   combineGeojsonsToFeatureCollection,
@@ -238,6 +238,7 @@ interface Store {
   toggleAllCompletedJobs: () => void;
   allCompletedJobs: any[];
   ardTiles: Record<string, any>;
+  ardTilesDataVersion: number;
   visibleReferenceLayers: string[];
   setVisibleReferenceLayers: (visibleReferenceLayers: string[]) => void;
   fetchARDTiles: () => void;
@@ -1358,6 +1359,7 @@ const useStore = create<Store>()(
       visibleReferenceLayers: [],
       setVisibleReferenceLayers: (visibleReferenceLayers) => set({ visibleReferenceLayers }),
       ardTiles: {},
+      ardTilesDataVersion: 0,
       fetchARDTiles: () => {
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {
@@ -1367,7 +1369,10 @@ const useStore = create<Store>()(
         axiosInstance
           .get(`${API_URL}/ard_tiles`)
           .then((response) => {
-            set({ ardTiles: response.data });
+            set({
+              ardTiles: response.data,
+              ardTilesDataVersion: ARD_TILES_DATA_VERSION,
+            });
           })
           .catch((error) => {
             console.error("Error fetching ARD tiles", error);
@@ -1443,9 +1448,19 @@ const useStore = create<Store>()(
         sortAscending: state.sortAscending,
         changelog: state.changelog,
         ardTiles: state.ardTiles,
+        ardTilesDataVersion: state.ardTilesDataVersion,
         mapLayerKey: state.mapLayerKey,
         showARDTiles: state.showARDTiles,
       }),
+      migrate: (persistedState) => {
+        const state = persistedState as Record<string, unknown>;
+        if (state.ardTilesDataVersion !== ARD_TILES_DATA_VERSION) {
+          delete state.ardTiles;
+          state.ardTilesDataVersion = 0;
+        }
+        return state;
+      },
+      version: 1,
     }
   )
 );

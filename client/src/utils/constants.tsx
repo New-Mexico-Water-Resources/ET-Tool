@@ -7,6 +7,8 @@ const NASS_CDL_WMS_URL =
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
 export const TILE_SERVER_URL = import.meta.env.VITE_TILE_SERVER_URL || "/ts_v1/tiles";
 
+export const ARD_TILES_DATA_VERSION = 2;
+
 export const authConfig = {
   domain: import.meta.env.VITE_AUTH0_DOMAIN || "",
   clientId: import.meta.env.VITE_AUTH0_CLIENT_ID || "",

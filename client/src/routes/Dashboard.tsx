@@ -15,7 +15,7 @@ import LoginButton from "../components/LoginButton";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import UsersList from "../components/UsersList";
 import MapLayersPanel from "../components/MapLayersPanel";
-import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS } from "../utils/constants";
+import { MAP_LAYER_OPTIONS, ET_COLORMAP, DIFF_COLORMAP, REFERENCE_GEOJSONS, ARD_TILES_DATA_VERSION } from "../utils/constants";
 import ActiveMapLayer from "../components/ActiveMapLayer";
 import { CRS } from "leaflet";
 import DrawControls from "../components/DrawControls";
@@ -63,6 +63,7 @@ const Dashboard = () => {
   const fetchARDTiles = useStore((state) => state.fetchARDTiles);
   const showARDTiles = useStore((state) => state.showARDTiles);
   const ardTiles = useStore((state) => state.ardTiles);
+  const ardTilesDataVersion = useStore((state) => state.ardTilesDataVersion);
   const fetchDroughtMonitorData = useStore((state) => state.fetchDroughtMonitorData);
   const droughtMonitorData = useStore((state) => state.droughtMonitorData);
 
@@ -152,10 +153,14 @@ const Dashboard = () => {
   const showRightMapLegend = showColorScale || showWmsLegend;
 
   useEffect(() => {
-    if (showARDTiles && !Object.keys(ardTiles).length) {
+    const needsFetch =
+      showARDTiles &&
+      (!Object.keys(ardTiles).length || ardTilesDataVersion !== ARD_TILES_DATA_VERSION);
+
+    if (needsFetch) {
       fetchARDTiles();
     }
-  }, [showARDTiles, ardTiles, fetchARDTiles]);
+  }, [showARDTiles, ardTiles, ardTilesDataVersion, fetchARDTiles]);
 
   const loadVersion = useStore((state) => state.loadVersion);
 
