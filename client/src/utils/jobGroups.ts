@@ -91,7 +91,10 @@ export interface QueueJob {
   ended?: string | null;
   finished?: string | null;
   submitted?: string | null;
+  submittedAt?: number | null;
   timeElapsed?: string | null;
+  status_msg?: string | null;
+  paused_year?: number | null;
   loaded_geo_json?: unknown;
   user?: {
     name?: string;

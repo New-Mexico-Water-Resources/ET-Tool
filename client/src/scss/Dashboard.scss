@@ -197,13 +197,25 @@
 
   position: absolute;
   right: 0;
+  overflow: hidden;
 
   &.open {
     width: 300px;
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   &.closed {
     width: 0;
+    transition: width 0.1s ease;
+  }
+
+  &.table-expanded {
+    width: calc(100vw - 8px);
+    z-index: 1002;
+
+    &.table-expanded-inset {
+      width: calc(100vw - 358px);
+    }
   }
 
   margin-top: 4px;
@@ -214,8 +226,6 @@
   height: calc(100vh - 52px);
   z-index: 1001;
   background-color: var(--st-gray-90);
-
-  transition: all 0.1s ease;
 
   .queue-list {
     height: 100%;

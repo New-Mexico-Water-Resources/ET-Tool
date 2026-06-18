@@ -156,3 +156,36 @@ ul.MuiMenu-list {
   padding-left: 6px;
   box-sizing: border-box;
 }
+
+.queue-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 4px 4px;
+  color: var(--st-gray-30);
+  border-bottom: 1px solid var(--st-gray-80);
+  flex-shrink: 0;
+  min-height: 36px;
+
+  &__title {
+    color: var(--st-gray-30);
+    font-size: 1.1rem;
+    line-height: 1.2;
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.queue-expand-btn {
+  padding: 2px !important;
+  color: var(--st-gray-50) !important;
+
+  .MuiSvgIcon-root {
+    color: inherit !important;
+  }
+
+  &:hover {
+    color: var(--st-gray-30) !important;
+    background-color: var(--st-gray-80);
+  }
+}

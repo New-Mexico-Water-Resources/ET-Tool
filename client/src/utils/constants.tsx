@@ -265,6 +265,57 @@ export const MAP_LAYER_OPTIONS = {
 
 export const QUEUE_STATUSES = ["Pending", "In Progress", "WaitingApproval", "Paused"];
 
+export const ALL_JOB_STATUSES = [
+  "Pending",
+  "WaitingApproval",
+  "In Progress",
+  "Paused",
+  "Complete",
+  "Failed",
+  "Killed",
+];
+
+const JOB_STATUS_DISPLAY_NAMES: Record<string, string> = {
+  WaitingApproval: "Waiting For Approval",
+};
+
+const JOB_STATUS_DESCRIPTIONS: Record<string, string> = {
+  Pending: "Queued for processing",
+  WaitingApproval: "Waiting for admin to approve job",
+  "In Progress": "Currently processing",
+  Paused: "Job is paused",
+  Complete: "Job finished successfully",
+  Failed: "Job failed",
+  Killed: "Job was manually killed",
+};
+
+export function getJobStatusDisplayName(status: string): string {
+  return JOB_STATUS_DISPLAY_NAMES[status] ?? status;
+}
+
+export function getJobStatusTooltip(status: string, statusMessage?: string | null): string {
+  const displayStatus = getJobStatusDisplayName(status);
+  const defaultDescription = JOB_STATUS_DESCRIPTIONS[status];
+  const message = statusMessage?.trim();
+  const lines = [displayStatus];
+
+  if (status === "Complete") {
+    if (defaultDescription) {
+      lines.push(defaultDescription);
+    }
+    return lines.join("\n");
+  }
+
+  const detail =
+    message && message !== status && message !== displayStatus ? message : defaultDescription;
+
+  if (detail) {
+    lines.push(detail);
+  }
+
+  return lines.join("\n");
+}
+
 export function getCdlDisplayYear(
   layer: { wmsLayers?: string } | undefined,
   releaseYear?: number | null

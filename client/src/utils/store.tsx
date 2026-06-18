@@ -228,6 +228,10 @@ interface Store {
   setSortAscending: (sortAscending: boolean) => void;
   approveJob: (jobKey: string) => void;
   bulkApproveJobs: (jobKeys: string[]) => void;
+  bulkPauseJobs: (jobKeys: string[]) => void;
+  bulkRestartJobs: (jobKeys: string[]) => void;
+  bulkResumeJobs: (jobKeys: string[]) => void;
+  reorderPendingJobs: (jobKeys: string[]) => void;
   changelog: string;
   version: string;
   loadVersion: () => void;
@@ -403,7 +407,14 @@ const useStore = create<Store>()(
           }
 
           const formattedQueue = response.data.map((job: any) => {
-            job.submitted = job.submitted ? new Date(job.submitted).toLocaleString() : null;
+            const submittedAt =
+              typeof job.submitted === "number"
+                ? job.submitted
+                : job.submitted
+                  ? new Date(job.submitted).getTime()
+                  : null;
+            job.submittedAt = Number.isFinite(submittedAt) ? submittedAt : null;
+            job.submitted = job.submittedAt ? new Date(job.submittedAt).toLocaleString() : null;
             job.started = job.started ? new Date(job.started).toLocaleString() : null;
             job.ended = job.ended ? new Date(job.ended).toLocaleString() : null;
             job.timeElapsed =
@@ -498,12 +509,13 @@ const useStore = create<Store>()(
           })
           .then(() => {
             set((state) => {
-              const deletedJobs = state.queue.filter((item) => jobKeys.includes(item.key));
-              const remainingJobs = state.queue.filter((item) => !jobKeys.includes(item.key));
+              const deletedJobs = [...state.queue, ...state.backlog].filter((item) => jobKeys.includes(item.key));
+              const keySet = new Set(jobKeys);
 
               return {
                 ...state,
-                queue: remainingJobs,
+                queue: state.queue.filter((item) => !keySet.has(item.key)),
+                backlog: state.backlog.filter((item) => !keySet.has(item.key)),
                 successMessage: `${deletedJobs.length} jobs deleted successfully`,
                 errorMessage: "",
               };
@@ -1338,6 +1350,75 @@ const useStore = create<Store>()(
           })
           .catch((error) => {
             set({ errorMessage: error?.response?.data || error?.message || "Error approving jobs" });
+          });
+      },
+      bulkPauseJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/bulk_pause_jobs`, { keys: jobKeys })
+          .then((response) => {
+            get().fetchQueue();
+            if (response?.data?.modifiedCount > 0) {
+              set({ successMessage: `${response?.data?.modifiedCount} jobs paused` });
+            }
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error pausing jobs" });
+          });
+      },
+      bulkRestartJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/bulk_restart_jobs`, { keys: jobKeys })
+          .then((response) => {
+            get().fetchQueue();
+            if (response?.data?.modifiedCount > 0) {
+              set({ successMessage: `${response?.data?.modifiedCount} jobs restarted` });
+            }
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error restarting jobs" });
+          });
+      },
+      bulkResumeJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/bulk_resume_jobs`, { keys: jobKeys })
+          .then((response) => {
+            get().fetchQueue();
+            if (response?.data?.modifiedCount > 0) {
+              set({ successMessage: `${response?.data?.modifiedCount} jobs started` });
+            }
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error starting jobs" });
+          });
+      },
+      reorderPendingJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/reorder_pending_jobs`, { keys: jobKeys })
+          .then(() => {
+            get().fetchQueue();
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error reordering jobs" });
           });
       },
       changelog: "",
