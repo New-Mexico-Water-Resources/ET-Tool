@@ -199,6 +199,12 @@ interface Store {
   downloadJob: (jobKey: string, units?: "metric" | "imperial" | "acre-feet") => void;
   downloadJobGroup: (jobs: any[], groupName: string, units?: "metric" | "imperial" | "acre-feet") => void;
   downloadJobGroupGeojson: (jobs: QueueJob[], groupName: string) => Promise<void>;
+  downloadJobsBulk: (
+    jobs: QueueJob[],
+    type: "report" | "geojson" | "geotiff",
+    downloadName: string,
+    units?: "metric" | "imperial" | "acre-feet"
+  ) => Promise<void>;
   downloadingJobGroupId: string | null;
   restartJob: (jobKey: string) => void;
   pauseJob: (jobKey: string) => void;
@@ -896,6 +902,33 @@ const useStore = create<Store>()(
         } finally {
           set({ downloadingJobGroupId: null });
         }
+      },
+      downloadJobsBulk: async (jobs, type, downloadName, units = "metric") => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance || jobs.length === 0) {
+          return;
+        }
+
+        const keys = jobs.map((job) => encodeURIComponent(job.key)).join(",");
+        const escapedName = encodeURIComponent(downloadName.replace(/[(),]/g, ""));
+        const unitsParam = type === "report" ? `&units=${units}` : "";
+
+        await axiosInstance
+          .get(`${API_URL}/download/bulk?keys=${keys}&type=${type}&name=${escapedName}${unitsParam}`, {
+            responseType: "arraybuffer",
+          })
+          .then((response) => {
+            const blob = new Blob([response.data], { type: "application/zip" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${downloadName.replace(/[(),]/g, "")}.zip`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.message || "Error downloading selected jobs" });
+          });
       },
       downloadJob: (jobKey, units = "metric") => {
         const axiosInstance = get().authAxios();

@@ -2,6 +2,8 @@ import {
   Avatar,
   Box,
   Checkbox,
+  CircularProgress,
+  Divider,
   FormControl,
   IconButton,
   InputLabel,
@@ -17,11 +19,13 @@ import {
   Toolbar,
   Tooltip,
   Typography,
+  type TypographyProps,
 } from "@mui/material";
 import {
   BadgeCheck,
   ChevronRight,
   ChevronUp,
+  Download,
   EllipsisIcon,
   FileTextIcon,
   GripVertical,
@@ -42,6 +46,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useConfirm } from "material-ui-confirm";
 import StatusIcon from "./StatusIcon";
 import useStore from "../utils/store";
+import useCurrentJobStore from "../utils/currentJobStore";
 import { ALL_JOB_STATUSES, getJobStatusDisplayName, getJobStatusTooltip } from "../utils/constants";
 import { getAvatarColorsFromLetter } from "../utils/avatarColors";
 import { QueueJob, isActiveQueueStatus } from "../utils/jobGroups";
@@ -99,7 +104,7 @@ function formatJobYearRange(startYear?: number, endYear?: number): string {
   if (startYear === endYear) {
     return String(startYear);
   }
-  const shortYear = (year: number) => `'${String(year).slice(-2)}`;
+  const shortYear = (year: number) => `${String(year).slice(-2)}`;
   return `${shortYear(startYear)} - ${shortYear(endYear)}`;
 }
 
@@ -112,6 +117,42 @@ function formatJobDateTime(value?: string | null): string {
     return value;
   }
   return parsed.format("MM/DD/YY hh:mm A");
+}
+
+function TruncatedCellText({ children, sx }: Pick<TypographyProps, "children" | "sx">) {
+  const textRef = useRef<HTMLElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const text = children == null ? "" : String(children);
+
+  const updateTruncation = useCallback(() => {
+    const element = textRef.current;
+    if (element) {
+      setIsTruncated(element.scrollWidth > element.clientWidth);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    updateTruncation();
+  }, [text, updateTruncation]);
+
+  useEffect(() => {
+    const element = textRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const resizeObserver = new ResizeObserver(updateTruncation);
+    resizeObserver.observe(element);
+    return () => resizeObserver.disconnect();
+  }, [updateTruncation]);
+
+  return (
+    <Tooltip title={isTruncated ? text : ""} disableHoverListener={!isTruncated}>
+      <Typography ref={textRef} variant="body2" noWrap sx={{ display: "block", ...sx }}>
+        {children}
+      </Typography>
+    </Tooltip>
+  );
 }
 
 function getTableMinWidth(showReorderControls: boolean) {
@@ -212,19 +253,48 @@ function JobStatusCell({ status, statusMessage }: { status: string; statusMessag
 
 const JOB_ROW_MENU_ITEM_SX = { backgroundColor: "var(--st-gray-80)" } as const;
 
+const JOB_ROW_MENU_HEADER_SX = {
+  marginLeft: "8px",
+  marginBottom: "4px",
+  marginTop: "4px",
+  backgroundColor: "var(--st-gray-80)",
+  color: "var(--st-gray-40)",
+} as const;
+
+function JobRowMenuSectionHeader({ label }: { label: string }) {
+  return (
+    <>
+      <Typography variant="body2" sx={JOB_ROW_MENU_HEADER_SX}>
+        {label}
+      </Typography>
+      <Divider />
+    </>
+  );
+}
+
 function JobRowActionsMenu({
+  job,
   canDelete,
   onLocate,
   onLogs,
   onDelete,
 }: {
+  job: QueueJob;
   canDelete: boolean;
   onLocate: () => void;
   onLogs: () => void;
   onDelete: () => void;
 }) {
+  const downloadJob = useStore((state) => state.downloadJob);
+  const downloadGeojson = useCurrentJobStore((state) => state.downloadGeojson);
+  const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
+  const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
+
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const open = Boolean(menuAnchor);
+
+  const isDownloadDisabled = ["Pending", "In Progress", "WaitingApproval"].includes(job.status);
+  const isBulkGeotiffDownloading = bulkGeotiffDownloadJobId === job.key;
 
   const closeMenu = () => setMenuAnchor(null);
 
@@ -251,6 +321,7 @@ function JobRowActionsMenu({
         transformOrigin={{ vertical: "top", horizontal: "right" }}
         sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
       >
+        <JobRowMenuSectionHeader label="Actions" />
         <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runAction(onLocate)}>
           <MapPinIcon size={16} style={{ marginRight: "16px" }} />
           Locate on Map
@@ -265,6 +336,59 @@ function JobRowActionsMenu({
             Delete Job
           </MenuItem>
         )}
+
+        <JobRowMenuSectionHeader label="Download Report" />
+        <MenuItem
+          sx={JOB_ROW_MENU_ITEM_SX}
+          disableRipple
+          disabled={isDownloadDisabled}
+          onClick={() => runAction(() => downloadJob(job.key, "metric"))}
+        >
+          Report (mm/month)
+        </MenuItem>
+        <MenuItem
+          sx={JOB_ROW_MENU_ITEM_SX}
+          disableRipple
+          disabled={isDownloadDisabled}
+          onClick={() => runAction(() => downloadJob(job.key, "imperial"))}
+        >
+          Report (in/month)
+        </MenuItem>
+        <MenuItem
+          sx={JOB_ROW_MENU_ITEM_SX}
+          disableRipple
+          disabled={isDownloadDisabled}
+          onClick={() => runAction(() => downloadJob(job.key, "acre-feet"))}
+        >
+          Report (acre-feet/month)
+        </MenuItem>
+
+        <JobRowMenuSectionHeader label="Download Map Data" />
+        <MenuItem
+          sx={JOB_ROW_MENU_ITEM_SX}
+          disableRipple
+          disabled={isDownloadDisabled}
+          onClick={() => runAction(() => downloadGeojson(job.key, job.name))}
+        >
+          GeoJSON
+        </MenuItem>
+        <MenuItem
+          sx={JOB_ROW_MENU_ITEM_SX}
+          disableRipple
+          disabled={isDownloadDisabled}
+          onClick={() => runAction(() => downloadAllGeotiffs(job.key))}
+        >
+          All GeoTIFFs
+        </MenuItem>
+        <MenuItem
+          sx={JOB_ROW_MENU_ITEM_SX}
+          disableRipple
+          disabled={isDownloadDisabled || isBulkGeotiffDownloading}
+          onClick={() => runAction(() => downloadAllGeotiffs(job.key, { clipped: true }))}
+        >
+          {isBulkGeotiffDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
+          All GeoTIFFs (clipped)
+        </MenuItem>
       </Menu>
     </>
   );
@@ -313,6 +437,75 @@ function TableIconButton({
         </IconButton>
       </span>
     </Tooltip>
+  );
+}
+
+function BulkSelectionDownloadButton({ jobs, disabled }: { jobs: QueueJob[]; disabled?: boolean }) {
+  const downloadJobsBulk = useStore((state) => state.downloadJobsBulk);
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const open = Boolean(menuAnchor);
+
+  const downloadName = jobs.length === 1 ? jobs[0].name : `Selected Jobs (${jobs.length})`;
+
+  const closeMenu = () => setMenuAnchor(null);
+
+  const runDownload = async (
+    type: "report" | "geojson" | "geotiff",
+    units?: "metric" | "imperial" | "acre-feet"
+  ) => {
+    closeMenu();
+    setIsDownloading(true);
+    try {
+      await downloadJobsBulk(jobs, type, downloadName, units);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return (
+    <>
+      <Tooltip title={disabled ? "No downloadable jobs selected" : "Download selected jobs"}>
+        <span>
+          <IconButton
+            size="small"
+            className="job-queue-table-view__icon-btn"
+            disabled={disabled || isDownloading}
+            onClick={(event) => setMenuAnchor(event.currentTarget)}
+            aria-label="Download selected jobs"
+          >
+            {isDownloading ? <CircularProgress size={14} /> : <Download size={16} />}
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Menu
+        anchorEl={menuAnchor}
+        open={open}
+        onClose={closeMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+        sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
+      >
+        <JobRowMenuSectionHeader label="Report" />
+        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("report", "metric")}>
+          Report (mm/month)
+        </MenuItem>
+        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("report", "imperial")}>
+          Report (in/month)
+        </MenuItem>
+        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("report", "acre-feet")}>
+          Report (acre-feet/month)
+        </MenuItem>
+
+        <JobRowMenuSectionHeader label="Map Data" />
+        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("geojson")}>
+          GeoJSON
+        </MenuItem>
+        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("geotiff")}>
+          All GeoTIFFs
+        </MenuItem>
+      </Menu>
+    </>
   );
 }
 
@@ -463,6 +656,11 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
   const selectedJobs = useMemo(
     () => displayJobs.filter((job) => selectedKeys.has(job.key)),
     [displayJobs, selectedKeys]
+  );
+
+  const selectedDownloadableJobs = useMemo(
+    () => selectedJobs.filter((job) => !["Pending", "In Progress", "WaitingApproval"].includes(job.status)),
+    [selectedJobs]
   );
 
   const selectedHasWaitingApproval = useMemo(
@@ -800,6 +998,10 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
             disabled={!selectedKeys.size}
             onClick={handleViewOnMap}
           />
+          <BulkSelectionDownloadButton
+            jobs={selectedDownloadableJobs}
+            disabled={!selectedDownloadableJobs.length}
+          />
           {canWriteJobs && (
             <>
               <TableIconButton
@@ -939,46 +1141,35 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
                       </TableCell>
                     )}
                     <TableCell>
-                      <Tooltip title={job.name}>
-                        <Typography variant="body2" noWrap>
-                          {job.name}
-                        </Typography>
-                      </Tooltip>
+                      <TruncatedCellText>{job.name}</TruncatedCellText>
                     </TableCell>
                     <TableCell align="center" className="job-queue-table-view__status-cell">
                       <JobStatusCell status={job.status} statusMessage={job.status_msg} />
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap>
-                        {formatJobYearRange(job.start_year, job.end_year)}
-                      </Typography>
+                      <TruncatedCellText>{formatJobYearRange(job.start_year, job.end_year)}</TruncatedCellText>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap>
-                        {formatJobDateTime(job.submitted)}
-                      </Typography>
+                      <TruncatedCellText>{formatJobDateTime(job.submitted)}</TruncatedCellText>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap>
-                        {formatJobDateTime(job.started)}
-                      </Typography>
+                      <TruncatedCellText>{formatJobDateTime(job.started)}</TruncatedCellText>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap>
-                        {formatJobDateTime(job.ended)}
-                      </Typography>
+                      <TruncatedCellText>{formatJobDateTime(job.ended)}</TruncatedCellText>
                     </TableCell>
                     <TableCell align="center" className="job-queue-table-view__author-cell">
                       <JobAuthorCell user={job.user} />
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap sx={{ color: job.group_name ? "var(--st-gray-10)" : "var(--st-gray-40)" }}>
+                      <TruncatedCellText sx={{ color: job.group_name ? "var(--st-gray-10)" : "var(--st-gray-40)" }}>
                         {job.group_name || "—"}
-                      </Typography>
+                      </TruncatedCellText>
                     </TableCell>
                     <TableCell align="right" sx={{ px: 0.5 }}>
                       <Box className="job-queue-table-view__row-actions">
                         <JobRowActionsMenu
+                          job={job}
                           canDelete={canDeleteJob(job)}
                           onLocate={() => loadJob(job)}
                           onLogs={() => onOpenLogs(job.key)}

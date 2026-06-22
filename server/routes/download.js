@@ -5,11 +5,13 @@ const path = require("path");
 const fs = require("fs");
 const constants = require("../constants");
 const { area: turfArea } = require("@turf/turf");
+const { listJobGeotiffs } = require("../utils/geotiffExport");
 
 const router = express.Router();
 const { run_directory_base, report_queue_collection, connectToDatabase } = constants;
 const OPENET_TRANSITION_DATE = 1985;
 const ANNUAL_ARCHIVE_DIR = "annual";
+const BULK_DOWNLOAD_TYPES = new Set(["report", "geojson", "geotiff"]);
 
 const mmToIn = (mm) => {
   let mmValue = typeof mm === "string" ? parseFloat(mm) : mm;
@@ -40,6 +42,24 @@ const getJob = async (key) => {
   const db = await connectToDatabase();
   const collection = db.collection(report_queue_collection);
   return collection.findOne({ key });
+};
+
+const parseJobKeys = (keysParam) =>
+  String(keysParam || "")
+    .split(",")
+    .map((key) => decodeURIComponent(key.trim()))
+    .filter(Boolean);
+
+const loadJobsByKeys = async (keysParam) => {
+  const keys = parseJobKeys(keysParam);
+  const jobs = [];
+  for (const key of keys) {
+    const job = await getJob(key);
+    if (job) {
+      jobs.push(job);
+    }
+  }
+  return jobs;
 };
 
 const unitsToFileSuffix = (units) => {
@@ -323,6 +343,41 @@ const addJobOutputsToArchive = async (archive, job, units, pathPrefix = "") => {
   await processCSVFiles(archive, run_directory_base, key, jobName, nanValues, landsatPassCounts, units, area, pathPrefix);
 };
 
+const addJobGeojsonToArchive = (archive, job) => {
+  const geojsonPath = path.join(run_directory_base, job.key, `${job.name}.geojson`);
+  if (!fs.existsSync(geojsonPath)) {
+    throw new Error(`GeoJSON not found for job ${job.name}`);
+  }
+
+  archive.file(geojsonPath, { name: `${job.name}.geojson` });
+};
+
+const addJobGeotiffsToArchive = (archive, job) => {
+  const files = listJobGeotiffs(run_directory_base, job);
+  if (!files.length) {
+    throw new Error(`No geotiff files found for job ${job.name}`);
+  }
+
+  files.forEach(({ filePath, archiveName }) => {
+    archive.file(filePath, { name: `${job.name}/${archiveName}` });
+  });
+};
+
+const addJobBulkOutputsToArchive = async (archive, job, type, units) => {
+  if (type === "report") {
+    await addJobOutputsToArchive(archive, job, units, job.name);
+  } else if (type === "geojson") {
+    addJobGeojsonToArchive(archive, job);
+  } else if (type === "geotiff") {
+    addJobGeotiffsToArchive(archive, job);
+  } else {
+    throw new Error(`Invalid download type: ${type}`);
+  }
+};
+
+const sanitizeDownloadName = (name, fallback = "selected-jobs") =>
+  String(name || fallback).replace(/[^a-zA-Z0-9_+. -]/g, "") || fallback;
+
 const createZipArchive = (res, filename) => {
   const archive = archiver("zip", { zlib: { level: 9 } });
   archive.on("end", () => console.log("Archive wrote %d bytes", archive.pointer()));
@@ -364,25 +419,11 @@ router.get("/download", async (req, res) => {
 
 router.get("/download/group", async (req, res) => {
   try {
-    const keys = String(req.query.keys || "")
-      .split(",")
-      .map((key) => key.trim())
-      .filter(Boolean);
+    const keys = req.query.keys;
     const units = req.query.units || "metric";
-    const groupName = String(req.query.name || "job-group").replace(/[^a-zA-Z0-9_+. -]/g, "") || "job-group";
+    const groupName = sanitizeDownloadName(req.query.name, "job-group");
 
-    if (!keys.length) {
-      return res.status(400).send("No job keys provided");
-    }
-
-    const jobs = [];
-    for (const key of keys) {
-      const job = await getJob(key);
-      if (job) {
-        jobs.push(job);
-      }
-    }
-
+    const jobs = await loadJobsByKeys(keys);
     if (!jobs.length) {
       return res.status(404).send("No jobs found");
     }
@@ -401,6 +442,44 @@ router.get("/download/group", async (req, res) => {
 
     if (!addedJobs) {
       return res.status(404).send("No downloadable outputs found for this group");
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.get("/download/bulk", async (req, res) => {
+  try {
+    const type = String(req.query.type || "").trim();
+    const units = req.query.units || "metric";
+    const downloadName = sanitizeDownloadName(req.query.name, "selected-jobs");
+
+    if (!BULK_DOWNLOAD_TYPES.has(type)) {
+      return res.status(400).send("Invalid download type");
+    }
+
+    const jobs = await loadJobsByKeys(req.query.keys);
+    if (!jobs.length) {
+      return res.status(404).send("No jobs found");
+    }
+
+    const archive = createZipArchive(res, `${downloadName}.zip`);
+    let addedJobs = 0;
+
+    for (const job of jobs) {
+      try {
+        await addJobBulkOutputsToArchive(archive, job, type, units);
+        addedJobs += 1;
+      } catch (error) {
+        console.warn(`Skipping job ${job.key} in bulk ${type} download:`, error.message);
+      }
+    }
+
+    if (!addedJobs) {
+      return res.status(404).send("No downloadable outputs found for the selected jobs");
     }
 
     await archive.finalize();
