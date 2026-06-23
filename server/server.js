@@ -21,6 +21,7 @@ const monthly_geojson = require("./routes/historical/monthly_geojson");
 const drought_monitor = require("./routes/auxiliary/drought_monitor");
 const cdl_year = require("./routes/auxiliary/cdl_year");
 const custom_report = require("./routes/custom_report/custom_report");
+const config = require("./routes/config");
 
 const { auth } = require("express-oauth2-jwt-bearer");
 
@@ -73,6 +74,7 @@ app.use(`${basePath}/historical`, verifyAuthToken, monthly_geojson);
 app.use(`${basePath}/auxiliary`, verifyAuthToken, drought_monitor);
 app.use(`${basePath}/auxiliary`, verifyAuthToken, cdl_year);
 app.use(`${basePath}/queue`, verifyAuthToken, queue);
+app.use(`${basePath}/config`, verifyAuthToken, config);
 app.post(`${basePath}/prepare_geojson`, prepare_geojson.upload.single("file"), prepare_geojson.prepareGeojson);
 
 app.use(`${basePath}/admin`, verifyAuthToken, admin);

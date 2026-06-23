@@ -237,12 +237,21 @@
       display: flex;
       flex-direction: column;
 
+      &.queue-item--compact {
+        justify-content: flex-start;
+
+        .item-body {
+          flex: 0 1 auto;
+          gap: 4px;
+        }
+      }
+
       .item-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         border-bottom: 1px solid var(--st-gray-80);
-        padding: 0 8px;
+        padding: 4px 8px;
       }
 
       .item-body {

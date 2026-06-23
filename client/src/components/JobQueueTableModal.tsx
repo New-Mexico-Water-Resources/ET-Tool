@@ -32,6 +32,7 @@ import {
   Map as MapIcon,
   MapPinIcon,
   Pause,
+  PencilLine,
   Play,
   RotateCw,
   Trash2,
@@ -48,6 +49,9 @@ import StatusIcon from "./StatusIcon";
 import useStore from "../utils/store";
 import useCurrentJobStore from "../utils/currentJobStore";
 import { ALL_JOB_STATUSES, getJobStatusDisplayName, getJobStatusTooltip } from "../utils/constants";
+import DefaultReportMenuItems from "./DefaultReportMenuItems";
+import RenameJobDialog from "./RenameJobDialog";
+import { getReportDownloadOptions } from "../utils/defaultDownloadOptions";
 import { getAvatarColorsFromLetter } from "../utils/avatarColors";
 import { QueueJob, isActiveQueueStatus } from "../utils/jobGroups";
 import {
@@ -284,23 +288,24 @@ function JobRowMenuSectionHeader({ label }: { label: string }) {
 function JobRowActionsMenu({
   job,
   canDelete,
+  canRename,
   onLocate,
   onLogs,
   onDelete,
 }: {
   job: QueueJob;
   canDelete: boolean;
+  canRename: boolean;
   onLocate: () => void;
   onLogs: () => void;
   onDelete: () => void;
 }) {
-  const downloadJob = useStore((state) => state.downloadJob);
-  const openCustomDownload = useStore((state) => state.openCustomDownload);
   const downloadGeojson = useCurrentJobStore((state) => state.downloadGeojson);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
   const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
 
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const open = Boolean(menuAnchor);
 
   const isDownloadDisabled = ["Pending", "In Progress", "WaitingApproval"].includes(job.status);
@@ -340,6 +345,19 @@ function JobRowActionsMenu({
           <FileTextIcon size={16} style={{ marginRight: "16px" }} />
           View Logs
         </MenuItem>
+        {canRename && (
+          <MenuItem
+            sx={JOB_ROW_MENU_ITEM_SX}
+            disableRipple
+            onClick={() => {
+              closeMenu();
+              setRenameDialogOpen(true);
+            }}
+          >
+            <PencilLine size={16} style={{ marginRight: "16px" }} />
+            Rename Job
+          </MenuItem>
+        )}
         {canDelete && (
           <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runAction(onDelete)}>
             <Trash2Icon size={16} style={{ marginRight: "16px" }} />
@@ -348,38 +366,13 @@ function JobRowActionsMenu({
         )}
 
         <JobRowMenuSectionHeader label="Download Report" />
-        <MenuItem
-          sx={JOB_ROW_MENU_ITEM_SX}
-          disableRipple
+        <DefaultReportMenuItems
+          jobKey={job.key}
           disabled={isDownloadDisabled}
-          onClick={() => runAction(() => downloadJob(job.key, "metric"))}
-        >
-          Report (mm/month)
-        </MenuItem>
-        <MenuItem
-          sx={JOB_ROW_MENU_ITEM_SX}
-          disableRipple
-          disabled={isDownloadDisabled}
-          onClick={() => runAction(() => downloadJob(job.key, "imperial"))}
-        >
-          Report (in/month)
-        </MenuItem>
-        <MenuItem
-          sx={JOB_ROW_MENU_ITEM_SX}
-          disableRipple
-          disabled={isDownloadDisabled}
-          onClick={() => runAction(() => downloadJob(job.key, "acre-feet"))}
-        >
-          Report (acre-feet/month)
-        </MenuItem>
-        <MenuItem
-          sx={JOB_ROW_MENU_ITEM_SX}
-          disableRipple
-          disabled={isDownloadDisabled}
-          onClick={() => runAction(() => openCustomDownload(job.key))}
-        >
-          Custom Download
-        </MenuItem>
+          onClose={closeMenu}
+          menuItemSx={JOB_ROW_MENU_ITEM_SX}
+          showSectionHeader={false}
+        />
 
         <JobRowMenuSectionHeader label="Download Map Data" />
         <MenuItem
@@ -408,6 +401,7 @@ function JobRowActionsMenu({
           All GeoTIFFs (clipped)
         </MenuItem>
       </Menu>
+      <RenameJobDialog job={job} open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)} />
     </>
   );
 }
@@ -460,6 +454,8 @@ function TableIconButton({
 
 function BulkSelectionDownloadButton({ jobs, disabled }: { jobs: QueueJob[]; disabled?: boolean }) {
   const downloadJobsBulk = useStore((state) => state.downloadJobsBulk);
+  const defaultDownloadOptions = useStore((state) => state.defaultDownloadOptions);
+  const reportOptions = getReportDownloadOptions(defaultDownloadOptions);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const open = Boolean(menuAnchor);
@@ -505,15 +501,16 @@ function BulkSelectionDownloadButton({ jobs, disabled }: { jobs: QueueJob[]; dis
         sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
       >
         <JobRowMenuSectionHeader label="Report" />
-        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("report", "metric")}>
-          Report (mm/month)
-        </MenuItem>
-        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("report", "imperial")}>
-          Report (in/month)
-        </MenuItem>
-        <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("report", "acre-feet")}>
-          Report (acre-feet/month)
-        </MenuItem>
+        {reportOptions.map((option) => (
+          <MenuItem
+            key={option.id}
+            sx={JOB_ROW_MENU_ITEM_SX}
+            disableRipple
+            onClick={() => runDownload("report", option.units)}
+          >
+            {option.label}
+          </MenuItem>
+        ))}
 
         <JobRowMenuSectionHeader label="Map Data" />
         <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runDownload("geojson")}>
@@ -741,6 +738,11 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
       return hasPermission || job?.user?.sub === currentUserInfo?.sub;
     },
     [currentUserInfo]
+  );
+
+  const canRenameJob = useCallback(
+    (job: QueueJob) => canDeleteJob(job) && !["In Progress", "Pending"].includes(job.status),
+    [canDeleteJob]
   );
 
   const toggleSelectAll = () => {
@@ -1211,6 +1213,7 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
                         <JobRowActionsMenu
                           job={job}
                           canDelete={canDeleteJob(job)}
+                          canRename={canRenameJob(job)}
                           onLocate={() => loadJob(job)}
                           onLogs={() => onOpenLogs(job.key)}
                           onDelete={() => handleDeleteJob(job)}

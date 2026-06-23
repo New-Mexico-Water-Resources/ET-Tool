@@ -132,6 +132,7 @@ const buildReportConfig = (job, options) => {
     preview_page: options.previewPage != null ? Number(options.previewPage) : 1,
     include_summary: options.includeSummary !== false,
     include_documentation: options.includeDocumentation !== false,
+    output_dir: options.outputDir || null,
   };
 };
 

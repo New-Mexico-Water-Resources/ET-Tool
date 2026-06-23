@@ -1,0 +1,39 @@
+{
+  "options": [
+    {
+      "id": "metric-mm-month",
+      "label": "Report (mm/month)",
+      "type": "report",
+      "units": "metric",
+      "etUnits": "metric",
+      "pptUnits": "metric",
+      "colorScale": "across_years",
+      "showMonthlyAverages": false
+    },
+    {
+      "id": "imperial-in-month",
+      "label": "Report (in/month)",
+      "type": "report",
+      "units": "imperial",
+      "etUnits": "imperial",
+      "pptUnits": "imperial",
+      "colorScale": "across_years",
+      "showMonthlyAverages": false
+    },
+    {
+      "id": "acre-feet-month",
+      "label": "Report (acre-feet/month)",
+      "type": "report",
+      "units": "acre-feet",
+      "etUnits": "acre-feet",
+      "pptUnits": "acre-feet",
+      "colorScale": "across_years",
+      "showMonthlyAverages": false
+    },
+    {
+      "id": "custom",
+      "label": "Custom Download",
+      "type": "custom"
+    }
+  ]
+}

@@ -47,13 +47,13 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useAtomValue } from "jotai";
 import { tooltipAtom } from "../utils/atoms";
+import DefaultReportMenuItems from "./DefaultReportMenuItems";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
   const activeJobGroup = useStore((state) => state.activeJobGroup);
   const clearJobGroup = useStore((state) => state.clearJobGroup);
   const loadJobGroup = useStore((state) => state.loadJobGroup);
-  const downloadJobGroup = useStore((state) => state.downloadJobGroup);
   const downloadJobGroupGeojson = useStore((state) => state.downloadJobGroupGeojson);
   const downloadingJobGroupId = useStore((state) => state.downloadingJobGroupId);
   const [locations, setLocations] = useStore((state) => [state.locations, state.setLocations]);
@@ -65,8 +65,6 @@ const CurrentJobChip = () => {
   const setShowUploadDialog = useStore((state) => state.setShowUploadDialog);
   const loadJob = useStore((state) => state.loadJob);
   const fetchJobStatus = useStore((state) => state.fetchJobStatus);
-  const downloadJob = useStore((state) => state.downloadJob);
-  const openCustomDownload = useStore((state) => state.openCustomDownload);
   const downloadGeotiff = useCurrentJobStore((state) => state.downloadGeotiff);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
   const previewGeotiffDownloadJobId = useCurrentJobStore((state) => state.previewGeotiffDownloadJobId);
@@ -1019,78 +1017,18 @@ const CurrentJobChip = () => {
                   </MenuItem>
                 </>
               )}
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
-              >
-                Report
-              </Typography>
               {totalMonths > 0 && (
-                <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
-                  disableRipple
+                <DefaultReportMenuItems
+                  jobKey={!isGroupMode ? activeJob?.key : undefined}
+                  groupJobs={isGroupMode && activeJobGroup ? activeJobGroup.jobs : undefined}
+                  groupName={isGroupMode && activeJobGroup ? activeJobGroup.groupName : undefined}
                   disabled={isGroupMode && isGroupDownloading}
-                  onClick={() => {
-                    if (isGroupMode && activeJobGroup) {
-                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "metric");
-                    } else {
-                      downloadJob(activeJob.key, "metric");
-                    }
-                    setDownloadMenuOpen(false);
+                  onClose={() => setDownloadMenuOpen(false)}
+                  menuItemSx={{
+                    backgroundColor: "var(--st-gray-80)",
+                    borderTop: "1px solid var(--st-gray-70)",
                   }}
-                >
-                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-                  {isGroupMode ? "All Reports (mm/month)" : "Report (mm/month)"}
-                </MenuItem>
-              )}
-              {totalMonths > 0 && (
-                <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
-                  disableRipple
-                  disabled={isGroupMode && isGroupDownloading}
-                  onClick={() => {
-                    if (isGroupMode && activeJobGroup) {
-                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "imperial");
-                    } else {
-                      downloadJob(activeJob.key, "imperial");
-                    }
-                    setDownloadMenuOpen(false);
-                  }}
-                >
-                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-                  {isGroupMode ? "All Reports (in/month)" : "Report (in/month)"}
-                </MenuItem>
-              )}
-              {totalMonths > 0 && (
-                <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
-                  disableRipple
-                  disabled={isGroupMode && isGroupDownloading}
-                  onClick={() => {
-                    if (isGroupMode && activeJobGroup) {
-                      downloadJobGroup(activeJobGroup.jobs, activeJobGroup.groupName, "acre-feet");
-                    } else {
-                      downloadJob(activeJob.key, "acre-feet");
-                    }
-                    setDownloadMenuOpen(false);
-                  }}
-                >
-                  {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-                  {isGroupMode ? "All Reports (acre-feet/month)" : "Report (acre-feet/month)"}
-                </MenuItem>
-              )}
-              {totalMonths > 0 && !isGroupMode && activeJob && (
-                <MenuItem
-                  sx={{ backgroundColor: "var(--st-gray-80)" }}
-                  disableRipple
-                  onClick={() => {
-                    openCustomDownload(activeJob.key);
-                    setDownloadMenuOpen(false);
-                  }}
-                >
-                  Custom Download
-                </MenuItem>
+                />
               )}
             </Menu>
           </div>

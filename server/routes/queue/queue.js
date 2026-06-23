@@ -3,6 +3,8 @@ const router = express.Router();
 const path = require("path");
 const fs = require("fs");
 const constants = require("../../constants");
+const { sanitizeJobName, renameJobFilesystem, buildRenamedJobFields } = require("../../utils/renameJob");
+const { regenerateDefaultReports } = require("../../utils/regenerateDefaultReports");
 
 router.get("/list", async (req, res) => {
   let canReadJobs = req.auth?.payload?.permissions?.includes("read:jobs") || false;
@@ -360,6 +362,62 @@ router.post("/bulk_resume_jobs", async (req, res) => {
   );
 
   res.status(200).send(result);
+});
+
+router.post("/rename_job", async (req, res) => {
+  const canWriteJobs = req.auth?.payload?.permissions?.includes("write:jobs") || false;
+  const key = req.body.key;
+  const newName = sanitizeJobName(req.body.name);
+
+  if (!key) {
+    res.status(400).send("Missing key");
+    return;
+  }
+
+  if (!newName) {
+    res.status(400).send("Missing or invalid job name");
+    return;
+  }
+
+  const db = await constants.connectToDatabase();
+  const collection = db.collection(constants.report_queue_collection);
+  const job = await collection.findOne({ key });
+
+  if (!job) {
+    res.status(404).send("Job not found");
+    return;
+  }
+
+  const userOwnsJob = req.auth?.payload?.sub === job?.user?.sub;
+  if (!canWriteJobs && !userOwnsJob) {
+    res.status(401).send("Unauthorized: missing write:jobs permission");
+    return;
+  }
+
+  if (job.name === newName) {
+    res.status(400).send("New name must be different from the current name");
+    return;
+  }
+
+  const duplicate = await collection.findOne({ name: newName, key: { $ne: key } });
+  if (duplicate) {
+    res.status(409).send(`A job named "${newName}" already exists`);
+    return;
+  }
+
+  try {
+    renameJobFilesystem(job, newName);
+    const renamedFields = buildRenamedJobFields(job, newName);
+    await collection.updateOne({ key }, { $set: renamedFields });
+
+    const updatedJob = { ...job, ...renamedFields };
+    await regenerateDefaultReports(updatedJob);
+
+    res.status(200).send(updatedJob);
+  } catch (error) {
+    console.error(`Error renaming job ${key}`, error);
+    res.status(500).send(error.message || "Failed to rename job");
+  }
 });
 
 router.post("/reorder_pending_jobs", async (req, res) => {

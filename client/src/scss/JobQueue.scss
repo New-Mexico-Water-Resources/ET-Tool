@@ -141,12 +141,21 @@ ul.MuiMenu-list {
   }
 
   .queue-group-job {
-    height: 300px;
     border-top: 1px solid var(--st-gray-80);
 
     .queue-item {
       height: 100%;
     }
+  }
+}
+
+.queue-item--compact {
+  height: 100%;
+  justify-content: flex-start;
+
+  .item-body {
+    flex: 0 1 auto;
+    gap: 4px;
   }
 }
 

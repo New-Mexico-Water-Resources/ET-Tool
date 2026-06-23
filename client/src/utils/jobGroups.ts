@@ -95,6 +95,7 @@ export interface QueueJob {
   timeElapsed?: string | null;
   status_msg?: string | null;
   paused_year?: number | null;
+  last_generated_year?: number | null;
   loaded_geo_json?: unknown;
   user?: {
     name?: string;
@@ -293,18 +294,27 @@ export function getGroupSubmitter(jobs: QueueJob[]) {
   return jobs.find((j) => j.user?.name)?.user ?? null;
 }
 
-export const QUEUE_JOB_ITEM_HEIGHT = 300;
+export const QUEUE_JOB_ITEM_HEIGHT = 308;
+export const QUEUE_JOB_ITEM_COMPACT_HEIGHT = 244;
 export const QUEUE_GROUP_HEADER_HEIGHT = 196;
+
+export function isCompactQueueJob(job: Pick<QueueJob, "status">): boolean {
+  return job.status === "Complete";
+}
+
+export function getQueueJobItemHeight(job: QueueJob): number {
+  return isCompactQueueJob(job) ? QUEUE_JOB_ITEM_COMPACT_HEIGHT : QUEUE_JOB_ITEM_HEIGHT;
+}
 
 export function getQueueDisplayItemHeight(
   item: QueueDisplayItem,
   expandedGroupIds: Set<string>
 ): number {
   if (item.type === "job") {
-    return QUEUE_JOB_ITEM_HEIGHT;
+    return getQueueJobItemHeight(item.job);
   }
   if (!expandedGroupIds.has(item.groupId)) {
     return QUEUE_GROUP_HEADER_HEIGHT;
   }
-  return QUEUE_GROUP_HEADER_HEIGHT + item.jobs.length * QUEUE_JOB_ITEM_HEIGHT;
+  return QUEUE_GROUP_HEADER_HEIGHT + item.jobs.reduce((sum, job) => sum + getQueueJobItemHeight(job), 0);
 }

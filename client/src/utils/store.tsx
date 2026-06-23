@@ -10,6 +10,10 @@ import {
   QueueJob,
 } from "./jobGroups";
 import {
+  DefaultDownloadOptionsConfig,
+  FALLBACK_DEFAULT_DOWNLOAD_OPTIONS,
+} from "./defaultDownloadOptions";
+import {
   applyUploadShapeList,
   buildPolygonLocationsFromGeojsons,
   collectExistingUploadShapes,
@@ -272,6 +276,9 @@ interface Store {
   customDownloadJob: QueueJob | null;
   openCustomDownload: (jobKey: string) => void;
   closeCustomDownload: () => void;
+  defaultDownloadOptions: DefaultDownloadOptionsConfig;
+  fetchDefaultDownloadOptions: () => void;
+  renameJob: (jobKey: string, newName: string) => Promise<QueueJob>;
 }
 
 const useStore = create<Store>()(
@@ -409,6 +416,8 @@ const useStore = create<Store>()(
           // No token, don't fetch queue
           return;
         }
+
+        get().fetchDefaultDownloadOptions();
 
         axiosInstance.get(`${API_URL}/queue/list`).then((response) => {
           if (!response?.data || !Array.isArray(response.data)) {
@@ -987,6 +996,48 @@ const useStore = create<Store>()(
         set({ customDownloadJob: job });
       },
       closeCustomDownload: () => set({ customDownloadJob: null }),
+      defaultDownloadOptions: FALLBACK_DEFAULT_DOWNLOAD_OPTIONS,
+      fetchDefaultDownloadOptions: () => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .get(`${API_URL}/config/default-download-options`)
+          .then((response) => {
+            if (response?.data?.options && Array.isArray(response.data.options)) {
+              set({ defaultDownloadOptions: response.data });
+            }
+          })
+          .catch((error) => {
+            console.error("Error fetching default download options", error);
+          });
+      },
+      renameJob: async (jobKey, newName) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          throw new Error("Not authenticated");
+        }
+
+        const response = await axiosInstance.post(`${API_URL}/queue/rename_job`, {
+          key: jobKey,
+          name: newName,
+        });
+
+        const updatedJob = response.data;
+        set((state) => {
+          const updateJobList = (jobs: QueueJob[]) =>
+            jobs.map((job) => (job.key === jobKey ? { ...job, ...updatedJob } : job));
+
+          return {
+            queue: updateJobList(state.queue),
+            backlog: updateJobList(state.backlog),
+          };
+        });
+        get().fetchQueue();
+        return updatedJob;
+      },
       restartJob: (jobKey) => {
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {
