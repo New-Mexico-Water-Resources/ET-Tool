@@ -257,4 +257,8 @@
       cursor: grabbing;
     }
   }
+
+  &__row--drop-target {
+    opacity: 0.25;
+  }
 }

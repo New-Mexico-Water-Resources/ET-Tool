@@ -36,6 +36,8 @@ def generate_summary_figure(
     root=None,
     requestor: dict[str, str] = None,
     units: ETUnit = MetricETUnit(),
+    ppt_units: ETUnit = None,
+    plain_filename: bool = False,
 ):
     """
     Generate a summary figure displaying evapotranspiration data for all years in the record.
@@ -63,11 +65,17 @@ def generate_summary_figure(
         requestor (dict[str, str], optional): Requestor information. Defaults to None.
         units (ETUnit, optional): Units to use for the report. Defaults to MetricETUnit().
     """
+    if ppt_units is None:
+        ppt_units = units
+
     # Create a new figure in landscape orientation
     fig = plt.figure(figsize=(11, 8.5))
     et_unit = units.abbreviation
+    ppt_unit = ppt_units.abbreviation
     figure_filename = (
-        figure_filename if units.units == "metric" else figure_filename.replace(".png", f"_{units.abbreviation}.png")
+        figure_filename
+        if plain_filename or units.units == "metric"
+        else figure_filename.replace(".png", f"_{units.abbreviation}.png")
     )
 
     title_fontsize = 16
@@ -132,7 +140,7 @@ def generate_summary_figure(
     main_df["PET"] = units.convert_from_metric(main_df["PET"])
 
     if "ppt_avg" in main_df.columns:
-        main_df["ppt_avg"] = units.convert_from_metric(main_df["ppt_avg"])
+        main_df["ppt_avg"] = ppt_units.convert_from_metric(main_df["ppt_avg"])
 
     if "avg_min" in main_df.columns:
         main_df["avg_min"] = units.convert_from_metric(main_df["avg_min"])
@@ -296,14 +304,14 @@ def generate_summary_figure(
     ax.set_yticklabels([f"{tick} {et_unit}" for tick in combined_range_values])
 
     if "ppt_avg" in main_df.columns and not main_df["ppt_avg"].empty and not main_df["ppt_avg"].isnull().all():
-        ppt_padding = 15 if units.units == "metric" else units.convert_from_metric(15)
-        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, units, subdivisions=3)
+        ppt_padding = 15 if ppt_units.units == "metric" else ppt_units.convert_from_metric(15)
+        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, ppt_units, subdivisions=3)
         ppt_min = max(ppt_range_values[0], 0)
         ppt_max = max(ppt_range_values[-1], ppt_min)
 
         ax_precip.set_ylim(ppt_min, ppt_max + ppt_padding)
-        precip_ticks = ppt_range_values
-        if not precip_ticks or len(precip_ticks) == 0:
+        precip_ticks = list(ppt_range_values)
+        if len(precip_ticks) == 0:
             precip_ticks = [0]
         elif len(precip_ticks) == 1:
             precip_ticks = [0, precip_ticks[0]]
@@ -316,7 +324,7 @@ def generate_summary_figure(
         precip_ticks = [0]
 
     ax_precip.set_yticks(precip_ticks)
-    ax_precip.set_yticklabels([f"{tick} {et_unit}" for tick in precip_ticks])
+    ax_precip.set_yticklabels([f"{tick} {ppt_unit}" for tick in precip_ticks])
 
     if not is_confidence_data_null:
         nice_cloud_cover_range = convert_to_nice_number_range(

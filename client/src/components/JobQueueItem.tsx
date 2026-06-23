@@ -57,6 +57,7 @@ const JobQueueItem = ({
   const deleteJob = useStore((state) => state.deleteJob);
   const loadJob = useStore((state) => state.loadJob);
   const downloadJob = useStore((state) => state.downloadJob);
+  const openCustomDownload = useStore((state) => state.openCustomDownload);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
   const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
   const isBulkGeotiffDownloading = bulkGeotiffDownloadJobId === job.key;
@@ -402,6 +403,16 @@ const JobQueueItem = ({
               disableRipple
             >
               Report (acre-feet/month)
+            </MenuItem>
+            <MenuItem
+              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              onClick={() => {
+                openCustomDownload(job.key);
+                setDownloadMenuOpen(false);
+              }}
+              disableRipple
+            >
+              Custom Download
             </MenuItem>
             <Typography
               variant="body2"

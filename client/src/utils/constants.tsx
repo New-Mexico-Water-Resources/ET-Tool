@@ -293,11 +293,19 @@ export function getJobStatusDisplayName(status: string): string {
   return JOB_STATUS_DISPLAY_NAMES[status] ?? status;
 }
 
-export function getJobStatusTooltip(status: string, statusMessage?: string | null): string {
+export function getJobStatusTooltip(
+  status: string,
+  statusMessage?: string | null,
+  queueOrder?: number | null
+): string {
   const displayStatus = getJobStatusDisplayName(status);
   const defaultDescription = JOB_STATUS_DESCRIPTIONS[status];
   const message = statusMessage?.trim();
   const lines = [displayStatus];
+
+  if (queueOrder != null) {
+    lines.push(`Queue order: ${queueOrder}`);
+  }
 
   if (status === "Complete") {
     if (defaultDescription) {

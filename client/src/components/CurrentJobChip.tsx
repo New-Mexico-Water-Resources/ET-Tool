@@ -66,6 +66,7 @@ const CurrentJobChip = () => {
   const loadJob = useStore((state) => state.loadJob);
   const fetchJobStatus = useStore((state) => state.fetchJobStatus);
   const downloadJob = useStore((state) => state.downloadJob);
+  const openCustomDownload = useStore((state) => state.openCustomDownload);
   const downloadGeotiff = useCurrentJobStore((state) => state.downloadGeotiff);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
   const previewGeotiffDownloadJobId = useCurrentJobStore((state) => state.previewGeotiffDownloadJobId);
@@ -1077,6 +1078,18 @@ const CurrentJobChip = () => {
                 >
                   {isGroupMode && isGroupDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
                   {isGroupMode ? "All Reports (acre-feet/month)" : "Report (acre-feet/month)"}
+                </MenuItem>
+              )}
+              {totalMonths > 0 && !isGroupMode && activeJob && (
+                <MenuItem
+                  sx={{ backgroundColor: "var(--st-gray-80)" }}
+                  disableRipple
+                  onClick={() => {
+                    openCustomDownload(activeJob.key);
+                    setDownloadMenuOpen(false);
+                  }}
+                >
+                  Custom Download
                 </MenuItem>
               )}
             </Menu>

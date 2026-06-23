@@ -218,3 +218,24 @@ export function sortJobsForQueueOrder(jobs: QueueJob[]): QueueJob[] {
     .filter(isReorderableQueueJob)
     .sort((a, b) => (getJobSubmittedTime(a) ?? 0) - (getJobSubmittedTime(b) ?? 0));
 }
+
+export function buildQueueRunOrderMap(queue: QueueJob[], reorderableKeys?: string[]): Map<string, number> {
+  const order = new Map<string, number>();
+  let position = 1;
+
+  for (const job of queue) {
+    if (job.status === "In Progress") {
+      order.set(job.key, position++);
+    }
+  }
+
+  const keys = reorderableKeys?.length ? reorderableKeys : sortJobsForQueueOrder(queue).map((job) => job.key);
+
+  for (const key of keys) {
+    if (!order.has(key)) {
+      order.set(key, position++);
+    }
+  }
+
+  return order;
+}

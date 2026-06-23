@@ -269,6 +269,9 @@ interface Store {
   fetchingDroughtMonitorData: boolean;
   cdlReleaseYear: number | null;
   fetchCdlReleaseYearIfNeeded: () => void;
+  customDownloadJob: QueueJob | null;
+  openCustomDownload: (jobKey: string) => void;
+  closeCustomDownload: () => void;
 }
 
 const useStore = create<Store>()(
@@ -967,6 +970,23 @@ const useStore = create<Store>()(
             set({ errorMessage: error?.message || "Error downloading job" });
           });
       },
+      customDownloadJob: null,
+      openCustomDownload: (jobKey) => {
+        const { queue, backlog, activeJob } = get();
+        let job = queue.find((item) => item.key === jobKey);
+        if (!job) {
+          job = backlog.find((item) => item.key === jobKey);
+        }
+        if (!job && activeJob?.key === jobKey) {
+          job = activeJob as QueueJob;
+        }
+        if (!job) {
+          set({ errorMessage: `Error opening custom download: ${jobKey} not found` });
+          return;
+        }
+        set({ customDownloadJob: job });
+      },
+      closeCustomDownload: () => set({ customDownloadJob: null }),
       restartJob: (jobKey) => {
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {

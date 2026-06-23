@@ -1,0 +1,153 @@
+// Report figures: portrait year/docs pages (8.5in x 11in), summary is landscape (11in x 8.5in).
+$report-portrait-aspect-ratio: 8.5 / 11;
+$report-landscape-aspect-ratio: 11 / 8.5;
+
+.custom-download-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(900px, calc(100vw - 32px));
+  height: min(760px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  background: var(--st-gray-90);
+  border-radius: 8px;
+  overflow: hidden;
+  outline: none;
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 8px 8px 12px;
+    border-bottom: 1px solid var(--st-gray-80);
+    flex-shrink: 0;
+  }
+
+  &__body {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 16px;
+    padding: 12px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+
+    @media (max-width: 800px) {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow-y: auto;
+    }
+  }
+
+  &__controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 4px 0;
+    min-height: 0;
+    overflow-y: auto;
+
+    .MuiFormControl-root {
+      margin-top: 2px;
+    }
+
+    .MuiFormControlLabel-label {
+      color: var(--st-gray-30);
+      font-size: 0.875rem;
+    }
+  }
+
+  &__preview {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  &__preview-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  &__preview-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  &__preview-label {
+    color: var(--st-gray-30);
+    font-weight: 600;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+    align-self: stretch;
+  }
+
+  &__custom-range {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  &__preview-frame {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    width: 467px;
+    max-width: 100%;
+    max-height: 100%;
+    border: 1px solid var(--st-gray-70);
+    border-radius: 4px;
+    background: var(--st-gray-100);
+    overflow: hidden;
+
+    &--portrait {
+      aspect-ratio: $report-portrait-aspect-ratio;
+    }
+
+    &--landscape {
+      aspect-ratio: $report-landscape-aspect-ratio;
+    }
+  }
+
+  &__preview-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+  }
+
+  &__preview-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--st-gray-80);
+    flex-shrink: 0;
+  }
+}

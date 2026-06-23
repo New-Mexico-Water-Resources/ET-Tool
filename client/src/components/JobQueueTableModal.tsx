@@ -55,6 +55,7 @@ import {
   BacklogDateFilter,
   JobTableColumnSort,
   JobTableSortColumn,
+  buildQueueRunOrderMap,
   cycleColumnSort,
   filterQueueJobs,
   getDefaultStatusFiltersForMode,
@@ -238,10 +239,18 @@ function JobAuthorCell({ user }: { user: QueueJob["user"] }) {
   );
 }
 
-function JobStatusCell({ status, statusMessage }: { status: string; statusMessage?: string | null }) {
+function JobStatusCell({
+  status,
+  statusMessage,
+  queueOrder,
+}: {
+  status: string;
+  statusMessage?: string | null;
+  queueOrder?: number;
+}) {
   return (
     <Tooltip
-      title={getJobStatusTooltip(status, statusMessage)}
+      title={getJobStatusTooltip(status, statusMessage, queueOrder)}
       slotProps={{ tooltip: { sx: { whiteSpace: "pre-line" } } }}
     >
       <Box sx={{ display: "flex", justifyContent: "center" }}>
@@ -286,6 +295,7 @@ function JobRowActionsMenu({
   onDelete: () => void;
 }) {
   const downloadJob = useStore((state) => state.downloadJob);
+  const openCustomDownload = useStore((state) => state.openCustomDownload);
   const downloadGeojson = useCurrentJobStore((state) => state.downloadGeojson);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
   const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
@@ -361,6 +371,14 @@ function JobRowActionsMenu({
           onClick={() => runAction(() => downloadJob(job.key, "acre-feet"))}
         >
           Report (acre-feet/month)
+        </MenuItem>
+        <MenuItem
+          sx={JOB_ROW_MENU_ITEM_SX}
+          disableRipple
+          disabled={isDownloadDisabled}
+          onClick={() => runAction(() => openCustomDownload(job.key))}
+        >
+          Custom Download
         </MenuItem>
 
         <JobRowMenuSectionHeader label="Download Map Data" />
@@ -534,6 +552,7 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
   const [customDateTo, setCustomDateTo] = useState<Dayjs | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [columnSort, setColumnSort] = useState<JobTableColumnSort>({ column: null, direction: null });
   const headerOuterRef = useRef<HTMLDivElement>(null);
   const headerInnerRef = useRef<HTMLDivElement>(null);
@@ -604,6 +623,11 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
   useEffect(() => {
     setOrderedReorderableKeys(allReorderableJobs.map((job) => job.key));
   }, [allReorderableJobs]);
+
+  const queueRunOrderByKey = useMemo(
+    () => (mode === "active" ? buildQueueRunOrderMap(queue, orderedReorderableKeys) : new Map<string, number>()),
+    [mode, queue, orderedReorderableKeys]
+  );
 
   const displayJobs = useMemo(() => {
     if (columnSort.column) {
@@ -1104,18 +1128,29 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
             <TableBody>
               {displayJobs.map((job) => {
                 const reorderable = showReorderControls && isReorderableQueueJob(job);
+                const rowClassName = [
+                  reorderable ? "job-queue-table-view__row--reorderable" : null,
+                  dropTargetKey === job.key ? "job-queue-table-view__row--drop-target" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+
                 return (
                   <TableRow
                     key={job.key}
                     hover
                     selected={selectedKeys.has(job.key)}
-                    className={reorderable ? "job-queue-table-view__row--reorderable" : undefined}
+                    className={rowClassName || undefined}
                     draggable={reorderable}
                     onDragStart={() => reorderable && setDragKey(job.key)}
-                    onDragEnd={() => setDragKey(null)}
+                    onDragEnd={() => {
+                      setDragKey(null);
+                      setDropTargetKey(null);
+                    }}
                     onDragOver={(event) => {
-                      if (reorderable && dragKey) {
+                      if (reorderable && dragKey && dragKey !== job.key) {
                         event.preventDefault();
+                        setDropTargetKey(job.key);
                       }
                     }}
                     onDrop={() => {
@@ -1123,6 +1158,7 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
                         moveReorderableJob(dragKey, job.key);
                       }
                       setDragKey(null);
+                      setDropTargetKey(null);
                     }}
                   >
                     <TableCell padding="checkbox">
@@ -1144,7 +1180,11 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
                       <TruncatedCellText>{job.name}</TruncatedCellText>
                     </TableCell>
                     <TableCell align="center" className="job-queue-table-view__status-cell">
-                      <JobStatusCell status={job.status} statusMessage={job.status_msg} />
+                      <JobStatusCell
+                        status={job.status}
+                        statusMessage={job.status_msg}
+                        queueOrder={queueRunOrderByKey.get(job.key)}
+                      />
                     </TableCell>
                     <TableCell>
                       <TruncatedCellText>{formatJobYearRange(job.start_year, job.end_year)}</TruncatedCellText>
