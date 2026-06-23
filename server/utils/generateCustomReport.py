@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from water_rights_visualizer.custom_report_generator import (
+    CUSTOM_REPORT_PREVIEW_VERSION,
     CustomReportConfig,
     generate_custom_preview,
     generate_custom_report,
@@ -42,12 +43,19 @@ def main(argv=None):
             color_scale=raw.get("color_scale", "across_years"),
             et_custom_min=_optional_float(raw.get("et_custom_min")),
             et_custom_max=_optional_float(raw.get("et_custom_max")),
+            et_eto_scale=raw.get("et_eto_scale", "across_years"),
+            et_eto_custom_min=_optional_float(raw.get("et_eto_custom_min")),
+            et_eto_custom_max=_optional_float(raw.get("et_eto_custom_max")),
+            ppt_scale=raw.get("ppt_scale", "across_years"),
+            ppt_custom_min=_optional_float(raw.get("ppt_custom_min")),
+            ppt_custom_max=_optional_float(raw.get("ppt_custom_max")),
             show_monthly_averages=bool(raw.get("show_monthly_averages", False)),
             start_month=int(raw.get("start_month", 1)),
             end_month=int(raw.get("end_month", 12)),
             requestor=raw.get("requestor"),
             output_dir=raw.get("output_dir"),
             include_summary=raw.get("include_summary", True),
+            include_yearly_combined=bool(raw.get("include_yearly_combined", False)),
             include_documentation=raw.get("include_documentation", True),
         )
 
@@ -61,7 +69,14 @@ def main(argv=None):
             preview_kind = raw.get("preview_kind", "year")
             year = int(raw["year"]) if raw.get("year") is not None else None
             doc_page = int(raw.get("preview_page", 1))
-            result_path = generate_custom_preview(config, preview_kind=preview_kind, year=year, doc_page=doc_page)
+            result_path = generate_custom_preview(
+                config,
+                preview_kind=preview_kind,
+                year=year,
+                doc_page=doc_page,
+                force_refresh=bool(raw.get("force_refresh", False)),
+                preview_version=int(raw.get("preview_version", CUSTOM_REPORT_PREVIEW_VERSION)),
+            )
         else:
             result_path = generate_custom_report(config)
 

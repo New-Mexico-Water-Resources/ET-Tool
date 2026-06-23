@@ -35,11 +35,14 @@ from .pdf_report_generator import (
 from .plotting_helpers import MetricETUnit, convert_to_nice_number_range, et_unit_from_name
 from .ROI_area import ROI_area
 from .summary_figure_generator import generate_summary_figure
+from .yearly_combined_figure_generator import generate_yearly_combined_figure
 
 logger = logging.getLogger(__name__)
 
+CUSTOM_REPORT_PREVIEW_VERSION = 2
+
 ColorScaleMode = Literal["across_years", "per_year", "custom"]
-PreviewKind = Literal["year", "summary", "documentation"]
+PreviewKind = Literal["year", "summary", "yearly_combined", "documentation"]
 UnitName = Literal["metric", "imperial", "acre-feet"]
 
 
@@ -55,12 +58,19 @@ class CustomReportConfig:
     color_scale: ColorScaleMode = "across_years"
     et_custom_min: float | None = None
     et_custom_max: float | None = None
+    et_eto_scale: ColorScaleMode = "across_years"
+    et_eto_custom_min: float | None = None
+    et_eto_custom_max: float | None = None
+    ppt_scale: ColorScaleMode = "across_years"
+    ppt_custom_min: float | None = None
+    ppt_custom_max: float | None = None
     show_monthly_averages: bool = False
     start_month: int = 1
     end_month: int = 12
     requestor: dict | None = None
     output_dir: str | None = None
     include_summary: bool = True
+    include_yearly_combined: bool = False
     include_documentation: bool = True
 
 
@@ -85,6 +95,8 @@ def _pipeline_figure_directory(config: CustomReportConfig) -> Path:
 def _can_use_pipeline_figures(config: CustomReportConfig) -> bool:
     return (
         config.color_scale == "across_years"
+        and config.et_eto_scale == "across_years"
+        and config.ppt_scale == "across_years"
         and not config.show_monthly_averages
         and config.et_units == config.ppt_units
     )
@@ -104,7 +116,23 @@ def _try_pipeline_preview_path(
         return str(figure_directory / f"{year}_{config.roi_name}{suffix}.png")
     if preview_kind == "summary":
         return str(figure_directory / f"summary_{config.roi_name}{suffix}.png")
+    if preview_kind == "yearly_combined":
+        return None
     return None
+
+
+def _display_scale_bounds(
+    vmin: float | None,
+    vmax: float | None,
+    unit,
+) -> tuple[float | None, float | None]:
+    if vmin is None or vmax is None:
+        return None, None
+    if unit.units == "metric":
+        nice = convert_to_nice_number_range(vmin, vmax, MetricETUnit())
+    else:
+        nice = convert_to_nice_number_range(vmin, vmax, unit)
+    return float(nice[0]), float(nice[-1])
 
 
 def _display_et_bounds(
@@ -112,17 +140,23 @@ def _display_et_bounds(
     et_vmax: float | None,
     et_unit,
 ) -> tuple[float | None, float | None]:
-    if et_vmin is None or et_vmax is None:
-        return None, None
-    if et_unit.units == "metric":
-        nice = convert_to_nice_number_range(et_vmin, et_vmax, MetricETUnit())
-    else:
-        nice = convert_to_nice_number_range(et_vmin, et_vmax, et_unit)
-    return float(nice[0]), float(nice[-1])
+    return _display_scale_bounds(et_vmin, et_vmax, et_unit)
 
 
-def get_et_scale_bounds(config: CustomReportConfig, year: int) -> dict[str, dict[str, float | None]]:
-    """Return display-unit ET bounds for across-years and per-year color scales."""
+def _bounds_group(
+    across_min: float | None,
+    across_max: float | None,
+    per_year_min: float | None,
+    per_year_max: float | None,
+) -> dict[str, dict[str, float | None]]:
+    return {
+        "across_years": {"min": across_min, "max": across_max},
+        "per_year": {"min": per_year_min, "max": per_year_max},
+    }
+
+
+def get_scale_bounds(config: CustomReportConfig, year: int) -> dict[str, dict[str, dict[str, float | None]]]:
+    """Return display-unit bounds for map, ET/ETo chart, and precipitation chart scales."""
     monthly_means_directory = Path(config.output_directory) / "monthly_means" / config.roi_name
     monthly_nan_directory = Path(config.output_directory) / "monthly_nan" / config.roi_name
     bounds = _calculate_global_bounds(monthly_means_directory, monthly_nan_directory)
@@ -131,19 +165,53 @@ def get_et_scale_bounds(config: CustomReportConfig, year: int) -> dict[str, dict
     makedirs(output_dir, exist_ok=True)
     roi_acres = round(ROI_area(config.roi_path, output_dir), 2)
     et_unit = et_unit_from_name(config.et_units, acres=roi_acres)
+    ppt_unit = et_unit_from_name(config.ppt_units, acres=roi_acres)
 
-    across_min, across_max = _display_et_bounds(bounds["et_vmin"], bounds["et_vmax"], et_unit)
+    across_map_min, across_map_max = _display_et_bounds(bounds["et_vmin"], bounds["et_vmax"], et_unit)
     year_et_vmin, year_et_vmax = _calculate_year_et_bounds(monthly_means_directory, year)
     if year_et_vmin is None:
         year_et_vmin = bounds["et_vmin"]
     if year_et_vmax is None:
         year_et_vmax = bounds["et_vmax"]
-    per_year_min, per_year_max = _display_et_bounds(year_et_vmin, year_et_vmax, et_unit)
+    per_year_map_min, per_year_map_max = _display_et_bounds(year_et_vmin, year_et_vmax, et_unit)
+
+    year_combined_min, year_combined_max = _calculate_year_combined_bounds(
+        monthly_means_directory,
+        monthly_nan_directory,
+        year,
+    )
+    if year_combined_min is None:
+        year_combined_min = bounds["combined_abs_min"]
+    if year_combined_max is None:
+        year_combined_max = bounds["combined_abs_max"]
+    across_et_eto_min, across_et_eto_max = _display_scale_bounds(
+        bounds["combined_abs_min"],
+        bounds["combined_abs_max"],
+        et_unit,
+    )
+    per_year_et_eto_min, per_year_et_eto_max = _display_scale_bounds(
+        year_combined_min,
+        year_combined_max,
+        et_unit,
+    )
+
+    year_ppt_min, year_ppt_max = _calculate_year_ppt_bounds(monthly_nan_directory, year)
+    if year_ppt_min is None:
+        year_ppt_min = bounds["ppt_min"]
+    if year_ppt_max is None:
+        year_ppt_max = bounds["ppt_max"]
+    across_ppt_min, across_ppt_max = _display_scale_bounds(bounds["ppt_min"], bounds["ppt_max"], ppt_unit)
+    per_year_ppt_min, per_year_ppt_max = _display_scale_bounds(year_ppt_min, year_ppt_max, ppt_unit)
 
     return {
-        "across_years": {"min": across_min, "max": across_max},
-        "per_year": {"min": per_year_min, "max": per_year_max},
+        "map": _bounds_group(across_map_min, across_map_max, per_year_map_min, per_year_map_max),
+        "et_eto": _bounds_group(across_et_eto_min, across_et_eto_max, per_year_et_eto_min, per_year_et_eto_max),
+        "ppt": _bounds_group(across_ppt_min, across_ppt_max, per_year_ppt_min, per_year_ppt_max),
     }
+
+
+def get_et_scale_bounds(config: CustomReportConfig, year: int) -> dict[str, dict[str, dict[str, float | None]]]:
+    return get_scale_bounds(config, year)
 
 
 def _preview_cache_key(
@@ -151,6 +219,7 @@ def _preview_cache_key(
     preview_kind: PreviewKind,
     year: int | None,
     doc_page: int,
+    preview_version: int | None = None,
 ) -> str:
     payload = {
         "roi": config.roi_name,
@@ -159,12 +228,19 @@ def _preview_cache_key(
         "color_scale": config.color_scale,
         "et_custom_min": config.et_custom_min,
         "et_custom_max": config.et_custom_max,
+        "et_eto_scale": config.et_eto_scale,
+        "et_eto_custom_min": config.et_eto_custom_min,
+        "et_eto_custom_max": config.et_eto_custom_max,
+        "ppt_scale": config.ppt_scale,
+        "ppt_custom_min": config.ppt_custom_min,
+        "ppt_custom_max": config.ppt_custom_max,
         "show_monthly_averages": config.show_monthly_averages,
         "preview_kind": preview_kind,
         "year": year,
         "doc_page": doc_page,
         "start_month": config.start_month,
         "end_month": config.end_month,
+        "preview_version": preview_version or CUSTOM_REPORT_PREVIEW_VERSION,
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     return digest[:16]
@@ -259,6 +335,49 @@ def _calculate_year_et_bounds(monthly_means_directory: Path, year: int) -> tuple
     return calculate_year_bounds(year_df, file, "ET")
 
 
+def _calculate_year_combined_bounds(
+    monthly_means_directory: Path,
+    monthly_nan_directory: Path,
+    year: int,
+) -> tuple[float | None, float | None]:
+    combined_abs_min = combined_abs_max = None
+
+    mm_file = monthly_means_directory / f"{year}_monthly_means.csv"
+    if exists(mm_file):
+        year_df = pd.read_csv(mm_file)
+        for variable in ["ET", "PET"]:
+            year_vmin, year_vmax = calculate_year_bounds(year_df, mm_file, variable, abs=True)
+            if year_vmin is None:
+                continue
+            combined_abs_min = year_vmin if combined_abs_min is None else min(combined_abs_min, year_vmin)
+            combined_abs_max = year_vmax if combined_abs_max is None else max(combined_abs_max, year_vmax)
+
+    nd_file = monthly_nan_directory / f"{year}.csv"
+    if exists(nd_file):
+        year_df = pd.read_csv(nd_file)
+        for variable in ["avg_min", "avg_max"]:
+            year_vmin, year_vmax = calculate_year_bounds(year_df, nd_file, variable, abs=True)
+            if year_vmin is None:
+                continue
+            combined_abs_min = year_vmin if combined_abs_min is None else min(combined_abs_min, year_vmin)
+            combined_abs_max = year_vmax if combined_abs_max is None else max(combined_abs_max, year_vmax)
+
+    return combined_abs_min, combined_abs_max
+
+
+def _calculate_year_ppt_bounds(monthly_nan_directory: Path, year: int) -> tuple[float | None, float | None]:
+    file = monthly_nan_directory / f"{year}.csv"
+    if not exists(file):
+        return None, None
+    year_df = pd.read_csv(file)
+    ppt_min, ppt_max = calculate_year_bounds(year_df, file, "ppt_avg", abs=True)
+    if ppt_min is not None:
+        ppt_min = max(ppt_min, 0)
+    if ppt_max is not None and ppt_min is not None:
+        ppt_max = max(ppt_max, ppt_min)
+    return ppt_min, ppt_max
+
+
 def _extract_month_et_averages(mm: pd.DataFrame, start_month: int, end_month: int) -> dict[int, float]:
     averages: dict[int, float] = {}
     if "ET" not in mm.columns or "Month" not in mm.columns:
@@ -303,6 +422,63 @@ def _resolve_et_bounds(
     return bounds["et_vmin"], bounds["et_vmax"]
 
 
+def _resolve_combined_bounds(
+    config: CustomReportConfig,
+    bounds: dict[str, float | None],
+    monthly_means_directory: Path,
+    monthly_nan_directory: Path,
+    year: int | None,
+    et_unit,
+) -> tuple[float | None, float | None]:
+    if config.et_eto_scale == "custom":
+        if config.et_eto_custom_min is None or config.et_eto_custom_max is None:
+            raise ValueError("Custom ET/ETo scale requires min and max values")
+        combined_vmin = et_unit.convert_to_metric(config.et_eto_custom_min)
+        combined_vmax = et_unit.convert_to_metric(config.et_eto_custom_max)
+        if combined_vmin >= combined_vmax:
+            raise ValueError("Custom ET/ETo scale max must be greater than min")
+        return combined_vmin, combined_vmax
+
+    if config.et_eto_scale == "per_year" and year is not None:
+        year_combined_min, year_combined_max = _calculate_year_combined_bounds(
+            monthly_means_directory,
+            monthly_nan_directory,
+            year,
+        )
+        return (
+            year_combined_min if year_combined_min is not None else bounds["combined_abs_min"],
+            year_combined_max if year_combined_max is not None else bounds["combined_abs_max"],
+        )
+
+    return bounds["combined_abs_min"], bounds["combined_abs_max"]
+
+
+def _resolve_ppt_bounds(
+    config: CustomReportConfig,
+    bounds: dict[str, float | None],
+    monthly_nan_directory: Path,
+    year: int | None,
+    ppt_unit,
+) -> tuple[float | None, float | None]:
+    if config.ppt_scale == "custom":
+        if config.ppt_custom_min is None or config.ppt_custom_max is None:
+            raise ValueError("Custom precipitation scale requires min and max values")
+        ppt_vmin = ppt_unit.convert_to_metric(config.ppt_custom_min)
+        ppt_vmax = ppt_unit.convert_to_metric(config.ppt_custom_max)
+        if ppt_vmin >= ppt_vmax:
+            raise ValueError("Custom precipitation scale max must be greater than min")
+        return ppt_vmin, ppt_vmax
+
+    if config.ppt_scale == "per_year" and year is not None:
+        year_ppt_min, year_ppt_max = _calculate_year_ppt_bounds(monthly_nan_directory, year)
+        return (
+            year_ppt_min if year_ppt_min is not None else bounds["ppt_min"],
+            year_ppt_max if year_ppt_max is not None else bounds["ppt_max"],
+        )
+
+    return bounds["ppt_min"], bounds["ppt_max"]
+
+
 def _prepare_year_main_df(
     year: int,
     monthly_means_directory: Path,
@@ -344,6 +520,7 @@ def generate_custom_figures(
     years: list[int] | None = None,
     *,
     include_summary: bool | None = None,
+    include_yearly_combined: bool | None = None,
     output_dir_override: str | None = None,
     clear_output_dir: bool = True,
 ) -> str:
@@ -374,6 +551,9 @@ def generate_custom_figures(
         target_years = years
 
     should_include_summary = config.include_summary if include_summary is None else include_summary
+    should_include_yearly_combined = (
+        config.include_yearly_combined if include_yearly_combined is None else include_yearly_combined
+    )
 
     for year in target_years:
         mm_filename = monthly_means_directory / f"{year}_monthly_means.csv"
@@ -396,6 +576,15 @@ def generate_custom_figures(
             continue
 
         et_vmin, et_vmax = _resolve_et_bounds(config, bounds, monthly_means_directory, year, et_unit)
+        combined_abs_min, combined_abs_max = _resolve_combined_bounds(
+            config,
+            bounds,
+            monthly_means_directory,
+            monthly_nan_directory,
+            year,
+            et_unit,
+        )
+        ppt_min, ppt_max = _resolve_ppt_bounds(config, bounds, monthly_nan_directory, year, ppt_unit)
 
         figure_filename = join(output_dir, f"{year}_{roi_name}.png")
         generate_figure(
@@ -406,10 +595,10 @@ def generate_custom_figures(
             year=year,
             et_vmin=et_vmin,
             et_vmax=et_vmax,
-            combined_abs_min=bounds["combined_abs_min"],
-            combined_abs_max=bounds["combined_abs_max"],
-            ppt_min=bounds["ppt_min"],
-            ppt_max=bounds["ppt_max"],
+            combined_abs_min=combined_abs_min,
+            combined_abs_max=combined_abs_max,
+            ppt_min=ppt_min,
+            ppt_max=ppt_max,
             cloud_cover_min=bounds["cloud_cover_min"],
             cloud_cover_max=bounds["cloud_cover_max"],
             affine=affine,
@@ -428,6 +617,22 @@ def generate_custom_figures(
         )
 
     if should_include_summary:
+        summary_year = config.end_year
+        summary_combined_min, summary_combined_max = _resolve_combined_bounds(
+            config,
+            bounds,
+            monthly_means_directory,
+            monthly_nan_directory,
+            summary_year,
+            et_unit,
+        )
+        summary_ppt_min, summary_ppt_max = _resolve_ppt_bounds(
+            config,
+            bounds,
+            monthly_nan_directory,
+            summary_year,
+            ppt_unit,
+        )
         summary_figure_filename = join(output_dir, f"summary_{roi_name}.png")
         generate_summary_figure(
             ROI_name=roi_name,
@@ -437,10 +642,10 @@ def generate_custom_figures(
             end_year=config.end_year,
             et_vmin=bounds["et_vmin"],
             et_vmax=bounds["et_vmax"],
-            combined_abs_min=bounds["combined_abs_min"],
-            combined_abs_max=bounds["combined_abs_max"],
-            ppt_min=bounds["ppt_min"],
-            ppt_max=bounds["ppt_max"],
+            combined_abs_min=summary_combined_min,
+            combined_abs_max=summary_combined_max,
+            ppt_min=summary_ppt_min,
+            ppt_max=summary_ppt_max,
             cloud_cover_min=bounds["cloud_cover_min"],
             cloud_cover_max=bounds["cloud_cover_max"],
             monthly_means_directory=str(monthly_means_directory),
@@ -450,6 +655,43 @@ def generate_custom_figures(
             units=et_unit,
             ppt_units=ppt_unit,
             plain_filename=True,
+        )
+
+    if should_include_yearly_combined:
+        yearly_year = config.end_year
+        yearly_combined_min, yearly_combined_max = _resolve_combined_bounds(
+            config,
+            bounds,
+            monthly_means_directory,
+            monthly_nan_directory,
+            yearly_year,
+            et_unit,
+        )
+        yearly_ppt_min, yearly_ppt_max = _resolve_ppt_bounds(
+            config,
+            bounds,
+            monthly_nan_directory,
+            yearly_year,
+            ppt_unit,
+        )
+        yearly_combined_figure_filename = join(output_dir, f"yearly_combined_{roi_name}.png")
+        generate_yearly_combined_figure(
+            ROI_name=roi_name,
+            ROI_acres=ROI_acres,
+            creation_date=creation_date,
+            start_year=config.start_year,
+            end_year=config.end_year,
+            monthly_means_directory=str(monthly_means_directory),
+            monthly_nan_directory=str(monthly_nan_directory),
+            figure_filename=yearly_combined_figure_filename,
+            requestor=config.requestor,
+            units=et_unit,
+            ppt_units=ppt_unit,
+            plain_filename=True,
+            combined_abs_min=yearly_combined_min,
+            combined_abs_max=yearly_combined_max,
+            ppt_min=yearly_ppt_min,
+            ppt_max=yearly_ppt_max,
         )
 
     return output_dir
@@ -469,23 +711,29 @@ def generate_custom_preview(
     preview_kind: PreviewKind = "year",
     year: int | None = None,
     doc_page: int = 1,
+    *,
+    force_refresh: bool = False,
+    preview_version: int | None = None,
 ) -> str:
     """Generate a preview image for a report page and return its path."""
+    resolved_preview_version = preview_version or CUSTOM_REPORT_PREVIEW_VERSION
+
     if preview_kind == "documentation":
         cache_path = get_documentation_preview_cache_path(doc_page)
-        if exists(cache_path):
+        if not force_refresh and exists(cache_path):
             return cache_path
         output_png = join(_resolve_output_dir(config), f"documentation_page_{doc_page}.png")
         makedirs(dirname(output_png), exist_ok=True)
         return render_documentation_page(doc_page, output_png)
 
-    pipeline_path = _try_pipeline_preview_path(config, preview_kind, year)
-    if pipeline_path and exists(pipeline_path):
-        return pipeline_path
+    if not force_refresh:
+        pipeline_path = _try_pipeline_preview_path(config, preview_kind, year)
+        if pipeline_path and exists(pipeline_path):
+            return pipeline_path
 
-    cache_key = _preview_cache_key(config, preview_kind, year, doc_page)
+    cache_key = _preview_cache_key(config, preview_kind, year, doc_page, resolved_preview_version)
     cached_path = _preview_cache_path(config, cache_key)
-    if exists(cached_path):
+    if not force_refresh and exists(cached_path):
         return cached_path
 
     roi_name = config.roi_name
@@ -502,6 +750,16 @@ def generate_custom_preview(
             clear_output_dir=False,
         )
         generated_path = join(build_dir, f"summary_{roi_name}.png")
+    elif preview_kind == "yearly_combined":
+        generate_custom_figures(
+            config,
+            years=[],
+            include_summary=False,
+            include_yearly_combined=True,
+            output_dir_override=build_dir,
+            clear_output_dir=False,
+        )
+        generated_path = join(build_dir, f"yearly_combined_{roi_name}.png")
     else:
         if year is None:
             raise ValueError("Preview year is required for year report previews")

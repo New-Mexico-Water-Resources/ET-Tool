@@ -4,6 +4,8 @@ const path = require("path");
 const { spawn } = require("child_process");
 const constants = require("../constants");
 
+const { CUSTOM_REPORT_PREVIEW_VERSION } = require("./customReportPreview");
+
 const GENERATE_SCRIPT = path.join(__dirname, "generateCustomReport.py");
 const DOC_PREVIEW_CACHE_DIR = path.join(
   constants.project_directory,
@@ -60,8 +62,16 @@ const canUsePipelineFigures = (options) => {
   const etUnits = parseUnits(options.etUnits);
   const pptUnits = parseUnits(options.pptUnits, etUnits);
   const colorScale = parseColorScale(options.colorScale);
+  const etEtoScale = parseColorScale(options.etEtoScale);
+  const pptScale = parseColorScale(options.pptScale);
   const showMonthlyAverages = parseBoolean(options.showMonthlyAverages);
-  return colorScale === "across_years" && !showMonthlyAverages && etUnits === pptUnits;
+  return (
+    colorScale === "across_years" &&
+    etEtoScale === "across_years" &&
+    pptScale === "across_years" &&
+    !showMonthlyAverages &&
+    etUnits === pptUnits
+  );
 };
 
 const resolvePipelinePreviewPath = (job, options) => {
@@ -125,13 +135,22 @@ const buildReportConfig = (job, options) => {
     color_scale: parseColorScale(options.colorScale),
     et_custom_min: parseOptionalNumber(options.etCustomMin),
     et_custom_max: parseOptionalNumber(options.etCustomMax),
+    et_eto_scale: parseColorScale(options.etEtoScale),
+    et_eto_custom_min: parseOptionalNumber(options.etEtoCustomMin),
+    et_eto_custom_max: parseOptionalNumber(options.etEtoCustomMax),
+    ppt_scale: parseColorScale(options.pptScale),
+    ppt_custom_min: parseOptionalNumber(options.pptCustomMin),
+    ppt_custom_max: parseOptionalNumber(options.pptCustomMax),
     show_monthly_averages: parseBoolean(options.showMonthlyAverages),
     requestor: job.user || null,
     year: options.year,
     preview_kind: options.previewKind || "year",
     preview_page: options.previewPage != null ? Number(options.previewPage) : 1,
     include_summary: options.includeSummary !== false,
+    include_yearly_combined: parseBoolean(options.includeYearlyCombined),
     include_documentation: options.includeDocumentation !== false,
+    preview_version: Number(options.previewVersion) || CUSTOM_REPORT_PREVIEW_VERSION,
+    force_refresh: parseBoolean(options.forceRefresh),
     output_dir: options.outputDir || null,
   };
 };
@@ -219,7 +238,7 @@ const generateCustomPreview = async (job, options) => {
     if (fs.existsSync(docPath)) {
       return docPath;
     }
-  } else {
+  } else if (previewKind !== "yearly_combined" && !parseBoolean(options.forceRefresh)) {
     const pipelinePath = resolvePipelinePreviewPath(job, options);
     if (pipelinePath && fs.existsSync(pipelinePath)) {
       return pipelinePath;
@@ -244,6 +263,24 @@ const generateCustomReport = async (job, options) => {
   return runGenerateCustomReport(config);
 };
 
+const parseCustomReportOptions = (query) => ({
+  etUnits: query.etUnits,
+  pptUnits: query.pptUnits,
+  colorScale: query.colorScale,
+  etCustomMin: query.etCustomMin,
+  etCustomMax: query.etCustomMax,
+  etEtoScale: query.etEtoScale,
+  etEtoCustomMin: query.etEtoCustomMin,
+  etEtoCustomMax: query.etEtoCustomMax,
+  pptScale: query.pptScale,
+  pptCustomMin: query.pptCustomMin,
+  pptCustomMax: query.pptCustomMax,
+  showMonthlyAverages: query.showMonthlyAverages,
+  includeYearlyCombined: query.includeYearlyCombined,
+  previewVersion: query.previewVersion,
+  forceRefresh: query.refresh === "true",
+});
+
 module.exports = {
   buildJobPaths,
   generateCustomPreview,
@@ -251,4 +288,6 @@ module.exports = {
   getEtScaleBounds,
   parseColorScale,
   parseUnits,
+  parseBoolean,
+  parseCustomReportOptions,
 };

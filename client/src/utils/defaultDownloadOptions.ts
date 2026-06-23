@@ -10,6 +10,7 @@ export type DefaultDownloadOption =
       pptUnits: ReportUnit;
       colorScale: ColorScaleMode;
       showMonthlyAverages: boolean;
+      combinedYearlyTotals?: boolean;
     }
   | {
       id: string;
@@ -32,6 +33,7 @@ export const FALLBACK_DEFAULT_DOWNLOAD_OPTIONS: DefaultDownloadOptionsConfig = {
       pptUnits: "metric",
       colorScale: "across_years",
       showMonthlyAverages: false,
+      combinedYearlyTotals: false,
     },
     {
       id: "imperial-in-month",
@@ -42,6 +44,7 @@ export const FALLBACK_DEFAULT_DOWNLOAD_OPTIONS: DefaultDownloadOptionsConfig = {
       pptUnits: "imperial",
       colorScale: "across_years",
       showMonthlyAverages: false,
+      combinedYearlyTotals: false,
     },
     {
       id: "acre-feet-month",
@@ -52,6 +55,7 @@ export const FALLBACK_DEFAULT_DOWNLOAD_OPTIONS: DefaultDownloadOptionsConfig = {
       pptUnits: "acre-feet",
       colorScale: "across_years",
       showMonthlyAverages: false,
+      combinedYearlyTotals: false,
     },
     {
       id: "custom",

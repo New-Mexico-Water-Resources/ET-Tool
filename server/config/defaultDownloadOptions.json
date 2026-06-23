@@ -8,7 +8,8 @@
       "etUnits": "metric",
       "pptUnits": "metric",
       "colorScale": "across_years",
-      "showMonthlyAverages": false
+      "showMonthlyAverages": false,
+      "combinedYearlyTotals": false
     },
     {
       "id": "imperial-in-month",
@@ -18,7 +19,8 @@
       "etUnits": "imperial",
       "pptUnits": "imperial",
       "colorScale": "across_years",
-      "showMonthlyAverages": false
+      "showMonthlyAverages": false,
+      "combinedYearlyTotals": false
     },
     {
       "id": "acre-feet-month",
@@ -28,7 +30,8 @@
       "etUnits": "acre-feet",
       "pptUnits": "acre-feet",
       "colorScale": "across_years",
-      "showMonthlyAverages": false
+      "showMonthlyAverages": false,
+      "combinedYearlyTotals": false
     },
     {
       "id": "custom",

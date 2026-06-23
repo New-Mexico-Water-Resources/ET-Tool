@@ -133,6 +133,20 @@ def generate_custom_pdf_report(figure_directory, ROI_name):
         except Exception as e:
             logger.error(f"Error loading summary image {summary_image_path} (skipping): {e}")
 
+    yearly_combined_image_path = join(figure_directory, f"yearly_combined_{ROI_name}.png")
+    if exists(yearly_combined_image_path):
+        try:
+            img_array = load_and_resize_image(yearly_combined_image_path)
+            fig = plt.figure(figsize=(19.2, 14.4), tight_layout=True)
+            ax = fig.add_axes([0, 0, 1, 1])
+            img_array = np.rot90(img_array)
+            ax.imshow(img_array)
+            ax.axis("off")
+            pdf.savefig(fig, bbox_inches="tight", pad_inches=0)
+            plt.close(fig)
+        except Exception as e:
+            logger.error(f"Error loading yearly combined image {yearly_combined_image_path} (skipping): {e}")
+
     pdf.close()
     return report_filename
 

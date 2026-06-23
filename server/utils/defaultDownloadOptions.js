@@ -21,6 +21,11 @@ const getReportDownloadOptions = () =>
 const getDownloadOptionByUnits = (units) =>
   getReportDownloadOptions().find((option) => option.units === units) || null;
 
+const shouldIncludeYearlyCombined = (units) => {
+  const option = getDownloadOptionByUnits(units);
+  return option?.combinedYearlyTotals === true;
+};
+
 const reloadDefaultDownloadOptions = () => {
   cachedConfig = null;
   return loadDefaultDownloadOptions();
@@ -30,5 +35,6 @@ module.exports = {
   loadDefaultDownloadOptions,
   getReportDownloadOptions,
   getDownloadOptionByUnits,
+  shouldIncludeYearlyCombined,
   reloadDefaultDownloadOptions,
 };

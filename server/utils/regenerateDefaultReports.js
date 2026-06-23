@@ -43,6 +43,12 @@ const installGeneratedReportArtifacts = (sourceDir, targetDir, jobName, units) =
       continue;
     }
 
+    if (entry.startsWith("yearly_combined_")) {
+      const targetName = `yearly_combined_${jobName}${figureSuffix}.png`;
+      fs.copyFileSync(sourcePath, path.join(targetDir, targetName));
+      continue;
+    }
+
     const yearMatch = entry.match(/^(\d{4})_/);
     if (yearMatch) {
       const targetName = `${yearMatch[1]}_${jobName}${figureSuffix}.png`;
@@ -69,6 +75,7 @@ const regenerateDefaultReports = async (job) => {
         pptUnits: option.pptUnits,
         colorScale: option.colorScale,
         showMonthlyAverages: option.showMonthlyAverages,
+        includeYearlyCombined: option.combinedYearlyTotals === true,
         outputDir: tempDir,
       });
       installGeneratedReportArtifacts(tempDir, figureDirectory, job.name, option.units);
