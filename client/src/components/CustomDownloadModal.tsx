@@ -16,6 +16,8 @@ import {
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL } from "../utils/constants";
@@ -218,6 +220,29 @@ const CustomDownloadModal = () => {
     options.push({ value: "documentation:2", label: "Documentation (Page 2)" });
     return options;
   }, [yearOptions]);
+
+  const previewPageIndex = useMemo(
+    () => previewPageOptions.findIndex((option) => option.value === previewPage),
+    [previewPage, previewPageOptions],
+  );
+
+  const previewPageTotal = previewPageOptions.length;
+  const canGoToPreviousPreviewPage = previewPageIndex > 0;
+  const canGoToNextPreviewPage = previewPageIndex >= 0 && previewPageIndex < previewPageTotal - 1;
+
+  const goToPreviousPreviewPage = () => {
+    if (!canGoToPreviousPreviewPage) {
+      return;
+    }
+    setPreviewPage(previewPageOptions[previewPageIndex - 1].value);
+  };
+
+  const goToNextPreviewPage = () => {
+    if (!canGoToNextPreviewPage) {
+      return;
+    }
+    setPreviewPage(previewPageOptions[previewPageIndex + 1].value);
+  };
 
   const previewNeedsReportOptions = previewPage.startsWith("year:");
   const customRangeSelected = colorScale === "custom";
@@ -671,6 +696,31 @@ const CustomDownloadModal = () => {
                       alt={`${job.name} ${selectedPreviewLabel} preview`}
                       className="custom-download-modal__preview-image"
                     />
+                  )}
+                  {previewPageTotal > 1 && previewPageIndex >= 0 && (
+                    <Box className="custom-download-modal__preview-nav" aria-label="Preview page navigation">
+                      <IconButton
+                        size="small"
+                        className="custom-download-modal__preview-nav-btn"
+                        onClick={goToPreviousPreviewPage}
+                        disabled={!canGoToPreviousPreviewPage}
+                        aria-label="Previous preview page"
+                      >
+                        <ChevronLeftIcon fontSize="small" />
+                      </IconButton>
+                      <Typography variant="body2" className="custom-download-modal__preview-nav-count">
+                        {previewPageIndex + 1}/{previewPageTotal}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        className="custom-download-modal__preview-nav-btn"
+                        onClick={goToNextPreviewPage}
+                        disabled={!canGoToNextPreviewPage}
+                        aria-label="Next preview page"
+                      >
+                        <ChevronRightIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
                   )}
                 </Box>
               </Box>

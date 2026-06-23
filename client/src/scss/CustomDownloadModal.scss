@@ -141,6 +141,44 @@ $report-landscape-aspect-ratio: 11 / 8.5;
     display: block;
   }
 
+  &__preview-nav {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 45%);
+    backdrop-filter: blur(4px);
+  }
+
+  &__preview-nav-btn {
+    color: var(--st-gray-10) !important;
+    padding: 4px !important;
+
+    &:hover:not(.Mui-disabled) {
+      background-color: rgb(255 255 255 / 12%) !important;
+    }
+
+    &.Mui-disabled {
+      color: rgb(255 255 255 / 35%) !important;
+    }
+  }
+
+  &__preview-nav-count {
+    color: var(--st-gray-10);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 3.25rem;
+    text-align: center;
+    user-select: none;
+  }
+
   &__footer {
     display: flex;
     align-items: center;

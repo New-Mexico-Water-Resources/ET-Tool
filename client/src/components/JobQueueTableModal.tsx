@@ -904,7 +904,7 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
       <Toolbar className="job-queue-table-view__toolbar" sx={{ gap: 1, flexWrap: "nowrap", minHeight: 40, px: 1 }}>
         <IconButton
           onClick={onClose}
-          className="job-queue-table-view__icon-btn"
+          className="job-queue-table-view__icon-btn job-queue-table-view__collapse-btn"
           aria-label="Collapse queue table view"
           size="small"
           sx={{ mr: 0.5 }}

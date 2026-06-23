@@ -91,6 +91,15 @@
     }
   }
 
+  &__collapse-btn {
+    transition: transform 0.15s ease, color 0.15s ease !important;
+
+    &:hover:not(.Mui-disabled) {
+      background-color: transparent !important;
+      transform: translateX(3px);
+    }
+  }
+
   &__row-actions {
     display: flex;
     align-items: center;

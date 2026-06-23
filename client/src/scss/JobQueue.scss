@@ -179,6 +179,7 @@ ul.MuiMenu-list {
 .queue-expand-btn {
   padding: 2px !important;
   color: var(--st-gray-50) !important;
+  transition: transform 0.15s ease, color 0.15s ease !important;
 
   .MuiSvgIcon-root {
     color: inherit !important;
@@ -186,6 +187,7 @@ ul.MuiMenu-list {
 
   &:hover {
     color: var(--st-gray-30) !important;
-    background-color: var(--st-gray-80);
+    background-color: transparent !important;
+    transform: translateX(-3px);
   }
 }
