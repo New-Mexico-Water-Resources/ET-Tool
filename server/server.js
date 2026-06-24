@@ -20,16 +20,15 @@ const admin = require("./routes/admin/admin");
 const monthly_geojson = require("./routes/historical/monthly_geojson");
 const drought_monitor = require("./routes/auxiliary/drought_monitor");
 const cdl_year = require("./routes/auxiliary/cdl_year");
+const custom_report = require("./routes/custom_report/custom_report");
+const config = require("./routes/config");
+const dataSourcesDocs = require("./routes/docs/data_sources");
 
 const { auth } = require("express-oauth2-jwt-bearer");
 
 const working_directory = process.cwd();
 const run_directory_base = constants.run_directory_base;
-// const html_path = path.join(path.dirname(__dirname), 'page');
 const port = constants.port;
-
-// const argv = process.argv.slice(2);
-// const demo_mode = argv[0] == "demo";
 
 console.log(`starting server on port ${port}`);
 console.log(`run directory: ${run_directory_base}`);
@@ -55,6 +54,8 @@ app.get(`${basePath}/`, (req, res) => {
   });
 });
 
+app.use(`${basePath}/docs`, dataSourcesDocs);
+
 app.use(`${basePath}/`, verifyAuthToken, user);
 app.use(`${basePath}/`, verifyAuthToken, status);
 app.use(`${basePath}/`, verifyAuthToken, logs);
@@ -67,10 +68,12 @@ app.use(`${basePath}/`, verifyAuthToken, result_base64);
 app.use(`${basePath}/`, verifyAuthToken, start_run);
 app.use(`${basePath}/`, verifyAuthToken, runs);
 app.use(`${basePath}/`, verifyAuthToken, download);
+app.use(`${basePath}/custom-report`, verifyAuthToken, custom_report);
 app.use(`${basePath}/historical`, verifyAuthToken, monthly_geojson);
 app.use(`${basePath}/auxiliary`, verifyAuthToken, drought_monitor);
 app.use(`${basePath}/auxiliary`, verifyAuthToken, cdl_year);
 app.use(`${basePath}/queue`, verifyAuthToken, queue);
+app.use(`${basePath}/config`, verifyAuthToken, config);
 app.post(`${basePath}/prepare_geojson`, prepare_geojson.upload.single("file"), prepare_geojson.prepareGeojson);
 
 app.use(`${basePath}/admin`, verifyAuthToken, admin);

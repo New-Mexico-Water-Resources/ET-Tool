@@ -53,6 +53,11 @@ def generate_figure(
     status_filename: str = None,
     requestor: dict[str, str] = None,
     units: ETUnit = MetricETUnit(),
+    ppt_units: ETUnit = None,
+    plain_filename: bool = False,
+    show_monthly_averages: bool = False,
+    month_et_averages_metric: dict[int, float] | None = None,
+    et_bounds_are_custom: bool = False,
 ):
     """
     Generate a figure displaying evapotranspiration data for a specific region of interest (ROI).
@@ -84,11 +89,17 @@ def generate_figure(
         metric_units (bool, optional): Whether to use metric units for the report. Defaults to True.
     """
 
+    if ppt_units is None:
+        ppt_units = units
+
     # Create a new figure
     fig = plt.figure(figsize=(8.5, 11))
     et_unit = units.abbreviation
+    ppt_unit = ppt_units.abbreviation
     figure_filename = (
-        figure_filename if units.units == "metric" else figure_filename.replace(".png", f"_{units.abbreviation}.png")
+        figure_filename
+        if plain_filename or units.units == "metric"
+        else figure_filename.replace(".png", f"_{units.abbreviation}.png")
     )
 
     # title_fontsize = 14
@@ -133,15 +144,23 @@ def generate_figure(
     grid = plt.GridSpec(grid_rows + 3, grid_cols, wspace=0.4, hspace=0.3)
 
     # Initially use metric units for the colorbar (geotiff data is in mm, not inches)
-    range_values = convert_to_nice_number_range(et_vmin, et_vmax, MetricETUnit())
-    et_vmin = range_values[0]
-    et_vmax = range_values[-1]
+    if not et_bounds_are_custom:
+        range_values = convert_to_nice_number_range(et_vmin, et_vmax, MetricETUnit())
+        et_vmin = range_values[0]
+        et_vmax = range_values[-1]
 
     # Generate sub-figures for each month
     for i, month in enumerate(range(start_month, end_month + 1)):
         logger.info(f"rendering month: {month} sub-figure: {i}")
-        # subfigure_title = datetime(year, month, 1).date().strftime("%Y-%m")
         subfigure_title = calendar.month_name[month]
+        if show_monthly_averages and month_et_averages_metric and month in month_et_averages_metric:
+            avg_value = units.convert_from_metric(month_et_averages_metric[month])
+            if isinstance(avg_value, (int, float)) and not pd.isna(avg_value):
+                if float(avg_value).is_integer():
+                    avg_label = str(int(avg_value))
+                else:
+                    avg_label = f"{avg_value:.1f}"
+                subfigure_title = f"{subfigure_title} ({avg_label} {et_unit})"
         logger.info(f"sub-figure title: {subfigure_title}")
         ET_monthly_filename = join(monthly_sums_directory, f"{year:04d}_{month:02d}_{ROI_name}_ET_monthly_sum.tif")
 
@@ -152,6 +171,9 @@ def generate_figure(
         # Read the monthly sum data from the file
         with rasterio.open(ET_monthly_filename, "r") as f:
             monthly = f.read(1)
+
+        month_vmin = et_vmin
+        month_vmax = et_vmax
 
         # Create a subplot for the current month
         ax = plt.subplot(grid[int(i / grid_cols), i % grid_cols])
@@ -166,8 +188,8 @@ def generate_figure(
         left, bottom, right, top = array_bounds(monthly.shape[0], monthly.shape[1], affine)
         im = ax.imshow(
             monthly,
-            vmin=et_vmin,
-            vmax=et_vmax,
+            vmin=month_vmin,
+            vmax=month_vmax,
             cmap=cmap,
             extent=(left, right, bottom, top),
             origin="upper",
@@ -180,10 +202,13 @@ def generate_figure(
             spine.set_linewidth(0.5)
 
     # Now convert to inches if necessary
-    if units.units != "metric":
+    if units.units != "metric" and not et_bounds_are_custom:
         range_values = convert_to_nice_number_range(et_vmin, et_vmax, units)
         et_vmin = range_values[0]
         et_vmax = range_values[-1]
+    elif units.units != "metric" and et_bounds_are_custom:
+        et_vmin = units.convert_from_metric(et_vmin)
+        et_vmax = units.convert_from_metric(et_vmax)
 
     # Adjust the layout of the figure
     fig.subplots_adjust(right=0.78)
@@ -250,7 +275,7 @@ def generate_figure(
     y2 = df["ET"]
 
     if "ppt_avg" in df.columns:
-        df["ppt_avg"] = units.convert_from_metric(df["ppt_avg"])
+        df["ppt_avg"] = ppt_units.convert_from_metric(df["ppt_avg"])
 
     if "avg_min" in df.columns:
         df["avg_min"] = units.convert_from_metric(df["avg_min"])
@@ -433,14 +458,14 @@ def generate_figure(
     ax.grid(True, linestyle="--", alpha=0.3, color="gray", axis="y")
 
     if "ppt_avg" in df.columns and not df["ppt_avg"].empty and not df["ppt_avg"].isnull().all():
-        ppt_padding = 15 if units.units == "metric" else units.convert_from_metric(15)
-        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, units, subdivisions=3)
+        ppt_padding = 15 if ppt_units.units == "metric" else ppt_units.convert_from_metric(15)
+        ppt_range_values = convert_to_nice_number_range(ppt_min, ppt_max, ppt_units, subdivisions=3)
         ppt_min = max(ppt_range_values[0], 0)
         ppt_max = max(ppt_range_values[-1], ppt_min)
 
         ax_precip.set_ylim(ppt_min, ppt_max + ppt_padding)
-        precip_ticks = ppt_range_values
-        if not precip_ticks or len(precip_ticks) == 0:
+        precip_ticks = list(ppt_range_values)
+        if len(precip_ticks) == 0:
             precip_ticks = [0]  # No precip data
         elif len(precip_ticks) == 1:
             precip_ticks = [0, precip_ticks[0]]  # Only 1 pixel and 1 year of precip data
@@ -452,7 +477,7 @@ def generate_figure(
         ax_precip.set_ylim(0, 0)
         precip_ticks = [0]
     ax_precip.set_yticks(precip_ticks)
-    ax_precip.set_yticklabels([f"{tick} {et_unit}" for tick in precip_ticks])
+    ax_precip.set_yticklabels([f"{tick} {ppt_unit}" for tick in precip_ticks])
 
     # Add grid lines to precipitation plot
     ax_precip.grid(True, linestyle="--", alpha=0.3, color="gray", axis="y")

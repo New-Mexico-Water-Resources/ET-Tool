@@ -1,3 +1,24 @@
+## 1.40.0 (2026-06-24)
+
+### Features
+- **New Job Table View**
+  - When the In Progress or Completed right sidebar is open, you can now click an arrow to the left of the title to open the expanded job view mode
+  - Job table view allows bulk actions such as bulk viewing on map, bulk downloading (as zip of individual reports), and deleting 
+  - Admin controls in Job table allow bulk restarting, pausing, and approving as well as reordering of pending jobs
+  - Every column is now both searchable and sortable
+- **Custom Report Download**
+  - From the download menu, can now click "Custom Download" to open the Custom Report Generator
+  - Generates a live preview of the report
+  - Allows configuring separate units and scales for all plots - options are "same scale across years" (default), "dynamic scale per year", or a custom range
+  - Option to show monthly ET values next to map plots
+  - Option for combined yearly totals page that sums up all months in a year
+  - Can download just the report PDF, the full ZIP, or respective CSVs
+- **Job Renaming**
+  - From the 3-dots menu either in the right sidebar or in the expanded table view, an option now exists to "Rename job", this re-generates existing reports to match the new name
+- Adds data docs to Release Notes modal
+- Misc UI changes to right sidebar to minimize info
+- Includes annual ET totals CSV in ZIP
+
 ## 1.39.0 (2026-06-03)
 
 ### Features

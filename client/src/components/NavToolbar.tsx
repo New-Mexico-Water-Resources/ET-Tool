@@ -3,6 +3,7 @@ import {
   Avatar,
   Badge,
   Box,
+  CircularProgress,
   Divider,
   IconButton,
   ListItemIcon,
@@ -10,6 +11,8 @@ import {
   MenuItem,
   Modal,
   Skeleton,
+  Tab,
+  Tabs,
   Toolbar,
   Tooltip,
   Typography,
@@ -26,12 +29,57 @@ import LayersIcon from "@mui/icons-material/Layers";
 import Markdown from "react-markdown";
 
 import useStore from "../utils/store";
-import { FC, useEffect, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import LoginButton from "./LoginButton";
-import { ROLES } from "../utils/constants";
+import { API_URL, ROLES } from "../utils/constants";
+import axios from "axios";
 
 import changelog from "../../CHANGELOG.md?raw";
 import { useNavigate } from "react-router";
+
+type ReleaseNotesTab = "release-notes" | "data-sources";
+
+const releaseNotesContentShellSx = {
+  flex: 1,
+  minHeight: 0,
+  mt: 2,
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+  border: "1px solid var(--st-gray-80)",
+  bgcolor: "var(--st-gray-100)",
+  borderRadius: "4px",
+} as const;
+
+const releaseNotesContentScrollSx = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: "auto",
+  overscrollBehavior: "contain",
+  bgcolor: "var(--st-gray-100)",
+  backgroundAttachment: "local",
+  padding: "8px",
+  color: "var(--st-gray-10)",
+  fontSize: "14px",
+  lineHeight: 1.5,
+  "& a": {
+    color: "var(--st-blue-40)",
+    wordBreak: "break-word",
+  },
+  "& p": {
+    margin: "0 0 8px",
+  },
+  "& ul": {
+    margin: "0 0 8px",
+    paddingLeft: "20px",
+  },
+  "& li": {
+    marginBottom: "4px",
+  },
+  "& strong": {
+    color: "var(--st-gray-5)",
+  },
+} as const;
 
 const Profile = () => {
   const { user, isAuthenticated, isLoading, logout } = useAuth0();
@@ -149,6 +197,34 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
   const hasSeenLatestVersion = useMemo(() => lastSeenVersion === version, [lastSeenVersion, version]);
 
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [releaseNotesTab, setReleaseNotesTab] = useState<ReleaseNotesTab>("release-notes");
+  const [dataSourcesHtml, setDataSourcesHtml] = useState<string | null>(null);
+  const [dataSourcesLoading, setDataSourcesLoading] = useState(false);
+  const [dataSourcesError, setDataSourcesError] = useState<string | null>(null);
+
+  const fetchDataSources = useCallback(async () => {
+    if (dataSourcesHtml || dataSourcesLoading) {
+      return;
+    }
+
+    setDataSourcesLoading(true);
+    setDataSourcesError(null);
+
+    try {
+      const response = await axios.get<{ html: string }>(`${API_URL}/docs/data-sources`);
+      setDataSourcesHtml(response.data.html);
+    } catch {
+      setDataSourcesError("Failed to load data source documentation.");
+    } finally {
+      setDataSourcesLoading(false);
+    }
+  }, [dataSourcesHtml, dataSourcesLoading]);
+
+  useEffect(() => {
+    if (releaseNotesOpen && releaseNotesTab === "data-sources") {
+      void fetchDataSources();
+    }
+  }, [fetchDataSources, releaseNotesOpen, releaseNotesTab]);
 
   const canSubmitJobs = useMemo(
     () => userInfo?.permissions.includes("submit:jobs") || userInfo?.permissions.includes("write:jobs"),
@@ -203,7 +279,7 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
           open={releaseNotesOpen}
           onClose={() => setReleaseNotesOpen(false)}
           aria-labelledby="release-notes-title"
-          aria-describedby="release-notes"
+          aria-describedby="release-notes-content"
         >
           <Box
             sx={{
@@ -212,38 +288,89 @@ const NavToolbar: FC<{ publicMode?: boolean }> = ({ publicMode }) => {
               top: "50%",
               left: "50%",
               transform: "translate(-50%, -50%)",
-              width: 600,
+              width: 640,
               height: 600,
               bgcolor: "var(--st-gray-90)",
               border: "2px solid var(--st-gray-100)",
               borderRadius: "4px",
               boxShadow: 24,
+              overflow: "hidden",
             }}
           >
             <IconButton
-              sx={{ position: "absolute", right: 12, top: 12, cursor: "pointer" }}
+              sx={{ position: "absolute", right: 12, top: 12, cursor: "pointer", zIndex: 1 }}
               onClick={() => setReleaseNotesOpen(false)}
             >
               <CloseIcon />
             </IconButton>
-            <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "16px" }}>
-              <Typography id="release-notes-title" variant="h6" component="h2">
-                Release Notes
-              </Typography>
-              <Typography
-                id="release-notes"
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+                padding: "16px",
+                overflow: "hidden",
+              }}
+            >
+              <Tabs
+                id="release-notes-title"
+                value={releaseNotesTab}
+                onChange={(_, value: ReleaseNotesTab) => setReleaseNotesTab(value)}
                 sx={{
-                  mt: 2,
-                  maxHeight: 516,
-                  overflowY: "auto",
-                  border: "1px solid var(--st-gray-80)",
-                  background: "var(--st-gray-100)",
-                  borderRadius: "4px",
-                  padding: "8px",
+                  flexShrink: 0,
+                  minHeight: 40,
+                  pr: 5,
+                  borderBottom: "1px solid var(--st-gray-80)",
+                  "& .MuiTab-root": {
+                    minHeight: 40,
+                    minWidth: "auto",
+                    px: 0,
+                    mr: 3,
+                    textTransform: "none",
+                    fontSize: "1.25rem",
+                    fontWeight: 400,
+                    lineHeight: 1.6,
+                    letterSpacing: "0.0075em",
+                    color: "var(--st-gray-30)",
+                    outline: "none",
+                    "&:focus": {
+                      outline: "none",
+                    },
+                    "&.Mui-focusVisible": {
+                      outline: "none",
+                      boxShadow: "none",
+                    },
+                  },
+                  "& .Mui-selected": {
+                    color: "var(--st-gray-10)",
+                    fontWeight: 500,
+                    textDecoration: "underline",
+                    textUnderlineOffset: "6px",
+                    textDecorationThickness: "2px",
+                  },
+                  "& .MuiTabs-indicator": {
+                    display: "none",
+                  },
                 }}
               >
-                <Markdown>{changelog}</Markdown>
-              </Typography>
+                <Tab label="Release Notes" value="release-notes" disableRipple sx={{ color: "var(--st-gray-10)!important" }} />
+                <Tab label="Data Sources" value="data-sources" disableRipple sx={{ color: "var(--st-gray-10)!important" }} />
+              </Tabs>
+              <Box sx={releaseNotesContentShellSx}>
+                <Box id="release-notes-content" sx={releaseNotesContentScrollSx}>
+                  {releaseNotesTab === "release-notes" ? (
+                    <Markdown>{changelog}</Markdown>
+                  ) : dataSourcesLoading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 200 }}>
+                      <CircularProgress size={28} />
+                    </Box>
+                  ) : dataSourcesError ? (
+                    <Typography color="error">{dataSourcesError}</Typography>
+                  ) : (
+                    <Box dangerouslySetInnerHTML={{ __html: dataSourcesHtml || "" }} />
+                  )}
+                </Box>
+              </Box>
             </Box>
           </Box>
         </Modal>
