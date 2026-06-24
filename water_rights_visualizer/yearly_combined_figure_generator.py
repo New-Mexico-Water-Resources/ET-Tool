@@ -109,6 +109,36 @@ def _yearly_metric_totals(main_df: pd.DataFrame) -> pd.DataFrame:
     return main_df.groupby("Year", as_index=False).agg(agg_map)
 
 
+def calculate_yearly_totals_bounds(
+    monthly_means_directory: str,
+    monthly_nan_directory: str,
+    start_year: int,
+    end_year: int,
+) -> dict[str, float | None]:
+    main_df = _load_monthly_data(monthly_means_directory, monthly_nan_directory, start_year, end_year)
+    yearly_metric = _yearly_metric_totals(main_df)
+
+    combined_abs_min = None
+    combined_abs_max = None
+    et_pet_values = np.concatenate([yearly_metric["ET"].values, yearly_metric["PET"].values])
+    if len(et_pet_values):
+        combined_abs_min = 0.0
+        combined_abs_max = float(np.nanmax(et_pet_values))
+
+    ppt_min = None
+    ppt_max = None
+    if "ppt_avg" in yearly_metric.columns and not yearly_metric["ppt_avg"].isnull().all():
+        ppt_min = 0.0
+        ppt_max = float(yearly_metric["ppt_avg"].max())
+
+    return {
+        "combined_abs_min": combined_abs_min,
+        "combined_abs_max": combined_abs_max,
+        "ppt_min": ppt_min,
+        "ppt_max": ppt_max,
+    }
+
+
 def generate_yearly_combined_figure(
     ROI_name: str,
     ROI_acres: float,
@@ -260,9 +290,7 @@ def generate_yearly_combined_figure(
         frameon=False,
     )
 
-    if combined_abs_max is not None:
-        combined_abs_max = units.convert_from_metric(combined_abs_max)
-    else:
+    if combined_abs_max is None:
         combined_abs_max = float(
             np.nanmax(np.concatenate([yearly_metric["ET"].values, yearly_metric["PET"].values]))
         )
@@ -280,10 +308,9 @@ def generate_yearly_combined_figure(
     ax.set_yticklabels([f"{tick} {et_unit}" for tick in combined_range_values])
 
     if "ppt_avg" in yearly_df.columns and not yearly_df["ppt_avg"].empty and not yearly_df["ppt_avg"].isnull().all():
-        if ppt_max is not None:
-            ppt_max_metric = ppt_units.convert_from_metric(ppt_max)
-        else:
-            ppt_max_metric = float(yearly_metric["ppt_avg"].max())
+        if ppt_max is None:
+            ppt_max = float(yearly_metric["ppt_avg"].max())
+        ppt_max_metric = ppt_max
         ppt_range_values = convert_to_nice_number_range(0, ppt_max_metric, ppt_units, subdivisions=3)
         ppt_top_tick = ppt_range_values[-1]
         if ppt_units.units == "metric":
