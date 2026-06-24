@@ -22,16 +22,13 @@ const drought_monitor = require("./routes/auxiliary/drought_monitor");
 const cdl_year = require("./routes/auxiliary/cdl_year");
 const custom_report = require("./routes/custom_report/custom_report");
 const config = require("./routes/config");
+const dataSourcesDocs = require("./routes/docs/data_sources");
 
 const { auth } = require("express-oauth2-jwt-bearer");
 
 const working_directory = process.cwd();
 const run_directory_base = constants.run_directory_base;
-// const html_path = path.join(path.dirname(__dirname), 'page');
 const port = constants.port;
-
-// const argv = process.argv.slice(2);
-// const demo_mode = argv[0] == "demo";
 
 console.log(`starting server on port ${port}`);
 console.log(`run directory: ${run_directory_base}`);
@@ -56,6 +53,8 @@ app.get(`${basePath}/`, (req, res) => {
     message: "New Mexico Water Rights Visualizer API is running",
   });
 });
+
+app.use(`${basePath}/docs`, dataSourcesDocs);
 
 app.use(`${basePath}/`, verifyAuthToken, user);
 app.use(`${basePath}/`, verifyAuthToken, status);
