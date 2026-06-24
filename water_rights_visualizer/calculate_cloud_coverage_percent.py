@@ -12,7 +12,7 @@ from logging import getLogger
 import re
 import datetime
 
-from water_rights_visualizer.landsat_pass_count import count_landsat_passes_for_month, calculate_monthly_cloud_coverage
+from water_rights_visualizer.landsat_pass_count import get_landsat_month_stats
 
 logger = getLogger(__name__)
 
@@ -136,7 +136,7 @@ def calculate_cloud_coverage_percent(
 
         days_in_month = get_days_in_month(int(year), int(month))
 
-        cloud_coverage = calculate_monthly_cloud_coverage(ROI_geometry, int(month), int(year), nan_subset_directory)
+        cloud_coverage = get_landsat_month_stats(ROI_geometry, int(month), int(year), subset_directory=nan_subset_directory)
 
         # If we can't calculate cloud coverage, use the ccount data
         ccount_average = None

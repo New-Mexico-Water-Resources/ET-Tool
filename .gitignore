@@ -46,3 +46,4 @@ tests/output
 .pnpm-store
 pipelines/fix_manifest_gaps.ipynb
 **/_*.ipynb
+landsat_pass_layers_output
