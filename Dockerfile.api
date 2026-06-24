@@ -18,5 +18,6 @@ RUN chmod +x /init-api.sh
 
 COPY server ./server
 COPY water_rights_visualizer/ARD_tiles.geojson ./water_rights_visualizer/ARD_tiles.geojson
+COPY water_rights_visualizer/et_tool_data_docs.docx ./water_rights_visualizer/et_tool_data_docs.docx
 
 EXPOSE 5000
