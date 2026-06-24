@@ -1,24 +1,37 @@
-import { Button, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import {
+  Button,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import useStore from "../utils/store";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TransitionEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
 import "../scss/JobQueue.scss";
 import JobQueueItem from "./JobQueueItem";
 import JobQueueGroup from "./JobQueueGroup";
 import JobLogViewer from "./JobLogViewer";
+import JobQueueTableModal from "./JobQueueTableModal";
 import { useConfirm } from "material-ui-confirm";
 
 import { VariableSizeList as List, ListChildComponentProps } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
-import dayjs from "dayjs";
+import { QueueDisplayItem, buildQueueDisplayItems, getQueueDisplayItemHeight } from "../utils/jobGroups";
 import {
-  QueueDisplayItem,
-  QueueJob,
-  buildQueueDisplayItems,
-  getQueueDisplayItemHeight,
-} from "../utils/jobGroups";
+  BACKLOG_DATE_FILTER_OPTIONS,
+  BacklogDateFilter,
+  filterQueueJobs,
+  getBacklogCutoffDate,
+} from "../utils/jobQueueFilters";
 
 const JobQueue = () => {
   const queue = useStore((state) => state.queue);
@@ -26,36 +39,24 @@ const JobQueue = () => {
   const isBacklogOpen = useStore((state) => state.isBacklogOpen);
   const isQueueOpen = useStore((state) => state.isQueueOpen);
   const clearPendingJobs = useStore((state) => state.clearPendingJobs);
+  const showUploadDialog = useStore((state) => state.showUploadDialog);
+  const activeJob = useStore((state) => state.activeJob);
+  const activeJobGroup = useStore((state) => state.activeJobGroup);
+  const multipolygons = useStore((state) => state.multipolygons);
 
   const [activeStatusFilters, setActiveStatusFilters] = useState<string[]>([]);
   const [activeAuthorFilters, setActiveAuthorFilters] = useState<string[]>([]);
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
-
-  const backlogDateFilterOptions = ["Last Day", "Last Week", "Last Month", "Last Year", "All Time"];
 
   const [backlogDateFilter, setBacklogDateFilter] = useStore((state) => [
     state.backlogDateFilter,
     state.setBacklogDateFilter,
   ]);
 
-  const backlogCutoffDate = useMemo(() => {
-    switch (backlogDateFilter) {
-      case "Last Day":
-        return dayjs().subtract(1, "day").toDate();
-      case "Last Week":
-        return dayjs().subtract(1, "week").toDate();
-      case "Last Month":
-        return dayjs().subtract(1, "month").toDate();
-      case "Last Year":
-        return dayjs().subtract(1, "year").toDate();
-      case "All Time":
-      default:
-        return null;
-    }
-  }, [backlogDateFilter]);
-
   const [activeJobLogKey, setActiveJobLogKey] = useState("");
   const [jobLogsOpen, setJobLogsOpen] = useState(false);
+  const [tableViewOpen, setTableViewOpen] = useState(false);
+  const [tableWidthExpanded, setTableWidthExpanded] = useState(false);
 
   const [sortAscending, setSortAscending] = useStore((state) => [state.sortAscending, state.setSortAscending]);
 
@@ -87,51 +88,50 @@ const JobQueue = () => {
     setActiveAuthorFilters([]);
     setActiveStatusFilters([]);
     setExpandedGroupIds(new Set());
+    setTableViewOpen(false);
+    setTableWidthExpanded(false);
   }, [isQueueOpen, isBacklogOpen]);
 
-  const filteredItemList = useMemo(() => {
-    let items: QueueJob[] = isBacklogOpen ? backlog : queue;
-    if (isBacklogOpen && backlogCutoffDate) {
-      items = items.filter(
-        (item) => new Date(item?.started || 0) > backlogCutoffDate || new Date(item?.finished || 0) > backlogCutoffDate
-      );
-    }
+  const openTableView = useCallback(() => {
+    setTableViewOpen(true);
+    requestAnimationFrame(() => setTableWidthExpanded(true));
+  }, []);
 
-    const searchTerm = searchField?.toLowerCase() || "";
+  const closeTableView = useCallback(() => {
+    setTableWidthExpanded(false);
+  }, []);
 
-    if (activeAuthorFilters.length) {
-      items = items.filter((item) => item.user?.name && activeAuthorFilters.includes(item.user.name));
-    }
-
-    if (activeStatusFilters.length) {
-      items = items.filter((item) => activeStatusFilters.includes(item.status));
-    }
-
-    const filteredItems = items.filter((item) => {
-      const fields = [
-        item?.name?.toLowerCase() || "",
-        item?.group_name?.toLowerCase() || "",
-        `${item?.start_year}`,
-        `${item?.end_year}`,
-        item.user?.name?.toLowerCase(),
-        item.user?.email?.toLowerCase(),
-        item?.status.toLowerCase(),
-      ].filter((field): field is string => Boolean(field));
-
-      return !searchField || fields.some((field) => field.includes(searchTerm));
-    });
-
-    filteredItems.sort((a, b) => {
-      const aStartedDate = new Date(a.started || 0);
-      const bStartedDate = new Date(b.started || 0);
-      if (sortAscending) {
-        return aStartedDate.getTime() - bStartedDate.getTime();
-      } else {
-        return bStartedDate.getTime() - aStartedDate.getTime();
+  const handleQueueWidthTransitionEnd = useCallback(
+    (event: TransitionEvent<HTMLDivElement>) => {
+      if (event.propertyName !== "width" || event.currentTarget !== event.target) {
+        return;
       }
-    });
+      if (!tableWidthExpanded) {
+        setTableViewOpen(false);
+      }
+    },
+    [tableWidthExpanded]
+  );
 
-    return filteredItems;
+  const filteredItemList = useMemo(() => {
+    const sourceJobs = isBacklogOpen ? backlog : queue;
+    const backlogCutoffDate = isBacklogOpen
+      ? getBacklogCutoffDate(backlogDateFilter as BacklogDateFilter, null)
+      : null;
+
+    return filterQueueJobs(
+      sourceJobs,
+      {
+        searchField,
+        activeAuthorFilters,
+        activeStatusFilters,
+        backlogDateFilter: backlogDateFilter as BacklogDateFilter,
+        customDateFrom: null,
+        customDateTo: null,
+        sortAscending,
+      },
+      { applyDateFilter: Boolean(isBacklogOpen && backlogCutoffDate) }
+    );
   }, [
     queue,
     backlog,
@@ -140,7 +140,7 @@ const JobQueue = () => {
     sortAscending,
     activeAuthorFilters,
     activeStatusFilters,
-    backlogCutoffDate,
+    backlogDateFilter,
   ]);
 
   const displayItems = useMemo(() => buildQueueDisplayItems(filteredItemList), [filteredItemList]);
@@ -218,8 +218,16 @@ const JobQueue = () => {
     [displayItems, expandedGroupIds, handleOpenLogs, toggleGroupExpanded]
   );
 
+  const isSidebarOpen = isQueueOpen || isBacklogOpen;
+
+  const hasLeftPanel =
+    showUploadDialog || Boolean(activeJob && (activeJobGroup || multipolygons.length <= 1));
+
   return (
-    <div className={`queue-container ${isQueueOpen || isBacklogOpen ? "open" : "closed"}`}>
+    <div
+      className={`queue-container ${isSidebarOpen ? "open" : "closed"}${tableWidthExpanded ? " table-expanded" : ""}${tableWidthExpanded && hasLeftPanel ? " table-expanded-inset" : ""}`}
+      onTransitionEnd={handleQueueWidthTransitionEnd}
+    >
       <JobLogViewer
         open={jobLogsOpen}
         jobKey={activeJobLogKey}
@@ -229,11 +237,32 @@ const JobQueue = () => {
           setJobLogsOpen(false);
         }}
       />
-      <Typography
-        variant="h5"
-        style={{ color: "var(--st-gray-30)", padding: "8px 16px", display: "flex", alignItems: "center" }}
-      >
-        {isBacklogOpen ? "Completed" : "In Progress"}
+      {tableViewOpen ? (
+        <JobQueueTableModal
+          mode={isBacklogOpen ? "completed" : "active"}
+          onClose={closeTableView}
+          onOpenLogs={(key) => {
+            setActiveJobLogKey(key);
+            setJobLogsOpen(true);
+          }}
+        />
+      ) : (
+        <>
+      <div className="queue-sidebar-header">
+        <Tooltip title="Expand to table view">
+          <IconButton
+            className="queue-expand-btn"
+            size="small"
+            aria-label="Expand queue to table view"
+            onClick={openTableView}
+            sx={{ color: "var(--st-gray-50)" }}
+          >
+            <ChevronLeftIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+        <Typography variant="h6" className="queue-sidebar-header__title">
+          {isBacklogOpen ? "Completed" : "In Progress"}
+        </Typography>
 
         {!isBacklogOpen && canDeleteJobs && (
           <Button
@@ -283,9 +312,9 @@ const JobQueue = () => {
             </ToggleButton>
           </ToggleButtonGroup>
         )}
-      </Typography>
+      </div>
       <div
-        style={{ display: "flex", flexDirection: "column", visibility: isQueueOpen || isBacklogOpen ? "visible" : "hidden" }}
+        style={{ display: "flex", flexDirection: "column", visibility: isSidebarOpen ? "visible" : "hidden" }}
       >
         <div className="search-bar">
           <input
@@ -378,7 +407,7 @@ const JobQueue = () => {
                   setBacklogDateFilter(evt.target.value as string);
                 }}
               >
-                {backlogDateFilterOptions.map((name) => (
+                {BACKLOG_DATE_FILTER_OPTIONS.filter((name) => name !== "Custom Range").map((name) => (
                   <MenuItem key={name} value={name}>
                     {name}
                   </MenuItem>
@@ -403,6 +432,8 @@ const JobQueue = () => {
           )}
         </AutoSizer>
       </div>
+        </>
+      )}
     </div>
   );
 };

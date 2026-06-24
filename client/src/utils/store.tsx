@@ -10,6 +10,10 @@ import {
   QueueJob,
 } from "./jobGroups";
 import {
+  DefaultDownloadOptionsConfig,
+  FALLBACK_DEFAULT_DOWNLOAD_OPTIONS,
+} from "./defaultDownloadOptions";
+import {
   applyUploadShapeList,
   buildPolygonLocationsFromGeojsons,
   collectExistingUploadShapes,
@@ -199,6 +203,12 @@ interface Store {
   downloadJob: (jobKey: string, units?: "metric" | "imperial" | "acre-feet") => void;
   downloadJobGroup: (jobs: any[], groupName: string, units?: "metric" | "imperial" | "acre-feet") => void;
   downloadJobGroupGeojson: (jobs: QueueJob[], groupName: string) => Promise<void>;
+  downloadJobsBulk: (
+    jobs: QueueJob[],
+    type: "report" | "geojson" | "geotiff",
+    downloadName: string,
+    units?: "metric" | "imperial" | "acre-feet"
+  ) => Promise<void>;
   downloadingJobGroupId: string | null;
   restartJob: (jobKey: string) => void;
   pauseJob: (jobKey: string) => void;
@@ -228,6 +238,10 @@ interface Store {
   setSortAscending: (sortAscending: boolean) => void;
   approveJob: (jobKey: string) => void;
   bulkApproveJobs: (jobKeys: string[]) => void;
+  bulkPauseJobs: (jobKeys: string[]) => void;
+  bulkRestartJobs: (jobKeys: string[]) => void;
+  bulkResumeJobs: (jobKeys: string[]) => void;
+  reorderPendingJobs: (jobKeys: string[]) => void;
   changelog: string;
   version: string;
   loadVersion: () => void;
@@ -259,6 +273,12 @@ interface Store {
   fetchingDroughtMonitorData: boolean;
   cdlReleaseYear: number | null;
   fetchCdlReleaseYearIfNeeded: () => void;
+  customDownloadJob: QueueJob | null;
+  openCustomDownload: (jobKey: string) => void;
+  closeCustomDownload: () => void;
+  defaultDownloadOptions: DefaultDownloadOptionsConfig;
+  fetchDefaultDownloadOptions: () => void;
+  renameJob: (jobKey: string, newName: string) => Promise<QueueJob>;
 }
 
 const useStore = create<Store>()(
@@ -397,13 +417,22 @@ const useStore = create<Store>()(
           return;
         }
 
+        get().fetchDefaultDownloadOptions();
+
         axiosInstance.get(`${API_URL}/queue/list`).then((response) => {
           if (!response?.data || !Array.isArray(response.data)) {
             return set({ queue: [], backlog: [] });
           }
 
           const formattedQueue = response.data.map((job: any) => {
-            job.submitted = job.submitted ? new Date(job.submitted).toLocaleString() : null;
+            const submittedAt =
+              typeof job.submitted === "number"
+                ? job.submitted
+                : job.submitted
+                  ? new Date(job.submitted).getTime()
+                  : null;
+            job.submittedAt = Number.isFinite(submittedAt) ? submittedAt : null;
+            job.submitted = job.submittedAt ? new Date(job.submittedAt).toLocaleString() : null;
             job.started = job.started ? new Date(job.started).toLocaleString() : null;
             job.ended = job.ended ? new Date(job.ended).toLocaleString() : null;
             job.timeElapsed =
@@ -498,12 +527,13 @@ const useStore = create<Store>()(
           })
           .then(() => {
             set((state) => {
-              const deletedJobs = state.queue.filter((item) => jobKeys.includes(item.key));
-              const remainingJobs = state.queue.filter((item) => !jobKeys.includes(item.key));
+              const deletedJobs = [...state.queue, ...state.backlog].filter((item) => jobKeys.includes(item.key));
+              const keySet = new Set(jobKeys);
 
               return {
                 ...state,
-                queue: remainingJobs,
+                queue: state.queue.filter((item) => !keySet.has(item.key)),
+                backlog: state.backlog.filter((item) => !keySet.has(item.key)),
                 successMessage: `${deletedJobs.length} jobs deleted successfully`,
                 errorMessage: "",
               };
@@ -885,6 +915,33 @@ const useStore = create<Store>()(
           set({ downloadingJobGroupId: null });
         }
       },
+      downloadJobsBulk: async (jobs, type, downloadName, units = "metric") => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance || jobs.length === 0) {
+          return;
+        }
+
+        const keys = jobs.map((job) => encodeURIComponent(job.key)).join(",");
+        const escapedName = encodeURIComponent(downloadName.replace(/[(),]/g, ""));
+        const unitsParam = type === "report" ? `&units=${units}` : "";
+
+        await axiosInstance
+          .get(`${API_URL}/download/bulk?keys=${keys}&type=${type}&name=${escapedName}${unitsParam}`, {
+            responseType: "arraybuffer",
+          })
+          .then((response) => {
+            const blob = new Blob([response.data], { type: "application/zip" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${downloadName.replace(/[(),]/g, "")}.zip`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.message || "Error downloading selected jobs" });
+          });
+      },
       downloadJob: (jobKey, units = "metric") => {
         const axiosInstance = get().authAxios();
         if (!axiosInstance) {
@@ -921,6 +978,65 @@ const useStore = create<Store>()(
           .catch((error) => {
             set({ errorMessage: error?.message || "Error downloading job" });
           });
+      },
+      customDownloadJob: null,
+      openCustomDownload: (jobKey) => {
+        const { queue, backlog, activeJob } = get();
+        let job = queue.find((item) => item.key === jobKey);
+        if (!job) {
+          job = backlog.find((item) => item.key === jobKey);
+        }
+        if (!job && activeJob?.key === jobKey) {
+          job = activeJob as QueueJob;
+        }
+        if (!job) {
+          set({ errorMessage: `Error opening custom download: ${jobKey} not found` });
+          return;
+        }
+        set({ customDownloadJob: job });
+      },
+      closeCustomDownload: () => set({ customDownloadJob: null }),
+      defaultDownloadOptions: FALLBACK_DEFAULT_DOWNLOAD_OPTIONS,
+      fetchDefaultDownloadOptions: () => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .get(`${API_URL}/config/default-download-options`)
+          .then((response) => {
+            if (response?.data?.options && Array.isArray(response.data.options)) {
+              set({ defaultDownloadOptions: response.data });
+            }
+          })
+          .catch((error) => {
+            console.error("Error fetching default download options", error);
+          });
+      },
+      renameJob: async (jobKey, newName) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          throw new Error("Not authenticated");
+        }
+
+        const response = await axiosInstance.post(`${API_URL}/queue/rename_job`, {
+          key: jobKey,
+          name: newName,
+        });
+
+        const updatedJob = response.data;
+        set((state) => {
+          const updateJobList = (jobs: QueueJob[]) =>
+            jobs.map((job) => (job.key === jobKey ? { ...job, ...updatedJob } : job));
+
+          return {
+            queue: updateJobList(state.queue),
+            backlog: updateJobList(state.backlog),
+          };
+        });
+        get().fetchQueue();
+        return updatedJob;
       },
       restartJob: (jobKey) => {
         const axiosInstance = get().authAxios();
@@ -1338,6 +1454,75 @@ const useStore = create<Store>()(
           })
           .catch((error) => {
             set({ errorMessage: error?.response?.data || error?.message || "Error approving jobs" });
+          });
+      },
+      bulkPauseJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/bulk_pause_jobs`, { keys: jobKeys })
+          .then((response) => {
+            get().fetchQueue();
+            if (response?.data?.modifiedCount > 0) {
+              set({ successMessage: `${response?.data?.modifiedCount} jobs paused` });
+            }
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error pausing jobs" });
+          });
+      },
+      bulkRestartJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/bulk_restart_jobs`, { keys: jobKeys })
+          .then((response) => {
+            get().fetchQueue();
+            if (response?.data?.modifiedCount > 0) {
+              set({ successMessage: `${response?.data?.modifiedCount} jobs restarted` });
+            }
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error restarting jobs" });
+          });
+      },
+      bulkResumeJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/bulk_resume_jobs`, { keys: jobKeys })
+          .then((response) => {
+            get().fetchQueue();
+            if (response?.data?.modifiedCount > 0) {
+              set({ successMessage: `${response?.data?.modifiedCount} jobs started` });
+            }
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error starting jobs" });
+          });
+      },
+      reorderPendingJobs: (jobKeys) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        axiosInstance
+          .post(`${API_URL}/queue/reorder_pending_jobs`, { keys: jobKeys })
+          .then(() => {
+            get().fetchQueue();
+          })
+          .catch((error) => {
+            set({ errorMessage: error?.response?.data || error?.message || "Error reordering jobs" });
           });
       },
       changelog: "",

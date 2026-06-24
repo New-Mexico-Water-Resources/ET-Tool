@@ -1,0 +1,5 @@
+const CUSTOM_REPORT_PREVIEW_VERSION = 2;
+
+module.exports = {
+  CUSTOM_REPORT_PREVIEW_VERSION,
+};

@@ -162,4 +162,12 @@ def convert_to_nice_number_range(start: float, end: float, units: ETUnit, subdiv
     if np.all(np.equal(np.mod(nice_numbers, 1), 0)) and not np.any(np.isnan(nice_numbers)):
         nice_numbers = nice_numbers.astype(int)
 
-    return nice_numbers.tolist()
+    return nice_numbers
+
+
+def et_unit_from_name(name: str, acres: float = 1) -> ETUnit:
+    if name == "imperial":
+        return ImperialETUnit()
+    if name == "acre-feet":
+        return AcreFeetETUnit(acres=acres)
+    return MetricETUnit()

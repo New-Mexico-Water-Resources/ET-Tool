@@ -1,21 +1,25 @@
-import { Box, Button, CircularProgress, IconButton, LinearProgress, Tooltip, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, IconButton, LinearProgress, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import CloseIcon from "@mui/icons-material/Close";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayIcon from "@mui/icons-material/PlayArrow";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import FileTextIcon from "@mui/icons-material/Description";
+import DriveFileRenameOutlineIcon from "@mui/icons-material/DriveFileRenameOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import StatusIcon from "./StatusIcon";
 
 import { useConfirm } from "material-ui-confirm";
 import useStore, { JobStatus } from "../utils/store";
 import { useEffect, useMemo, useState } from "react";
-import Menu from "@mui/material/Menu";
 import Divider from "@mui/material/Divider";
-
-import MenuItem from "@mui/material/MenuItem";
-import RestartAltIcon from "@mui/icons-material/RestartAlt";
 
 import { formatElapsedTime } from "../utils/helpers";
 import useCurrentJobStore from "../utils/currentJobStore";
+import DefaultReportMenuItems from "./DefaultReportMenuItems";
+import RenameJobDialog from "./RenameJobDialog";
+import { QueueJob, isCompactQueueJob } from "../utils/jobGroups";
+
 const JobProgressBar = ({ status }: { status: JobStatus }) => {
   const estimatedPercentComplete = Math.max(Math.min(Math.round(status.estimatedPercentComplete * 1000) / 10, 100), 0);
 
@@ -40,12 +44,14 @@ const JobProgressBar = ({ status }: { status: JobStatus }) => {
   );
 };
 
+const MENU_ITEM_SX = { backgroundColor: "var(--st-gray-80)" } as const;
+
 const JobQueueItem = ({
   job,
   onOpenLogs,
   inGroupMember = false,
 }: {
-  job: any;
+  job: QueueJob;
   onOpenLogs: () => void;
   inGroupMember?: boolean;
 }) => {
@@ -56,7 +62,6 @@ const JobQueueItem = ({
 
   const deleteJob = useStore((state) => state.deleteJob);
   const loadJob = useStore((state) => state.loadJob);
-  const downloadJob = useStore((state) => state.downloadJob);
   const downloadAllGeotiffs = useCurrentJobStore((state) => state.downloadAllGeotiffs);
   const bulkGeotiffDownloadJobId = useCurrentJobStore((state) => state.bulkGeotiffDownloadJobId);
   const isBulkGeotiffDownloading = bulkGeotiffDownloadJobId === job.key;
@@ -76,15 +81,23 @@ const JobQueueItem = ({
   const canRestartJobs = useMemo(() => currentUserInfo?.permissions?.includes("write:jobs"), [currentUserInfo]);
   const canPauseJobs = useMemo(() => currentUserInfo?.permissions?.includes("write:jobs"), [currentUserInfo]);
   const isAdmin = useMemo(() => currentUserInfo?.permissions?.includes("write:admin"), [currentUserInfo]);
+  const canRenameJob = useMemo(() => canDeleteJobs && !["In Progress", "Pending"].includes(job.status), [canDeleteJobs, job.status]);
 
   const isDownloadDisabled = useMemo(() => {
     return ["Pending", "In Progress", "WaitingApproval"].includes(job.status);
   }, [job.status]);
 
+  const showInlineLogsButton = job.status === "Failed" || job.status === "In Progress";
+  const showProgressBar = job.status !== "Complete";
+  const isCompact = isCompactQueueJob(job);
+
   const approveJob = useStore((state) => state.approveJob);
 
   const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
 
   const jobStatus = useMemo(() => {
     let jobStatus: JobStatus = jobStatuses[job.key];
@@ -123,12 +136,53 @@ const JobQueueItem = ({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [job.key]);
+  }, [job.key, job.name, fetchJobStatus]);
+
+  const closeActionsMenu = () => {
+    setActionsAnchorEl(null);
+    setActionsMenuOpen(false);
+  };
+
+  const runAction = (action: () => void) => {
+    closeActionsMenu();
+    action();
+  };
+
+  const handleDelete = () => {
+    confirm({
+      title: "Delete Job",
+      description: `Are you sure you want to delete the job "${job.name}"?`,
+      confirmationButtonProps: { color: "primary", variant: "contained" },
+      cancellationButtonProps: { color: "secondary", variant: "contained" },
+      titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+      contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+      dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
+    }).then(() => {
+      deleteJob(job.key, true);
+      if (job.key === activeJob?.key) {
+        setActiveJob(null);
+      }
+    });
+  };
+
+  const handleRerun = () => {
+    confirm({
+      title: "Rerun Job",
+      description: `Are you sure you want to rerun the job "${job.name}"?`,
+      confirmationButtonProps: { color: "primary", variant: "contained" },
+      cancellationButtonProps: { color: "secondary", variant: "contained" },
+      titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+      contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+      dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
+    }).then(() => {
+      restartJob(job.key);
+    });
+  };
 
   return (
     <div
-      className={`queue-item${inGroupMember ? " queue-item--group-member" : ""}`}
-      style={{ height: "100%", justifyContent: "space-between" }}
+      className={`queue-item${inGroupMember ? " queue-item--group-member" : ""}${isCompact ? " queue-item--compact" : ""}`}
+      style={isCompact ? undefined : { height: "100%", justifyContent: "space-between" }}
     >
       <div className="item-header">
         <Tooltip title={`${job.name}\nStatus: ${job.status}`}>
@@ -146,39 +200,18 @@ const JobQueueItem = ({
             </span>
           </Typography>
         </Tooltip>
-        {canDeleteJobs && (
-          <Tooltip
-            title={
-              job.status === "Killed"
-                ? "This job will be cleaned up automatically and cannot be deleted"
-                : `Delete ${job.name}`
-            }
-          >
-            <IconButton
-              disabled={job.status === "Killed"}
-              onClick={() => {
-                confirm({
-                  title: "Delete Job",
-                  description: `Are you sure you want to delete the job "${job.name}"?`,
-                  confirmationButtonProps: { color: "primary", variant: "contained" },
-                  cancellationButtonProps: { color: "secondary", variant: "contained" },
-                  titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
-                }).then(() => {
-                  deleteJob(job.key, true);
-                  if (job.key === activeJob?.key) {
-                    setActiveJob(null);
-                  }
-                });
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Tooltip>
-        )}
+        <IconButton
+          size="small"
+          aria-label="Job actions"
+          onClick={(event) => {
+            setActionsAnchorEl(event.currentTarget);
+            setActionsMenuOpen(true);
+          }}
+        >
+          <MoreVertIcon fontSize="small" />
+        </IconButton>
       </div>
-      <div className="item-body" style={{ flex: 1, justifyContent: "space-around" }}>
+      <div className="item-body" style={isCompact ? undefined : { flex: 1, justifyContent: "space-around" }}>
         {job.status === "WaitingApproval" && (
           <Button
             disabled={!canApproveJobs}
@@ -191,20 +224,6 @@ const JobQueueItem = ({
           >
             {canApproveJobs ? "Approve Job" : "Waiting Approval..."}
           </Button>
-        )}
-        {job.status === "Failed" && canRestartJobs && (
-          <Tooltip title="Restart job from where it failed">
-            <Button
-              variant="contained"
-              size="small"
-              style={{ marginBottom: "8px" }}
-              onClick={() => {
-                restartJob(job.key);
-              }}
-            >
-              Restart Job
-            </Button>
-          </Tooltip>
         )}
         {["In Progress", "Pending"].includes(job.status) && (
           <Tooltip title="Pause the job at the current month">
@@ -306,9 +325,11 @@ const JobQueueItem = ({
             </Typography>
           </Tooltip>
         )}
-        <div>
-          <JobProgressBar status={jobStatus} />
-        </div>
+        {showProgressBar && (
+          <div>
+            <JobProgressBar status={jobStatus} />
+          </div>
+        )}
       </div>
       <div className="action-buttons">
         <Button
@@ -321,16 +342,18 @@ const JobQueueItem = ({
         >
           Locate
         </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          size="small"
-          onClick={() => {
-            onOpenLogs();
-          }}
-        >
-          Logs
-        </Button>
+        {showInlineLogsButton && (
+          <Button
+            variant="contained"
+            color="secondary"
+            size="small"
+            onClick={() => {
+              onOpenLogs();
+            }}
+          >
+            Logs
+          </Button>
+        )}
         <span>
           <div style={{ display: "flex", alignItems: "center", padding: 0 }}>
             <Tooltip title={job.status === "Complete" ? "Download Completed Job" : "Download partial job"}>
@@ -365,44 +388,12 @@ const JobQueueItem = ({
               },
             }}
           >
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
-            >
-              Report
-            </Typography>
-            <Divider />
-            <MenuItem
-              sx={{ backgroundColor: "var(--st-gray-80)" }}
-              onClick={() => {
-                downloadJob(job.key, "metric");
-                setDownloadMenuOpen(false);
-              }}
-              disableRipple
-            >
-              Report (mm/month)
-            </MenuItem>
-            <MenuItem
-              sx={{ backgroundColor: "var(--st-gray-80)" }}
-              onClick={() => {
-                downloadJob(job.key, "imperial");
-                setDownloadMenuOpen(false);
-              }}
-              disableRipple
-            >
-              Report (in/month)
-            </MenuItem>
-            <MenuItem
-              sx={{ backgroundColor: "var(--st-gray-80)" }}
-              onClick={() => {
-                downloadJob(job.key, "acre-feet");
-                setDownloadMenuOpen(false);
-              }}
-              disableRipple
-            >
-              Report (acre-feet/month)
-            </MenuItem>
+            <DefaultReportMenuItems
+              jobKey={job.key}
+              disabled={isDownloadDisabled}
+              onClose={() => setDownloadMenuOpen(false)}
+              menuItemSx={MENU_ITEM_SX}
+            />
             <Typography
               variant="body2"
               color="text.secondary"
@@ -412,7 +403,7 @@ const JobQueueItem = ({
             </Typography>
             <Divider />
             <MenuItem
-              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              sx={MENU_ITEM_SX}
               onClick={() => {
                 downloadGeojson(job.key, job.name);
                 setDownloadMenuOpen(false);
@@ -422,7 +413,7 @@ const JobQueueItem = ({
               GeoJSON
             </MenuItem>
             <MenuItem
-              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              sx={MENU_ITEM_SX}
               onClick={() => {
                 downloadAllGeotiffs(job.key);
                 setDownloadMenuOpen(false);
@@ -432,7 +423,7 @@ const JobQueueItem = ({
               All GeoTIFFs
             </MenuItem>
             <MenuItem
-              sx={{ backgroundColor: "var(--st-gray-80)" }}
+              sx={MENU_ITEM_SX}
               onClick={() => {
                 downloadAllGeotiffs(job.key, { clipped: true });
                 setDownloadMenuOpen(false);
@@ -445,35 +436,67 @@ const JobQueueItem = ({
             </MenuItem>
           </Menu>
         </span>
-        {isAdmin && job.status !== "In Progress" && (
-          <Tooltip title="Rerun job">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                marginLeft: "4px",
-              }}
+        {job.status === "Failed" && canRestartJobs && (
+          <Tooltip title="Restart job from where it failed">
+            <IconButton
+              size="small"
+              aria-label="Restart job"
               onClick={() => {
-                confirm({
-                  title: "Rerun Job",
-                  description: `Are you sure you want to rerun the job "${job.name}"?`,
-                  confirmationButtonProps: { color: "primary", variant: "contained" },
-                  cancellationButtonProps: { color: "secondary", variant: "contained" },
-                  titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
-                }).then(() => {
-                  restartJob(job.key);
-                });
+                restartJob(job.key);
               }}
+              sx={{ padding: "4px", marginLeft: "2px" }}
             >
-              <RestartAltIcon sx={{ padding: 0, margin: 0 }} />
-            </div>
+              <RestartAltIcon fontSize="small" />
+            </IconButton>
           </Tooltip>
         )}
       </div>
+
+      <Menu
+        anchorEl={actionsAnchorEl}
+        open={actionsMenuOpen}
+        onClose={closeActionsMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
+      >
+        <MenuItem sx={MENU_ITEM_SX} disableRipple onClick={() => runAction(onOpenLogs)}>
+          <FileTextIcon fontSize="small" sx={{ marginRight: "12px" }} />
+          Logs
+        </MenuItem>
+        {canRenameJob && (
+          <MenuItem
+            sx={MENU_ITEM_SX}
+            disableRipple
+            onClick={() => {
+              closeActionsMenu();
+              setRenameDialogOpen(true);
+            }}
+          >
+            <DriveFileRenameOutlineIcon fontSize="small" sx={{ marginRight: "12px" }} />
+            Rename Job
+          </MenuItem>
+        )}
+        {isAdmin && job.status !== "In Progress" && (
+          <MenuItem sx={MENU_ITEM_SX} disableRipple onClick={() => runAction(handleRerun)}>
+            <RestartAltIcon fontSize="small" sx={{ marginRight: "12px" }} />
+            Rerun Job
+          </MenuItem>
+        )}
+        {canDeleteJobs && (
+          <MenuItem
+            sx={MENU_ITEM_SX}
+            disableRipple
+            disabled={job.status === "Killed"}
+            onClick={() => runAction(handleDelete)}
+          >
+            <DeleteOutlineIcon fontSize="small" sx={{ marginRight: "12px" }} />
+            Delete Job
+          </MenuItem>
+        )}
+      </Menu>
+
+      <RenameJobDialog job={job} open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)} />
     </div>
   );
 };

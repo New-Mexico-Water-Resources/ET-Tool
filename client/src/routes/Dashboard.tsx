@@ -7,6 +7,7 @@ import GeoJSONLayer from "../components/GeoJsonLayer";
 import "../scss/Dashboard.scss";
 import NavToolbar from "../components/NavToolbar";
 import CurrentJobChip from "../components/CurrentJobChip";
+import CustomDownloadModal from "../components/CustomDownloadModal";
 import JobQueue from "../components/JobQueue";
 import MultiGeoJSONLayer from "../components/MultiGeoJsonLayer";
 import LayersControl from "../components/LayersControl";
@@ -320,6 +321,7 @@ const Dashboard = () => {
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <QueuePollingEffect />
       <NavToolbar />
+      {isAuthenticated && <CustomDownloadModal />}
       {isAuthenticated && activeJob && (activeJobGroup || multipolygons.length <= 1) && <CurrentJobChip />}
       {isAuthenticated && showUploadDialog && <LayersControl />}
       {(!isAuthenticated || (!canReadJobs && userInfo)) && (

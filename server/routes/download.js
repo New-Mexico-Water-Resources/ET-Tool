@@ -1,40 +1,22 @@
 const express = require("express");
 const archiver = require("archiver");
-const glob = require("glob");
 const path = require("path");
 const fs = require("fs");
 const constants = require("../constants");
 const { area: turfArea } = require("@turf/turf");
+const { listJobGeotiffs } = require("../utils/geotiffExport");
+const { shouldIncludeYearlyCombined } = require("../utils/defaultDownloadOptions");
+const {
+  processFigureFiles,
+  processReportFiles,
+  processMonthlyNanFiles,
+  processLandsatPassCounts,
+  appendJobCsvsToArchive,
+} = require("../utils/reportArchive");
 
 const router = express.Router();
 const { run_directory_base, report_queue_collection, connectToDatabase } = constants;
-const OPENET_TRANSITION_DATE = 1985;
-const ANNUAL_ARCHIVE_DIR = "annual";
-
-const mmToIn = (mm) => {
-  let mmValue = typeof mm === "string" ? parseFloat(mm) : mm;
-  return isNaN(mmValue) ? "" : mmValue / 25.4;
-};
-
-const mmToAF = (value, acres) => {
-  return value * acres * 0.003259;
-};
-
-class UnitConverter {
-  static convert(value, units, acres = 1) {
-    const unitConversionMap = {
-      metric: (value) => value,
-      imperial: (value) => mmToIn(value),
-      "acre-feet": (value, acres) => mmToAF(value, acres),
-    };
-
-    if (!unitConversionMap[units]) {
-      throw new Error(`Invalid units: ${units}`);
-    }
-
-    return unitConversionMap[units](value, acres);
-  }
-}
+const BULK_DOWNLOAD_TYPES = new Set(["report", "geojson", "geotiff"]);
 
 const getJob = async (key) => {
   const db = await connectToDatabase();
@@ -42,269 +24,35 @@ const getJob = async (key) => {
   return collection.findOne({ key });
 };
 
-const unitsToFileSuffix = (units) => {
-  if (units === "metric") return "";
-  if (units === "imperial") return "in";
-  if (units === "acre-feet") return "AF";
-  return units;
-};
+const parseJobKeys = (keysParam) =>
+  String(keysParam || "")
+    .split(",")
+    .map((key) => decodeURIComponent(key.trim()))
+    .filter(Boolean);
 
-const unitsToAbbreviation = (units) => {
-  if (units === "metric") return "mm";
-  if (units === "imperial") return "in";
-  if (units === "acre-feet") return "AF";
-  return units;
-};
-
-const unitsToPdfId = (units) => {
-  if (units === "metric") return "";
-  if (units === "imperial") return "Imperial";
-  if (units === "acre-feet") return "AF";
-  return units;
-};
-
-const getFigureArchiveName = (name) => (/^\d{4}_/.test(name) ? `${ANNUAL_ARCHIVE_DIR}/${name}` : name);
-
-const processFigureFiles = (archive, figureDirectory, units, pathPrefix = "") => {
-  const prefix = pathPrefix ? `${pathPrefix}/` : "";
-  const pattern = path.join(figureDirectory, "*.png");
-  const figureFiles = glob.sync(pattern);
-  figureFiles.forEach((file) => {
-    const suffix = unitsToFileSuffix(units);
-    if (suffix !== "" && units !== "metric" && file.endsWith(`_${suffix}.png`)) {
-      const newName = path.basename(file).replace(`_${suffix}.png`, ".png");
-      const archiveName = `${prefix}${getFigureArchiveName(newName)}`;
-      console.log(`Adding figure file: ${file} as ${archiveName}`);
-      archive.file(file, { name: archiveName });
-    } else if (suffix === "" && units === "metric" && !file.endsWith(`_in.png`) && !file.endsWith(`_AF.png`)) {
-      const name = path.basename(file);
-      const archiveName = `${prefix}${getFigureArchiveName(name)}`;
-      console.log(`Adding figure file: ${file} as ${archiveName}`);
-      archive.file(file, { name: archiveName });
+const loadJobsByKeys = async (keysParam) => {
+  const keys = parseJobKeys(keysParam);
+  const jobs = [];
+  for (const key of keys) {
+    const job = await getJob(key);
+    if (job) {
+      jobs.push(job);
     }
-  });
-};
-
-const processReportFiles = (archive, figureDirectory, units, pathPrefix = "") => {
-  const prefix = pathPrefix ? `${pathPrefix}/` : "";
-  const pattern = path.join(figureDirectory, "*.pdf");
-  const reportFiles = glob.sync(pattern);
-  const id = unitsToPdfId(units);
-  reportFiles.forEach((file) => {
-    // Find the PDF file with the correct units, rename this to be the report downloaded
-    if (id && file.endsWith(`_${id}_Report.pdf`)) {
-      const newName = path.basename(file).replace(`_${id}_Report.pdf`, "_Report.pdf");
-      console.log(`Adding report file: ${file} as ${prefix}${newName}`);
-      archive.file(file, { name: `${prefix}${newName}` });
-    } else if (
-      !id &&
-      file.endsWith(`_Report.pdf`) &&
-      !file.endsWith(`_AF_Report.pdf`) &&
-      !file.endsWith(`_Imperial_Report.pdf`)
-    ) {
-      // Default metric report case
-      const newName = path.basename(file);
-      console.log(`Adding report file: ${file} as ${prefix}${newName}`);
-      archive.file(file, { name: `${prefix}${newName}` });
-    }
-  });
-};
-
-const processMonthlyNanFiles = (runDir, key, jobName) => {
-  const monthlyNanDir = path.join(runDir, key, "output", "monthly_nan", jobName);
-  const csvPattern = path.join(monthlyNanDir, "*.csv");
-  const nanFiles = glob.sync(csvPattern);
-  const nanValues = {};
-
-  nanFiles.forEach((file) => {
-    const data = fs.readFileSync(file, "utf8");
-    const lines = data.trim().split("\n");
-    const header = lines
-      .shift()
-      .split(",")
-      .map((s) => s.trim());
-
-    lines.forEach((line) => {
-      const columns = line.split(",").map((s) => s.trim());
-      let row = {};
-      header.forEach((col, i) => (row[col] = columns[i]));
-
-      for (const key in row) {
-        const convertedColumn = Number(row[key]);
-        if (!isNaN(convertedColumn)) {
-          // Round to 2 decimal places
-          row[key] = Math.round(convertedColumn * 100) / 100;
-        }
-      }
-
-      const year = row["year"];
-      const month = row["month"];
-      if (!nanValues[year]) {
-        nanValues[year] = {};
-      }
-      nanValues[year][month] = row;
-    });
-  });
-
-  return nanValues;
-};
-
-const processLandsatCloudCoverageCache = (runDir, key, jobName) => {
-  const landsatCloudCoverageCacheDir = path.join(runDir, key, "output", "nan_subsets", jobName, "cloud_coverage_cache");
-  if (!fs.existsSync(landsatCloudCoverageCacheDir)) {
-    return null;
   }
-  const jsonPattern = path.join(landsatCloudCoverageCacheDir, "*.json");
-  const landsatCloudCoverageCacheFiles = glob.sync(jsonPattern);
-  const landsatCloudCoverageCache = {};
-  landsatCloudCoverageCacheFiles.forEach((file) => {
-    const data = fs.readFileSync(file, "utf8");
-    const jsonData = JSON.parse(data);
-    landsatCloudCoverageCache[jsonData.year] = landsatCloudCoverageCache[jsonData.year] || {};
-    landsatCloudCoverageCache[jsonData.year][jsonData.month] = jsonData;
-  });
-  return landsatCloudCoverageCache;
-};
-
-const processLandsatPassCountCache = (runDir, key, jobName) => {
-  const landsatPassCountCacheDir = path.join(runDir, key, "output", "subset", jobName, "landsat_pass_count_cache");
-  if (!fs.existsSync(landsatPassCountCacheDir)) {
-    return null;
-  }
-  const jsonPattern = path.join(landsatPassCountCacheDir, "*.json");
-  const landsatPassCountCacheFiles = glob.sync(jsonPattern);
-  const landsatPassCountCache = {};
-  landsatPassCountCacheFiles.forEach((file) => {
-    const data = fs.readFileSync(file, "utf8");
-    const jsonData = JSON.parse(data);
-    landsatPassCountCache[jsonData.year] = landsatPassCountCache[jsonData.year] || {};
-    landsatPassCountCache[jsonData.year][jsonData.month] = jsonData;
-  });
-  return landsatPassCountCache;
-};
-
-const processLandsatPassCounts = (runDir, key, jobName) => {
-  // Landsat Pass Count cache is the older format, but much simpler, so check if this exists first
-  const landsatPassCountCache = processLandsatPassCountCache(runDir, key, jobName);
-  if (!landsatPassCountCache) {
-    return processLandsatCloudCoverageCache(runDir, key, jobName);
-  }
-  return landsatPassCountCache;
-};
-
-const processCSVFiles = async (archive, runDir, key, jobName, nanValues, landsatPassCounts, units, area, pathPrefix = "") => {
-  const prefix = pathPrefix ? `${pathPrefix}/` : "";
-  const csvDir = path.join(runDir, key, "output", "monthly_means", jobName);
-  let csvFiles = glob.sync(path.join(csvDir, "*.csv")).filter((file) => path.basename(file).endsWith("_monthly_means.csv"));
-  const unitsAbbreviation = unitsToAbbreviation(units);
-
-  const hasPostTransitionData = csvFiles.some((fileName) => {
-    const year = path.basename(fileName).split("_")[0];
-    if (isNaN(year)) {
-      return false;
-    }
-
-    return Number(year) >= OPENET_TRANSITION_DATE;
-  });
-
-  const header = [
-    "Year",
-    "Month",
-    `ET (${unitsAbbreviation}/month)`,
-    `ETo (${unitsAbbreviation}/month)`,
-    `Precipitation (${unitsAbbreviation}/month)`,
-    "Cloud Coverage + Missing Data (%)",
-    ...(hasPostTransitionData ? ["Days with Landsat Passes"] : []),
-  ].join(",");
-
-  let combinedDataRows = [];
-
-  for (const file of csvFiles) {
-    if (path.basename(file).includes("_temp_")) continue;
-
-    let data = fs.readFileSync(file, "utf8");
-    let lines = data.trim().split("\n");
-    const existingHeader = lines.shift();
-
-    // Remove index column if present (when header has 5 columns)
-    if (existingHeader.split(",").length === 5) {
-      lines = lines.map((line) => {
-        let cols = line.split(",").map((s) => s.trim());
-        if (cols.length === 5) {
-          cols.shift();
-        }
-        return cols.join(",");
-      });
-    }
-
-    lines = lines.map((line) => {
-      const cols = line.split(",").map((s) => s.trim());
-      let [year, month, etRaw, petRaw] = cols;
-      year = Number(year);
-      month = Number(month);
-
-      let et = UnitConverter.convert(etRaw, units, area);
-      et = isNaN(et) ? "" : Math.round(et * 100) / 100;
-      let pet = UnitConverter.convert(petRaw, units, area);
-      pet = isNaN(pet) ? "" : Math.round(pet * 100) / 100;
-
-      let convertedRow = [year, month, et, pet];
-
-      const nanRow = nanValues?.[year]?.[month];
-
-      // Add precipitation and cloud coverage (for all years)
-      if (nanRow) {
-        let ppt = UnitConverter.convert(nanRow["ppt_avg"], units, area);
-        ppt = isNaN(ppt) ? "" : Math.round(ppt * 100) / 100;
-        convertedRow.push(ppt, nanRow["percent_nan"]);
-      } else {
-        convertedRow.push("", "");
-      }
-
-      if (hasPostTransitionData) {
-        if (year >= OPENET_TRANSITION_DATE) {
-          const landsatPassCountRow = landsatPassCounts?.[year]?.[month];
-          convertedRow.push(landsatPassCountRow ? landsatPassCountRow["pass_count"] : "");
-        } else {
-          convertedRow.push(""); // Empty for pre-transition years
-        }
-      }
-
-      return convertedRow.join(",");
-    });
-
-    const newData = [header, ...lines].join("\n");
-    const tempPath = file.replace(".csv", `_temp_${unitsAbbreviation}.csv`);
-    fs.writeFileSync(tempPath, newData);
-    archive.file(tempPath, { name: `${prefix}${ANNUAL_ARCHIVE_DIR}/${path.basename(file)}` });
-    combinedDataRows = combinedDataRows.concat(lines);
-  }
-
-  const combinedCsvPath = path.join(csvDir, `${jobName}_combined.csv`);
-  const combinedStream = fs.createWriteStream(combinedCsvPath);
-  combinedStream.write(header + "\n");
-
-  // Remove duplicates and sort by Year then Month.
-  combinedDataRows = Array.from(new Set(combinedDataRows)).sort((a, b) => {
-    const [yearA, monthA] = a.split(",").map((s) => s.trim());
-    const [yearB, monthB] = b.split(",").map((s) => s.trim());
-    return yearA === yearB ? Number(monthA) - Number(monthB) : Number(yearA) - Number(yearB);
-  });
-  combinedDataRows.forEach((row) => combinedStream.write(row + "\n"));
-  combinedStream.end();
-  archive.file(combinedCsvPath, { name: `${prefix}${jobName}_combined.csv` });
+  return jobs;
 };
 
 const addJobOutputsToArchive = async (archive, job, units, pathPrefix = "") => {
   const key = job.key;
   const jobName = job.name;
-  const prefix = pathPrefix ? `${pathPrefix}/` : "";
+  const includeYearlyCombined = shouldIncludeYearlyCombined(units);
 
   const geojsonPath = path.join(run_directory_base, key, `${jobName}.geojson`);
   if (!fs.existsSync(geojsonPath)) {
     throw new Error(`GeoJSON not found for job ${jobName}`);
   }
 
+  const prefix = pathPrefix ? `${pathPrefix}/` : "";
   archive.file(geojsonPath, { name: `${prefix}${jobName}.geojson` });
 
   const geojson = JSON.parse(fs.readFileSync(geojsonPath, "utf8"));
@@ -315,13 +63,48 @@ const addJobOutputsToArchive = async (archive, job, units, pathPrefix = "") => {
     throw new Error(`Figure directory ${figureDirectory} does not exist`);
   }
 
-  processFigureFiles(archive, figureDirectory, units, pathPrefix);
+  processFigureFiles(archive, figureDirectory, units, pathPrefix, includeYearlyCombined);
   processReportFiles(archive, figureDirectory, units, pathPrefix);
 
   const nanValues = processMonthlyNanFiles(run_directory_base, key, jobName);
   const landsatPassCounts = processLandsatPassCounts(run_directory_base, key, jobName);
-  await processCSVFiles(archive, run_directory_base, key, jobName, nanValues, landsatPassCounts, units, area, pathPrefix);
+  await appendJobCsvsToArchive(archive, run_directory_base, key, jobName, nanValues, landsatPassCounts, units, area, pathPrefix);
 };
+
+const addJobGeojsonToArchive = (archive, job) => {
+  const geojsonPath = path.join(run_directory_base, job.key, `${job.name}.geojson`);
+  if (!fs.existsSync(geojsonPath)) {
+    throw new Error(`GeoJSON not found for job ${job.name}`);
+  }
+
+  archive.file(geojsonPath, { name: `${job.name}.geojson` });
+};
+
+const addJobGeotiffsToArchive = (archive, job) => {
+  const files = listJobGeotiffs(run_directory_base, job);
+  if (!files.length) {
+    throw new Error(`No geotiff files found for job ${job.name}`);
+  }
+
+  files.forEach(({ filePath, archiveName }) => {
+    archive.file(filePath, { name: `${job.name}/${archiveName}` });
+  });
+};
+
+const addJobBulkOutputsToArchive = async (archive, job, type, units) => {
+  if (type === "report") {
+    await addJobOutputsToArchive(archive, job, units, job.name);
+  } else if (type === "geojson") {
+    addJobGeojsonToArchive(archive, job);
+  } else if (type === "geotiff") {
+    addJobGeotiffsToArchive(archive, job);
+  } else {
+    throw new Error(`Invalid download type: ${type}`);
+  }
+};
+
+const sanitizeDownloadName = (name, fallback = "selected-jobs") =>
+  String(name || fallback).replace(/[^a-zA-Z0-9_+. -]/g, "") || fallback;
 
 const createZipArchive = (res, filename) => {
   const archive = archiver("zip", { zlib: { level: 9 } });
@@ -364,25 +147,11 @@ router.get("/download", async (req, res) => {
 
 router.get("/download/group", async (req, res) => {
   try {
-    const keys = String(req.query.keys || "")
-      .split(",")
-      .map((key) => key.trim())
-      .filter(Boolean);
+    const keys = req.query.keys;
     const units = req.query.units || "metric";
-    const groupName = String(req.query.name || "job-group").replace(/[^a-zA-Z0-9_+. -]/g, "") || "job-group";
+    const groupName = sanitizeDownloadName(req.query.name, "job-group");
 
-    if (!keys.length) {
-      return res.status(400).send("No job keys provided");
-    }
-
-    const jobs = [];
-    for (const key of keys) {
-      const job = await getJob(key);
-      if (job) {
-        jobs.push(job);
-      }
-    }
-
+    const jobs = await loadJobsByKeys(keys);
     if (!jobs.length) {
       return res.status(404).send("No jobs found");
     }
@@ -401,6 +170,44 @@ router.get("/download/group", async (req, res) => {
 
     if (!addedJobs) {
       return res.status(404).send("No downloadable outputs found for this group");
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.get("/download/bulk", async (req, res) => {
+  try {
+    const type = String(req.query.type || "").trim();
+    const units = req.query.units || "metric";
+    const downloadName = sanitizeDownloadName(req.query.name, "selected-jobs");
+
+    if (!BULK_DOWNLOAD_TYPES.has(type)) {
+      return res.status(400).send("Invalid download type");
+    }
+
+    const jobs = await loadJobsByKeys(req.query.keys);
+    if (!jobs.length) {
+      return res.status(404).send("No jobs found");
+    }
+
+    const archive = createZipArchive(res, `${downloadName}.zip`);
+    let addedJobs = 0;
+
+    for (const job of jobs) {
+      try {
+        await addJobBulkOutputsToArchive(archive, job, type, units);
+        addedJobs += 1;
+      } catch (error) {
+        console.warn(`Skipping job ${job.key} in bulk ${type} download:`, error.message);
+      }
+    }
+
+    if (!addedJobs) {
+      return res.status(404).send("No downloadable outputs found for the selected jobs");
     }
 
     await archive.finalize();

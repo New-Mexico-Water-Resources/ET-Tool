@@ -141,7 +141,6 @@ ul.MuiMenu-list {
   }
 
   .queue-group-job {
-    height: 300px;
     border-top: 1px solid var(--st-gray-80);
 
     .queue-item {
@@ -150,9 +149,54 @@ ul.MuiMenu-list {
   }
 }
 
+.queue-item--compact {
+  height: 100%;
+  justify-content: flex-start;
+
+  .item-body {
+    flex: 0 1 auto;
+    gap: 4px;
+  }
+}
+
 .queue-item--group-member {
   border-left: 4px solid #3b82f6;
   margin-left: 6px;
   padding-left: 6px;
   box-sizing: border-box;
+}
+
+.queue-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 4px 4px;
+  color: var(--st-gray-30);
+  border-bottom: 1px solid var(--st-gray-80);
+  flex-shrink: 0;
+  min-height: 36px;
+
+  &__title {
+    color: var(--st-gray-30);
+    font-size: 1.1rem;
+    line-height: 1.2;
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.queue-expand-btn {
+  padding: 2px !important;
+  color: var(--st-gray-50) !important;
+  transition: transform 0.15s ease, color 0.15s ease !important;
+
+  .MuiSvgIcon-root {
+    color: inherit !important;
+  }
+
+  &:hover {
+    color: var(--st-gray-30) !important;
+    background-color: transparent !important;
+    transform: translateX(-3px);
+  }
 }

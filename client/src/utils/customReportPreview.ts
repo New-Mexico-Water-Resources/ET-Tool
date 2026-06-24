@@ -1,0 +1,1 @@
+export const CUSTOM_REPORT_PREVIEW_VERSION = 2;

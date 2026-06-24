@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useConfirm } from "material-ui-confirm";
 import StatusIcon from "./StatusIcon";
 import JobQueueItem from "./JobQueueItem";
+import DefaultReportMenuItems from "./DefaultReportMenuItems";
 import useStore from "../utils/store";
 import {
   QueueJob,
@@ -27,6 +28,7 @@ import {
   getGroupStatusSummary,
   getGroupSubmitter,
   getGroupYearRangeLabel,
+  getQueueJobItemHeight,
 } from "../utils/jobGroups";
 import { formatElapsedTime } from "../utils/helpers";
 
@@ -42,7 +44,6 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
   const confirm = useConfirm();
   const [jobStatuses, fetchJobStatus] = useStore((state) => [state.jobStatuses, state.fetchJobStatus]);
   const loadJobGroup = useStore((state) => state.loadJobGroup);
-  const downloadJobGroup = useStore((state) => state.downloadJobGroup);
   const downloadJobGroupGeojson = useStore((state) => state.downloadJobGroupGeojson);
   const downloadingJobGroupId = useStore((state) => state.downloadingJobGroupId);
   const deleteJob = useStore((state) => state.deleteJob);
@@ -235,7 +236,7 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
       <Collapse in={expanded} timeout="auto" unmountOnExit>
         <div className="queue-group-members">
           {jobs.map((job) => (
-            <div key={job.key} className="queue-group-job">
+            <div key={job.key} className="queue-group-job" style={{ height: getQueueJobItemHeight(job) }}>
               <JobQueueItem job={job} inGroupMember onOpenLogs={() => onOpenLogs(job.key)} />
             </div>
           ))}
@@ -247,49 +248,13 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
         onClose={() => setDownloadAnchorEl(null)}
         sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
       >
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ marginLeft: "8px", marginBottom: "4px", backgroundColor: "var(--st-gray-80)" }}
-        >
-          Report
-        </Typography>
-        <MenuItem
-          sx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
-          disableRipple
+        <DefaultReportMenuItems
+          groupJobs={jobs}
+          groupName={groupName}
           disabled={isDownloading}
-          onClick={() => {
-            downloadJobGroup(jobs, groupName, "metric");
-            setDownloadAnchorEl(null);
-          }}
-        >
-          {isDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-          All Reports (mm/month)
-        </MenuItem>
-        <MenuItem
-          sx={{ backgroundColor: "var(--st-gray-80)" }}
-          disableRipple
-          disabled={isDownloading}
-          onClick={() => {
-            downloadJobGroup(jobs, groupName, "imperial");
-            setDownloadAnchorEl(null);
-          }}
-        >
-          {isDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-          All Reports (in/month)
-        </MenuItem>
-        <MenuItem
-          sx={{ backgroundColor: "var(--st-gray-80)" }}
-          disableRipple
-          disabled={isDownloading}
-          onClick={() => {
-            downloadJobGroup(jobs, groupName, "acre-feet");
-            setDownloadAnchorEl(null);
-          }}
-        >
-          {isDownloading && <CircularProgress size={16} sx={{ marginRight: "8px" }} />}
-          All Reports (acre-feet/month)
-        </MenuItem>
+          onClose={() => setDownloadAnchorEl(null)}
+          menuItemSx={{ backgroundColor: "var(--st-gray-80)", borderTop: "1px solid var(--st-gray-70)" }}
+        />
         <Typography
           variant="body2"
           color="text.secondary"
