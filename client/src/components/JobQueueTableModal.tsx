@@ -266,6 +266,14 @@ function JobStatusCell({
 
 const JOB_ROW_MENU_ITEM_SX = { backgroundColor: "var(--st-gray-80)" } as const;
 
+const JOB_ROW_MENU_SX = {
+  "& .MuiPaper-root": {
+    backgroundColor: "var(--st-gray-80)",
+    backgroundImage: "none",
+  },
+  "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" },
+} as const;
+
 const JOB_ROW_MENU_HEADER_SX = {
   marginLeft: "8px",
   marginBottom: "4px",
@@ -334,7 +342,7 @@ function JobRowActionsMenu({
         onClose={closeMenu}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
-        sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
+        sx={JOB_ROW_MENU_SX}
       >
         <JobRowMenuSectionHeader label="Actions" />
         <MenuItem sx={JOB_ROW_MENU_ITEM_SX} disableRipple onClick={() => runAction(onLocate)}>
@@ -498,7 +506,7 @@ function BulkSelectionDownloadButton({ jobs, disabled }: { jobs: QueueJob[]; dis
         onClose={closeMenu}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
         transformOrigin={{ vertical: "top", horizontal: "left" }}
-        sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
+        sx={JOB_ROW_MENU_SX}
       >
         <JobRowMenuSectionHeader label="Report" />
         {reportOptions.map((option) => (
