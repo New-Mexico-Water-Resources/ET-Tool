@@ -1,3 +1,21 @@
+## 1.41.0 (2026-06-30)
+### Features
+- **Comparison Job Reports**
+  - From the Custom Download modal, users can now select a "Comparison Report" tab and select a corresponding region to compare against
+  - A single map thumbnail for each region per year is used for visual comparison and this can be adjusted to be either the annual or season total or an individual month
+  - Updated CSV download support that includes both regions
+- **Job Complete Notifications**
+  - When a job completes, a browser notification is now triggered for the user who requested the job
+  - Adds configuration options to also set up email based alerts
+  - Adds admin controls for enabling and testing email support
+- **Warning Alerts**
+  - If a job successfully completes, but encounters errors that might cause unexpected results (eg. if the Microsoft Planetary Computer API is down), then a new warning status icon appears next to the job and lists the errors encountered
+- **Changeable User Names**
+  - Users can now change their first and last names for easier discoverability
+  - User first/last names are automatically added if email matches pattern "first.lastname@example.com"
+- **Cloud Coverage Cache Pipeline**
+  - Implements backend pipeline for manually caching Planetary Computer Cloud Coverage and Landsat Pass data so that downstream issues dont hold up report generation
+
 ## 1.40.0 (2026-06-24)
 
 ### Features
