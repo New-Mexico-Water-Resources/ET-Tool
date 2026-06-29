@@ -161,9 +161,6 @@ def calculate_cloud_coverage_percent(
         # This is necessary in case the variable is present, but has no data
         pass_count = cloud_coverage.get("pass_count", 0) or 0
         mean_cloud_coverage = cloud_coverage.get("mean_cloud_coverage", None)
-        # Cloud coverage is 100% if it's not present
-        if mean_cloud_coverage is None:
-            mean_cloud_coverage = 100
         total_observations = cloud_coverage.get("total_observations", 0) or 0
         cloudy_observations = cloud_coverage.get("cloudy_observations", 0) or 0
 
@@ -174,7 +171,7 @@ def calculate_cloud_coverage_percent(
             "avg_max": et_max_average,
             "ppt_avg": ppt_average,
             "landsat_passes": pass_count,
-            "cloud_coverage_percent": mean_cloud_coverage / 100,
+            "cloud_coverage_percent": mean_cloud_coverage / 100 if mean_cloud_coverage is not None else None,
             "cloudy_observations": cloudy_observations,
             "total_observations": total_observations,
         }
@@ -194,7 +191,7 @@ def calculate_cloud_coverage_percent(
 
             percentage = None
 
-            if percentages and percentages.get("cloud_coverage_percent"):
+            if percentages and percentages.get("cloud_coverage_percent") is not None:
                 percentage = percentages["cloud_coverage_percent"]
                 percentage = max(percentage, 0)
                 percentage = min(percentage, 1)
@@ -204,9 +201,12 @@ def calculate_cloud_coverage_percent(
                 percentage = min(percentage, 1)
 
             if percentage is None and existing_nan_percent_csv is not None:
-                existing_row = existing_nan_percent_csv.loc[existing_nan_percent_csv["month"] == month_key]
+                month_matches = pd.to_numeric(existing_nan_percent_csv["month"], errors="coerce")
+                existing_row = existing_nan_percent_csv.loc[month_matches == month]
                 if not existing_row.empty:
-                    percentage = existing_row["percent_nan"].values[0]
+                    existing_percent = existing_row["percent_nan"].values[0]
+                    if existing_percent != "" and not pd.isna(existing_percent):
+                        percentage = float(existing_percent) / 100
 
             rounded_percentage = round(percentage * 100, 2) if percentage is not None else ""
             avg_min = percentages.get("avg_min") or 0

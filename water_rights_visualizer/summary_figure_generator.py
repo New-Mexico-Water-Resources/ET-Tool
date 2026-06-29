@@ -9,7 +9,7 @@ import seaborn as sns
 import json
 from .write_status import write_status
 from .variable_types import get_available_variable_source_for_date, OPENET_TRANSITION_DATE
-from .plotting_helpers import convert_to_nice_number_range, MetricETUnit, ETUnit, PercentageUnits
+from .plotting_helpers import convert_to_nice_number_range, MetricETUnit, ETUnit, PercentageUnits, fill_missing_report_columns, cloud_coverage_data_unavailable, fill_cloud_coverage_area, format_requestor_name
 
 logger = getLogger(__name__)
 
@@ -82,16 +82,7 @@ def generate_summary_figure(
     axis_label_fontsize = 12
 
     # Set up the title and subtitle
-    requestor_name = ""
-    if requestor:
-        requestor_name = requestor.get("name", "")
-        if not requestor_name:
-            requestor_name = requestor.get("email", "")
-        if not requestor_name:
-            requestor_name = requestor.get("sub", "")
-
-    if not requestor_name:
-        requestor_name = "Unknown"
+    requestor_name = format_requestor_name(requestor)
 
     title = f"Evapotranspiration For {ROI_name}"
     subtitle = f"Years: {start_year}-{end_year}  Area: {ROI_acres} acres  Created: {creation_date.date()}  Requested By: {requestor_name}"
@@ -128,7 +119,7 @@ def generate_summary_figure(
         df = pd.merge(left=mm, right=nd, how="left", left_on="Month", right_on="month")
         if "Year" not in df.columns and "Year_x" in df.columns:
             df = df.rename(columns={"Year_x": "Year"})
-        df = df.replace(np.nan, 100)
+        df = fill_missing_report_columns(df)
 
         all_data.append(df)
 
@@ -235,16 +226,14 @@ def generate_summary_figure(
         ax_precip.stackplot(main_df.index, main_df["ppt_avg"], colors=[ppt_color + "80"], labels=["Precipitation"])
 
     # Plot cloud coverage data
-    is_confidence_data_null = (
-        main_df["percent_nan"].isnull().all() or main_df["percent_nan"].eq(0).all() or main_df["percent_nan"].eq(100).all()
-    )
+    is_confidence_data_null = cloud_coverage_data_unavailable(main_df)
 
     if not is_confidence_data_null:
         ci_color = "#7F7F7F"
-        mask = main_df["percent_nan"].notna()
+        fill_cloud_coverage_area(ax_cloud, main_df.index, main_df["percent_nan"], ci_color)
         sns.lineplot(
-            x=main_df.index[mask],
-            y=main_df["percent_nan"][mask],
+            x=main_df.index,
+            y=main_df["percent_nan"],
             ax=ax_cloud,
             color=ci_color,
             alpha=0.8,
@@ -252,8 +241,6 @@ def generate_summary_figure(
             marker=marker,
             markersize=marker_size,
         )
-        stack_data = np.ma.masked_invalid(main_df["percent_nan"].values)
-        ax_cloud.stackplot(main_df.index, stack_data, colors=[ci_color + "80"])
 
     # Set up legends
     legend_items = {
@@ -328,7 +315,7 @@ def generate_summary_figure(
 
     if not is_confidence_data_null:
         nice_cloud_cover_range = convert_to_nice_number_range(
-            cloud_cover_min, cloud_cover_max, PercentageUnits(), subdivisions=3
+            0, cloud_cover_max, PercentageUnits(), subdivisions=3
         )
         min_cloud_coverage = nice_cloud_cover_range[0]
         max_cloud_coverage = nice_cloud_cover_range[-1]

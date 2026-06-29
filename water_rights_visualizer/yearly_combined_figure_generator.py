@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from .plotting_helpers import ETUnit, MetricETUnit, PercentageUnits, convert_to_nice_number_range
+from .plotting_helpers import ETUnit, MetricETUnit, PercentageUnits, convert_to_nice_number_range, fill_missing_report_columns, cloud_coverage_data_unavailable, fill_cloud_coverage_area, format_requestor_name
 from .variable_types import OPENET_TRANSITION_DATE, get_available_variable_source_for_date
 from .write_status import write_status
 
@@ -28,7 +28,7 @@ def _load_monthly_data(monthly_means_directory: str, monthly_nan_directory: str,
         df = pd.merge(left=mm, right=nd, how="left", left_on="Month", right_on="month")
         if "Year" not in df.columns and "Year_x" in df.columns:
             df = df.rename(columns={"Year_x": "Year"})
-        all_data.append(df.replace(np.nan, 100))
+        all_data.append(fill_missing_report_columns(df))
 
     return pd.concat(all_data, ignore_index=True)
 
@@ -175,11 +175,7 @@ def generate_yearly_combined_figure(
     title_fontsize = 16
     axis_label_fontsize = 12
 
-    requestor_name = ""
-    if requestor:
-        requestor_name = requestor.get("name", "") or requestor.get("email", "") or requestor.get("sub", "")
-    if not requestor_name:
-        requestor_name = "Unknown"
+    requestor_name = format_requestor_name(requestor)
 
     title = f"Evapotranspiration For {ROI_name}"
     subtitle = (
@@ -236,14 +232,11 @@ def generate_yearly_combined_figure(
         )
         ax_precip.stackplot(x, yearly_df["ppt_avg"], colors=[ppt_color + "80"], labels=["Precipitation"])
 
-    is_confidence_data_null = (
-        yearly_df["percent_nan"].isnull().all()
-        or yearly_df["percent_nan"].eq(0).all()
-        or yearly_df["percent_nan"].eq(100).all()
-    )
+    is_confidence_data_null = cloud_coverage_data_unavailable(yearly_df)
 
     if not is_confidence_data_null:
         ci_color = "#7F7F7F"
+        fill_cloud_coverage_area(ax_cloud, x, yearly_df["percent_nan"], ci_color)
         ax_cloud.plot(
             x,
             yearly_df["percent_nan"],
@@ -253,8 +246,6 @@ def generate_yearly_combined_figure(
             marker=marker,
             markersize=marker_size,
         )
-        stack_data = np.ma.masked_invalid(yearly_df["percent_nan"].values)
-        ax_cloud.stackplot(x, stack_data, colors=[ci_color + "80"])
 
     legend_items = {
         pet_label: {"color": pet_color, "alpha": 0.8, "lw": 2},

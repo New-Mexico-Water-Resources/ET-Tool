@@ -117,6 +117,9 @@ const processMonthlyNanFiles = (runDir, key, jobName) => {
       });
 
       for (const col in row) {
+        if (row[col] === "") {
+          continue;
+        }
         const convertedColumn = Number(row[col]);
         if (!Number.isNaN(convertedColumn)) {
           row[col] = Math.round(convertedColumn * 100) / 100;
@@ -358,6 +361,315 @@ const buildMonthlyCombinedCsv = (runDir, key, jobName, units, area) => {
   };
 };
 
+const getOverlapYears = (primaryJob, comparisonJob) => {
+  const startYear = Math.max(Number(primaryJob.start_year), Number(comparisonJob.start_year));
+  const endYear = Math.min(Number(primaryJob.end_year), Number(comparisonJob.end_year));
+  if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || startYear > endYear) {
+    throw new Error("Selected jobs do not have overlapping years");
+  }
+  return { startYear, endYear };
+};
+
+const parseCombinedDataRow = (row, hasPostTransitionData) => {
+  const cols = row.split(",").map((s) => s.trim());
+  const values = {
+    year: cols[0],
+    month: cols[1],
+    et: cols[2] ?? "",
+    pet: cols[3] ?? "",
+    ppt: cols[4] ?? "",
+    cloudCover: cols[5] ?? "",
+    passCount: "",
+  };
+  if (hasPostTransitionData) {
+    values.passCount = cols[6] ?? "";
+  }
+  return values;
+};
+
+const parseYearlyCombinedRow = (row, hasPostTransitionData) => {
+  const cols = row.split(",").map((s) => s.trim());
+  const values = {
+    year: cols[0],
+    et: cols[1] ?? "",
+    pet: cols[2] ?? "",
+    ppt: cols[3] ?? "",
+    cloudCover: cols[4] ?? "",
+    passCount: "",
+  };
+  if (hasPostTransitionData) {
+    values.passCount = cols[5] ?? "";
+  }
+  return values;
+};
+
+const comparisonMetricDefinitions = (unitsAbbreviation, period, includePassCounts) => {
+  const periodLabel = period === "month" ? "month" : "year";
+  const metrics = [
+    { key: "et", label: `ET (${unitsAbbreviation}/${periodLabel})` },
+    { key: "pet", label: `ETo (${unitsAbbreviation}/${periodLabel})` },
+    { key: "ppt", label: `Precipitation (${unitsAbbreviation}/${periodLabel})` },
+    { key: "cloudCover", label: "Cloud Coverage + Missing Data (%)" },
+  ];
+  if (includePassCounts) {
+    metrics.push({ key: "passCount", label: "Days with Landsat Passes" });
+  }
+  return metrics;
+};
+
+const buildInterleavedComparisonHeader = (
+  primaryName,
+  comparisonName,
+  unitsAbbreviation,
+  period,
+  primaryHasPostTransitionData,
+  comparisonHasPostTransitionData,
+) => {
+  const metrics = comparisonMetricDefinitions(
+    unitsAbbreviation,
+    period,
+    primaryHasPostTransitionData || comparisonHasPostTransitionData,
+  );
+  const headers = period === "month" ? ["Year", "Month"] : ["Year"];
+  metrics.forEach((metric) => {
+    headers.push(`${metric.label} - ${primaryName}`);
+    headers.push(`${metric.label} - ${comparisonName}`);
+  });
+  return headers;
+};
+
+const buildInterleavedComparisonValues = (
+  primaryValues,
+  comparisonValues,
+  primaryHasPostTransitionData,
+  comparisonHasPostTransitionData,
+  period,
+  unitsAbbreviation,
+) => {
+  const metrics = comparisonMetricDefinitions(
+    unitsAbbreviation,
+    period,
+    primaryHasPostTransitionData || comparisonHasPostTransitionData,
+  );
+  const values = [];
+  metrics.forEach((metric) => {
+    values.push(primaryValues[metric.key] ?? "");
+    values.push(comparisonValues[metric.key] ?? "");
+  });
+  return values;
+};
+
+const indexMonthlyRows = (combinedDataRows, hasPostTransitionData, startYear, endYear) => {
+  const indexed = new Map();
+  combinedDataRows.forEach((row) => {
+    const values = parseCombinedDataRow(row, hasPostTransitionData);
+    const year = Number(values.year);
+    if (!Number.isFinite(year) || year < startYear || year > endYear) {
+      return;
+    }
+    indexed.set(`${values.year}-${values.month}`, values);
+  });
+  return indexed;
+};
+
+const indexYearlyRows = (yearlyRows, hasPostTransitionData, startYear, endYear) => {
+  const indexed = new Map();
+  yearlyRows.forEach((row) => {
+    const values = parseYearlyCombinedRow(row, hasPostTransitionData);
+    const year = Number(values.year);
+    if (!Number.isFinite(year) || year < startYear || year > endYear) {
+      return;
+    }
+    indexed.set(values.year, values);
+  });
+  return indexed;
+};
+
+const emptyRegionValues = () => ({
+  et: "",
+  pet: "",
+  ppt: "",
+  cloudCover: "",
+  passCount: "",
+});
+
+const buildComparisonMonthlyCsv = (runDir, primaryJob, comparisonJob, units, primaryArea, comparisonArea) => {
+  const primaryNan = processMonthlyNanFiles(runDir, primaryJob.key, primaryJob.name);
+  const primaryPasses = processLandsatPassCounts(runDir, primaryJob.key, primaryJob.name);
+  const comparisonNan = processMonthlyNanFiles(runDir, comparisonJob.key, comparisonJob.name);
+  const comparisonPasses = processLandsatPassCounts(runDir, comparisonJob.key, comparisonJob.name);
+
+  const primaryData = collectCombinedDataRows(
+    runDir,
+    primaryJob.key,
+    primaryJob.name,
+    primaryNan,
+    primaryPasses,
+    units,
+    primaryArea,
+  );
+  const comparisonData = collectCombinedDataRows(
+    runDir,
+    comparisonJob.key,
+    comparisonJob.name,
+    comparisonNan,
+    comparisonPasses,
+    units,
+    comparisonArea,
+  );
+
+  const { startYear, endYear } = getOverlapYears(primaryJob, comparisonJob);
+  const primaryRows = indexMonthlyRows(
+    primaryData.combinedDataRows,
+    primaryData.hasPostTransitionData,
+    startYear,
+    endYear,
+  );
+  const comparisonRows = indexMonthlyRows(
+    comparisonData.combinedDataRows,
+    comparisonData.hasPostTransitionData,
+    startYear,
+    endYear,
+  );
+
+  const monthKeys = Array.from(new Set([...primaryRows.keys(), ...comparisonRows.keys()])).sort((a, b) => {
+    const [yearA, monthA] = a.split("-").map(Number);
+    const [yearB, monthB] = b.split("-").map(Number);
+    return yearA === yearB ? monthA - monthB : yearA - yearB;
+  });
+
+  const unitsAbbreviation = unitsToAbbreviation(units);
+  const slug = `${primaryJob.name}_vs_${comparisonJob.name}`;
+  const header = buildInterleavedComparisonHeader(
+    primaryJob.name,
+    comparisonJob.name,
+    unitsAbbreviation,
+    "month",
+    primaryData.hasPostTransitionData,
+    comparisonData.hasPostTransitionData,
+  ).join(",");
+
+  const rows = monthKeys.map((key) => {
+    const [year, month] = key.split("-");
+    const primaryValues = primaryRows.get(key) || emptyRegionValues();
+    const comparisonValues = comparisonRows.get(key) || emptyRegionValues();
+    return [
+      year,
+      month,
+      ...buildInterleavedComparisonValues(
+        primaryValues,
+        comparisonValues,
+        primaryData.hasPostTransitionData,
+        comparisonData.hasPostTransitionData,
+        "month",
+        unitsAbbreviation,
+      ),
+    ].join(",");
+  });
+
+  return {
+    filename: `${slug}_combined.csv`,
+    content: [header, ...rows].join("\n"),
+  };
+};
+
+const buildComparisonYearlyCsv = (runDir, primaryJob, comparisonJob, units, primaryArea, comparisonArea) => {
+  const primaryNan = processMonthlyNanFiles(runDir, primaryJob.key, primaryJob.name);
+  const primaryPasses = processLandsatPassCounts(runDir, primaryJob.key, primaryJob.name);
+  const comparisonNan = processMonthlyNanFiles(runDir, comparisonJob.key, comparisonJob.name);
+  const comparisonPasses = processLandsatPassCounts(runDir, comparisonJob.key, comparisonJob.name);
+
+  const primaryData = collectCombinedDataRows(
+    runDir,
+    primaryJob.key,
+    primaryJob.name,
+    primaryNan,
+    primaryPasses,
+    units,
+    primaryArea,
+  );
+  const comparisonData = collectCombinedDataRows(
+    runDir,
+    comparisonJob.key,
+    comparisonJob.name,
+    comparisonNan,
+    comparisonPasses,
+    units,
+    comparisonArea,
+  );
+
+  const { startYear, endYear } = getOverlapYears(primaryJob, comparisonJob);
+  const primaryYearly = indexYearlyRows(
+    aggregateYearlyCombinedRows(primaryData.combinedDataRows, primaryData.hasPostTransitionData),
+    primaryData.hasPostTransitionData,
+    startYear,
+    endYear,
+  );
+  const comparisonYearly = indexYearlyRows(
+    aggregateYearlyCombinedRows(comparisonData.combinedDataRows, comparisonData.hasPostTransitionData),
+    comparisonData.hasPostTransitionData,
+    startYear,
+    endYear,
+  );
+
+  const years = Array.from(new Set([...primaryYearly.keys(), ...comparisonYearly.keys()])).sort(
+    (a, b) => Number(a) - Number(b),
+  );
+
+  const unitsAbbreviation = unitsToAbbreviation(units);
+  const slug = `${primaryJob.name}_vs_${comparisonJob.name}`;
+  const header = buildInterleavedComparisonHeader(
+    primaryJob.name,
+    comparisonJob.name,
+    unitsAbbreviation,
+    "year",
+    primaryData.hasPostTransitionData,
+    comparisonData.hasPostTransitionData,
+  ).join(",");
+
+  const rows = years.map((year) => {
+    const primaryValues = primaryYearly.get(year) || emptyRegionValues();
+    const comparisonValues = comparisonYearly.get(year) || emptyRegionValues();
+    return [
+      year,
+      ...buildInterleavedComparisonValues(
+        primaryValues,
+        comparisonValues,
+        primaryData.hasPostTransitionData,
+        comparisonData.hasPostTransitionData,
+        "year",
+        unitsAbbreviation,
+      ),
+    ].join(",");
+  });
+
+  return {
+    filename: `${slug}_yearly_combined.csv`,
+    content: [header, ...rows].join("\n"),
+  };
+};
+
+const processComparisonFigureFiles = (archive, figureDirectory, pathPrefix = "", includeYearlyCombined = true) => {
+  const prefix = pathPrefix ? `${pathPrefix}/` : "";
+  const figureFiles = glob.sync(path.join(figureDirectory, "*.png"));
+  figureFiles.forEach((file) => {
+    const basename = path.basename(file);
+    if (!includeYearlyCombined && basename.startsWith("yearly_combined_")) {
+      return;
+    }
+    const archiveName = /^\d{4}_/.test(basename) ? `${prefix}${ANNUAL_ARCHIVE_DIR}/${basename}` : `${prefix}${basename}`;
+    archive.file(file, { name: archiveName });
+  });
+};
+
+const processComparisonReportFiles = (archive, figureDirectory, slug, pathPrefix = "") => {
+  const prefix = pathPrefix ? `${pathPrefix}/` : "";
+  const reportPath = path.join(figureDirectory, `${slug}_Report.pdf`);
+  if (fs.existsSync(reportPath)) {
+    archive.file(reportPath, { name: `${prefix}${slug}_Report.pdf` });
+  }
+};
+
 const buildYearlyCombinedCsv = (runDir, key, jobName, units, area) => {
   const nanValues = processMonthlyNanFiles(runDir, key, jobName);
   const landsatPassCounts = processLandsatPassCounts(runDir, key, jobName);
@@ -498,9 +810,13 @@ module.exports = {
   ANNUAL_ARCHIVE_DIR,
   processFigureFiles,
   processReportFiles,
+  processComparisonFigureFiles,
+  processComparisonReportFiles,
   processMonthlyNanFiles,
   processLandsatPassCounts,
   appendJobCsvsToArchive,
   buildMonthlyCombinedCsv,
   buildYearlyCombinedCsv,
+  buildComparisonMonthlyCsv,
+  buildComparisonYearlyCsv,
 };

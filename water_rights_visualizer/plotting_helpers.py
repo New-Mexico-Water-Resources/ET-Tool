@@ -80,6 +80,46 @@ class AcreFeetETUnit(ETUnit):
         return value / (self.acres * 0.003259)
 
 
+def fill_missing_report_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare merged monthly report data for figure generation.
+
+    percent_nan is left unchanged: NaN means missing data (gap in chart), 0 means 0% coverage.
+    """
+    df = df.copy()
+    for col in ("avg_min", "avg_max", "ppt_avg"):
+        if col in df.columns:
+            df[col] = df[col].fillna(0)
+    return df
+
+
+def cloud_coverage_data_unavailable(df: pd.DataFrame, column: str = "percent_nan") -> bool:
+    return bool(column not in df.columns or df[column].isnull().all())
+
+
+def continuous_valid_segments(valid_mask: np.ndarray) -> list[tuple[int, int]]:
+    """Return [start, end) index ranges for each contiguous run of True values."""
+    if valid_mask.size == 0 or not valid_mask.any():
+        return []
+
+    padded = np.concatenate(([False], valid_mask, [False]))
+    transitions = np.diff(padded.astype(int))
+    starts = np.where(transitions == 1)[0]
+    ends = np.where(transitions == -1)[0]
+    return list(zip(starts, ends))
+
+
+def fill_cloud_coverage_area(ax, x, y, color: str) -> None:
+    """Fill area under cloud coverage for each continuous stretch of valid data."""
+    x_array = np.asarray(x, dtype=float)
+    y_array = np.asarray(y, dtype=float)
+    valid = ~np.isnan(y_array)
+    fill_color = f"{color}80" if color.startswith("#") and len(color) == 7 else color
+
+    for start, end in continuous_valid_segments(valid):
+        ax.fill_between(x_array[start:end], 0, y_array[start:end], color=fill_color)
+
+
 def convert_to_nice_number_range(start: float, end: float, units: ETUnit, subdivisions: int = 5) -> list[float]:
     """
     Convert a range of values to "nice" numbers in the given units (assumes input is in mm).
@@ -163,6 +203,16 @@ def convert_to_nice_number_range(start: float, end: float, units: ETUnit, subdiv
         nice_numbers = nice_numbers.astype(int)
 
     return nice_numbers
+
+
+def format_requestor_name(requestor: dict | None) -> str:
+    if not requestor:
+        return "Unknown"
+    for key in ("email", "sub", "name"):
+        value = requestor.get(key)
+        if value:
+            return str(value).strip()
+    return "Unknown"
 
 
 def et_unit_from_name(name: str, acres: float = 1) -> ETUnit:

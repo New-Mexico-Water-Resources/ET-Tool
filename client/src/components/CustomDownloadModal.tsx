@@ -17,6 +17,8 @@ import {
   Radio,
   RadioGroup,
   Select,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
@@ -29,12 +31,18 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type MouseEvent } from "react";
 import { API_URL } from "../utils/constants";
-import { CUSTOM_REPORT_PREVIEW_VERSION } from "../utils/customReportPreview";
+import { COMPARISON_REPORT_PREVIEW_VERSION, CUSTOM_REPORT_PREVIEW_VERSION } from "../utils/customReportPreview";
 import useStore from "../utils/store";
+import { type QueueJob } from "../utils/jobGroups";
+import ComparisonJobPicker from "./ComparisonJobPicker";
 import "../scss/CustomDownloadModal.scss";
 
 export type ReportUnit = "metric" | "imperial" | "acre-feet";
 export type ColorScaleMode = "across_years" | "per_year" | "custom";
+export type MapTileMode = "yearly_total" | "month" | "winter" | "spring" | "summer" | "fall";
+export type CustomDownloadModalMode = "custom" | "comparison";
+
+type ComparisonScaleBounds = ReportScaleBounds;
 
 type ScaleBoundsGroup = {
   across_years: { min: number | null; max: number | null };
@@ -67,6 +75,11 @@ const UNIT_ABBREVIATIONS: Record<ReportUnit, string> = {
   imperial: "in",
   "acre-feet": "AF",
 };
+
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => ({
+  value: index + 1,
+  label: new Date(2000, index, 1).toLocaleString("en-US", { month: "long" }),
+}));
 
 const formatBound = (value: number | null | undefined) => {
   if (value == null || Number.isNaN(value)) {
@@ -115,54 +128,6 @@ const appendCustomScaleParams = (
     }
   }
 };
-
-const buildPreviewRequestKey = ({
-  previewPage,
-  etUnits,
-  pptUnits,
-  colorScale,
-  etCustomMin,
-  etCustomMax,
-  etEtoScale,
-  etEtoCustomMin,
-  etEtoCustomMax,
-  pptScale,
-  pptCustomMin,
-  pptCustomMax,
-  showMonthlyAverages,
-  previewVersion,
-}: {
-  previewPage: string;
-  etUnits: ReportUnit;
-  pptUnits: ReportUnit;
-  colorScale: ColorScaleMode;
-  etCustomMin: string;
-  etCustomMax: string;
-  etEtoScale: ColorScaleMode;
-  etEtoCustomMin: string;
-  etEtoCustomMax: string;
-  pptScale: ColorScaleMode;
-  pptCustomMin: string;
-  pptCustomMax: string;
-  showMonthlyAverages: boolean;
-  previewVersion: number;
-}) =>
-  JSON.stringify({
-    previewPage,
-    etUnits,
-    pptUnits,
-    colorScale,
-    etCustomMin: colorScale === "custom" ? etCustomMin.trim() : "",
-    etCustomMax: colorScale === "custom" ? etCustomMax.trim() : "",
-    etEtoScale,
-    etEtoCustomMin: etEtoScale === "custom" ? etEtoCustomMin.trim() : "",
-    etEtoCustomMax: etEtoScale === "custom" ? etEtoCustomMax.trim() : "",
-    pptScale,
-    pptCustomMin: pptScale === "custom" ? pptCustomMin.trim() : "",
-    pptCustomMax: pptScale === "custom" ? pptCustomMax.trim() : "",
-    showMonthlyAverages,
-    previewVersion,
-  });
 
 const readAxiosError = async (error: unknown, fallback: string) => {
   if (axios.isAxiosError(error) && error.response?.data) {
@@ -252,6 +217,201 @@ const buildPreviewParams = ({
   }
 
   return params;
+};
+
+const buildComparisonPreviewParams = ({
+  jobKey,
+  comparisonJobKey,
+  previewPage,
+  etUnits,
+  pptUnits,
+  etEtoScale,
+  etEtoCustomMin,
+  etEtoCustomMax,
+  pptScale,
+  pptCustomMin,
+  pptCustomMax,
+  mapTileMode,
+  mapTileMonth,
+  colorScale,
+  etCustomMin,
+  etCustomMax,
+  forceRefresh = false,
+}: {
+  jobKey: string;
+  comparisonJobKey: string;
+  previewPage: string;
+  etUnits: ReportUnit;
+  pptUnits: ReportUnit;
+  etEtoScale: ColorScaleMode;
+  etEtoCustomMin: string;
+  etEtoCustomMax: string;
+  pptScale: ColorScaleMode;
+  pptCustomMin: string;
+  pptCustomMax: string;
+  mapTileMode: MapTileMode;
+  mapTileMonth: number;
+  colorScale: ColorScaleMode;
+  etCustomMin: string;
+  etCustomMax: string;
+  forceRefresh?: boolean;
+}) => {
+  const params = new URLSearchParams({
+    key: jobKey,
+    comparisonKey: comparisonJobKey,
+    etUnits,
+    pptUnits,
+    mapTileMode,
+    mapTileMonth: String(mapTileMonth),
+    previewVersion: String(COMPARISON_REPORT_PREVIEW_VERSION),
+  });
+
+  if (forceRefresh) {
+    params.set("refresh", "true");
+    params.set("_t", String(Date.now()));
+  }
+
+  appendCustomScaleParams(params, "colorScale", "etCustomMin", "etCustomMax", colorScale, etCustomMin, etCustomMax);
+  appendCustomScaleParams(
+    params,
+    "etEtoScale",
+    "etEtoCustomMin",
+    "etEtoCustomMax",
+    etEtoScale,
+    etEtoCustomMin,
+    etEtoCustomMax,
+  );
+  appendCustomScaleParams(params, "pptScale", "pptCustomMin", "pptCustomMax", pptScale, pptCustomMin, pptCustomMax);
+
+  if (previewPage.startsWith("year:")) {
+    params.set("previewKind", "year");
+    params.set("year", previewPage.replace("year:", ""));
+  } else if (previewPage === "summary") {
+    params.set("previewKind", "summary");
+  } else if (previewPage === "yearly-combined") {
+    params.set("previewKind", "yearly_combined");
+  }
+
+  return params;
+};
+
+const buildComparisonDownloadParams = ({
+  jobKey,
+  comparisonJobKey,
+  etUnits,
+  pptUnits,
+  etEtoScale,
+  etEtoCustomMin,
+  etEtoCustomMax,
+  pptScale,
+  pptCustomMin,
+  pptCustomMax,
+  includeYearlyCombined,
+  previewPage,
+  mapTileMode,
+  mapTileMonth,
+  colorScale,
+  etCustomMin,
+  etCustomMax,
+}: {
+  jobKey: string;
+  comparisonJobKey: string;
+  etUnits: ReportUnit;
+  pptUnits: ReportUnit;
+  etEtoScale: ColorScaleMode;
+  etEtoCustomMin: string;
+  etEtoCustomMax: string;
+  pptScale: ColorScaleMode;
+  pptCustomMin: string;
+  pptCustomMax: string;
+  includeYearlyCombined: boolean;
+  previewPage?: string;
+  mapTileMode: MapTileMode;
+  mapTileMonth: number;
+  colorScale: ColorScaleMode;
+  etCustomMin: string;
+  etCustomMax: string;
+}) => {
+  const params = new URLSearchParams({
+    key: jobKey,
+    comparisonKey: comparisonJobKey,
+    etUnits,
+    pptUnits,
+    includeYearlyCombined: String(includeYearlyCombined),
+    mapTileMode,
+    mapTileMonth: String(mapTileMonth),
+  });
+
+  appendCustomScaleParams(params, "colorScale", "etCustomMin", "etCustomMax", colorScale, etCustomMin, etCustomMax);
+  appendCustomScaleParams(
+    params,
+    "etEtoScale",
+    "etEtoCustomMin",
+    "etEtoCustomMax",
+    etEtoScale,
+    etEtoCustomMin,
+    etEtoCustomMax,
+  );
+  appendCustomScaleParams(params, "pptScale", "pptCustomMin", "pptCustomMax", pptScale, pptCustomMin, pptCustomMax);
+
+  if (previewPage) {
+    params.set("previewPage", previewPage);
+    params.set("previewVersion", String(COMPARISON_REPORT_PREVIEW_VERSION));
+  }
+
+  return params;
+};
+
+const getComparisonDownloadFilename = (
+  primaryName: string,
+  comparisonName: string,
+  target: CustomDownloadTarget,
+  previewPage: string,
+) => {
+  const slug = `${primaryName}_vs_${comparisonName}`;
+  if (target === "pdf") {
+    return `${slug}_comparison_report.pdf`;
+  }
+  if (target === "csv-monthly") {
+    return `${slug}_combined.csv`;
+  }
+  if (target === "csv-yearly") {
+    return `${slug}_yearly_combined.csv`;
+  }
+  if (target === "zip") {
+    return `${slug}_comparison_report.zip`;
+  }
+  if (previewPage.startsWith("year:")) {
+    return `${slug}_${previewPage.replace("year:", "")}_comparison.png`;
+  }
+  if (previewPage === "summary") {
+    return `${slug}_summary_comparison.png`;
+  }
+  if (previewPage === "yearly-combined") {
+    return `${slug}_yearly_combined_comparison.png`;
+  }
+  return `${slug}_comparison_preview.png`;
+};
+
+const getOverlappingYears = (primaryJob: QueueJob, comparisonJob: QueueJob | null) => {
+  if (
+    comparisonJob?.start_year == null ||
+    comparisonJob?.end_year == null ||
+    primaryJob.start_year == null ||
+    primaryJob.end_year == null
+  ) {
+    return [];
+  }
+  const startYear = Math.max(primaryJob.start_year, comparisonJob.start_year);
+  const endYear = Math.min(primaryJob.end_year, comparisonJob.end_year);
+  if (startYear > endYear) {
+    return [];
+  }
+  const years: number[] = [];
+  for (let year = startYear; year <= endYear; year += 1) {
+    years.push(year);
+  }
+  return years;
 };
 
 type CustomDownloadTarget = "pdf" | "page" | "csv-monthly" | "csv-yearly" | "zip";
@@ -454,9 +614,14 @@ const ScaleControlsSection = ({
 
 const CustomDownloadModal = () => {
   const job = useStore((state) => state.customDownloadJob);
+  const queue = useStore((state) => state.queue);
+  const backlog = useStore((state) => state.backlog);
   const onClose = useStore((state) => state.closeCustomDownload);
   const authAxios = useStore((state) => state.authAxios);
   const setErrorMessage = useStore((state) => state.setErrorMessage);
+
+  const [modalMode, setModalMode] = useState<CustomDownloadModalMode>("custom");
+  const [comparisonJobKey, setComparisonJobKey] = useState("");
 
   const [etUnits, setEtUnits] = useState<ReportUnit>("metric");
   const [pptUnits, setPptUnits] = useState<ReportUnit>("metric");
@@ -470,6 +635,8 @@ const CustomDownloadModal = () => {
   const [pptCustomMin, setPptCustomMin] = useState("");
   const [pptCustomMax, setPptCustomMax] = useState("");
   const [showMonthlyAverages, setShowMonthlyAverages] = useState(false);
+  const [mapTileMode, setMapTileMode] = useState<MapTileMode>("yearly_total");
+  const [mapTileMonth, setMapTileMonth] = useState(1);
   const [includeYearlyCombined, setIncludeYearlyCombined] = useState(false);
   const [previewPage, setPreviewPage] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -492,17 +659,44 @@ const CustomDownloadModal = () => {
   const pendingPptCustomDefaultsRef = useRef(false);
 
   const open = job != null;
+  const isComparisonMode = modalMode === "comparison";
+
+  const comparisonJobOptions = useMemo(() => {
+    if (!job) {
+      return [];
+    }
+    const candidates = [...queue, ...backlog].filter(
+      (candidate) =>
+        candidate.key !== job.key &&
+        candidate.status === "Complete" &&
+        candidate.start_year != null &&
+        candidate.end_year != null,
+    );
+    const uniqueJobs = new Map<string, QueueJob>();
+    for (const candidate of candidates) {
+      uniqueJobs.set(candidate.key, candidate);
+    }
+    return Array.from(uniqueJobs.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [backlog, job, queue]);
+
+  const selectedComparisonJob = useMemo(
+    () => comparisonJobOptions.find((candidate) => candidate.key === comparisonJobKey) ?? null,
+    [comparisonJobKey, comparisonJobOptions],
+  );
 
   const yearOptions = useMemo(() => {
     if (!job?.start_year || !job?.end_year) {
       return [];
+    }
+    if (isComparisonMode) {
+      return getOverlappingYears(job, selectedComparisonJob);
     }
     const years: number[] = [];
     for (let year = job.start_year; year <= job.end_year; year += 1) {
       years.push(year);
     }
     return years;
-  }, [job?.end_year, job?.start_year]);
+  }, [isComparisonMode, job, selectedComparisonJob]);
 
   const previewPageOptions = useMemo(() => {
     const options = yearOptions.map((year) => ({
@@ -541,8 +735,10 @@ const CustomDownloadModal = () => {
     setPreviewPage(previewPageOptions[previewPageIndex + 1].value);
   };
 
-  const previewNeedsReportOptions = previewPage.startsWith("year:");
+  const previewNeedsMapOptions = previewPage.startsWith("year:");
   const previewNeedsChartOptions = !previewPage.startsWith("documentation:");
+  const comparisonReady =
+    !isComparisonMode || previewPage.startsWith("documentation:") || (comparisonJobKey !== "" && yearOptions.length > 0);
   const mapCustomRangeSelected = colorScale === "custom";
   const etEtoCustomRangeSelected = etEtoScale === "custom";
   const pptCustomRangeSelected = pptScale === "custom";
@@ -596,6 +792,8 @@ const CustomDownloadModal = () => {
     scaleBoundsRef.current = null;
     setEtUnits("metric");
     setPptUnits("metric");
+    setModalMode("custom");
+    setComparisonJobKey("");
     setColorScale("across_years");
     setEtCustomMin("");
     setEtCustomMax("");
@@ -615,6 +813,32 @@ const CustomDownloadModal = () => {
   }, [job, open]);
 
   useEffect(() => {
+    if (!isComparisonMode || !job || comparisonJobOptions.length === 0) {
+      return;
+    }
+    if (!comparisonJobKey || !comparisonJobOptions.some((candidate) => candidate.key === comparisonJobKey)) {
+      setComparisonJobKey(comparisonJobOptions[0].key);
+    }
+  }, [comparisonJobKey, comparisonJobOptions, isComparisonMode, job]);
+
+  useEffect(() => {
+    if (!isComparisonMode || !job || !selectedComparisonJob) {
+      return;
+    }
+    const overlappingYears = getOverlappingYears(job, selectedComparisonJob);
+    if (overlappingYears.length === 0) {
+      setPreviewPage("summary");
+      return;
+    }
+    if (previewPage.startsWith("year:")) {
+      const previewYear = Number(previewPage.replace("year:", ""));
+      if (!overlappingYears.includes(previewYear)) {
+        setPreviewPage(`year:${overlappingYears[overlappingYears.length - 1]}`);
+      }
+    }
+  }, [isComparisonMode, job, previewPage, selectedComparisonJob]);
+
+  useEffect(() => {
     if (!includeYearlyCombined && previewPage === "yearly-combined") {
       setPreviewPage("summary");
     }
@@ -622,6 +846,9 @@ const CustomDownloadModal = () => {
 
   useEffect(() => {
     if (!open || !job || boundsYear == null) {
+      return;
+    }
+    if (isComparisonMode && !comparisonJobKey) {
       return;
     }
 
@@ -640,17 +867,21 @@ const CustomDownloadModal = () => {
           etUnits,
           pptUnits,
         });
-        const response = await axiosInstance.get(`${API_URL}/custom-report/bounds?${params.toString()}`);
+        if (isComparisonMode) {
+          params.set("comparisonKey", comparisonJobKey);
+        }
+        const endpoint = isComparisonMode ? "/comparison-report/bounds" : "/custom-report/bounds";
+        const response = await axiosInstance.get(`${API_URL}${endpoint}?${params.toString()}`);
         if (cancelled) {
           return;
         }
-        const bounds = response.data as ReportScaleBounds;
-        scaleBoundsRef.current = bounds;
-        setScaleBounds(bounds);
-        if (pendingMapCustomDefaultsRef.current) {
+        const bounds = response.data as ReportScaleBounds | ComparisonScaleBounds;
+        scaleBoundsRef.current = bounds as ReportScaleBounds;
+        setScaleBounds(bounds as ReportScaleBounds);
+        if (pendingMapCustomDefaultsRef.current && scaleBounds?.map) {
           const sourceMode =
             previousMapScaleRef.current === "custom" ? "across_years" : previousMapScaleRef.current;
-          if (applyCustomDefaultsForScale(bounds.map, sourceMode, setEtCustomMin, setEtCustomMax)) {
+          if (applyCustomDefaultsForScale(scaleBounds.map, sourceMode, setEtCustomMin, setEtCustomMax)) {
             pendingMapCustomDefaultsRef.current = false;
             deferMapCustomPreviewRef.current = false;
           }
@@ -683,7 +914,17 @@ const CustomDownloadModal = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyCustomDefaultsForScale, authAxios, boundsYear, etUnits, job, open, pptUnits]);
+  }, [
+    applyCustomDefaultsForScale,
+    authAxios,
+    boundsYear,
+    comparisonJobKey,
+    etUnits,
+    isComparisonMode,
+    job,
+    open,
+    pptUnits,
+  ]);
 
   const handleScaleModeChange = (
     currentScale: ColorScaleMode,
@@ -757,11 +998,11 @@ const CustomDownloadModal = () => {
   const loadPreview = useCallback(async (options: { forceRefresh?: boolean } = {}) => {
     const { forceRefresh = false } = options;
 
-    if (!job || !previewPage) {
+    if (!job || !previewPage || !comparisonReady) {
       return;
     }
 
-    if (previewNeedsReportOptions && mapCustomRangeSelected && (!etCustomMin.trim() || !etCustomMax.trim())) {
+    if (previewNeedsMapOptions && mapCustomRangeSelected && (!etCustomMin.trim() || !etCustomMax.trim())) {
       return;
     }
     if (previewNeedsChartOptions && etEtoCustomRangeSelected && (!etEtoCustomMin.trim() || !etEtoCustomMax.trim())) {
@@ -771,21 +1012,25 @@ const CustomDownloadModal = () => {
       return;
     }
 
-    const requestKey = buildPreviewRequestKey({
+    const requestKey = JSON.stringify({
+      modalMode,
+      comparisonJobKey: isComparisonMode ? comparisonJobKey : "",
       previewPage,
       etUnits,
       pptUnits,
       colorScale,
-      etCustomMin,
-      etCustomMax,
+      etCustomMin: colorScale !== "custom" ? "" : etCustomMin.trim(),
+      etCustomMax: colorScale !== "custom" ? "" : etCustomMax.trim(),
       etEtoScale,
-      etEtoCustomMin,
-      etEtoCustomMax,
+      etEtoCustomMin: etEtoScale === "custom" ? etEtoCustomMin.trim() : "",
+      etEtoCustomMax: etEtoScale === "custom" ? etEtoCustomMax.trim() : "",
       pptScale,
-      pptCustomMin,
-      pptCustomMax,
-      showMonthlyAverages,
-      previewVersion: CUSTOM_REPORT_PREVIEW_VERSION,
+      pptCustomMin: pptScale === "custom" ? pptCustomMin.trim() : "",
+      pptCustomMax: pptScale === "custom" ? pptCustomMax.trim() : "",
+      showMonthlyAverages: isComparisonMode ? false : showMonthlyAverages,
+      mapTileMode: isComparisonMode ? mapTileMode : "",
+      mapTileMonth: isComparisonMode ? mapTileMonth : "",
+      previewVersion: isComparisonMode ? COMPARISON_REPORT_PREVIEW_VERSION : CUSTOM_REPORT_PREVIEW_VERSION,
     });
 
     if (!forceRefresh && requestKey === loadedPreviewKeyRef.current && previewUrl) {
@@ -801,25 +1046,66 @@ const CustomDownloadModal = () => {
     setPreviewError(null);
 
     try {
-      const params = buildPreviewParams({
-        jobKey: job.key,
-        previewPage,
-        etUnits,
-        pptUnits,
-        colorScale,
-        etCustomMin,
-        etCustomMax,
-        etEtoScale,
-        etEtoCustomMin,
-        etEtoCustomMax,
-        pptScale,
-        pptCustomMin,
-        pptCustomMax,
-        showMonthlyAverages,
-        forceRefresh,
-      });
+      const isDocumentationPreview = previewPage.startsWith("documentation:");
+      const params = isDocumentationPreview
+        ? buildPreviewParams({
+          jobKey: job.key,
+          previewPage,
+          etUnits,
+          pptUnits,
+          colorScale,
+          etCustomMin,
+          etCustomMax,
+          etEtoScale,
+          etEtoCustomMin,
+          etEtoCustomMax,
+          pptScale,
+          pptCustomMin,
+          pptCustomMax,
+          showMonthlyAverages,
+          forceRefresh,
+        })
+        : isComparisonMode
+          ? buildComparisonPreviewParams({
+            jobKey: job.key,
+            comparisonJobKey,
+            previewPage,
+            etUnits,
+            pptUnits,
+            etEtoScale,
+            etEtoCustomMin,
+            etEtoCustomMax,
+            pptScale,
+            pptCustomMin,
+            pptCustomMax,
+            mapTileMode,
+            mapTileMonth,
+            colorScale,
+            etCustomMin,
+            etCustomMax,
+            forceRefresh,
+          })
+          : buildPreviewParams({
+            jobKey: job.key,
+            previewPage,
+            etUnits,
+            pptUnits,
+            colorScale,
+            etCustomMin,
+            etCustomMax,
+            etEtoScale,
+            etEtoCustomMin,
+            etEtoCustomMax,
+            pptScale,
+            pptCustomMin,
+            pptCustomMax,
+            showMonthlyAverages,
+            forceRefresh,
+          });
 
-      const response = await axiosInstance.get(`${API_URL}/custom-report/preview?${params.toString()}`, {
+      const endpoint =
+        isDocumentationPreview || !isComparisonMode ? "/custom-report/preview" : "/comparison-report/preview";
+      const response = await axiosInstance.get(`${API_URL}${endpoint}?${params.toString()}`, {
         responseType: "blob",
         headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
       });
@@ -840,6 +1126,8 @@ const CustomDownloadModal = () => {
   }, [
     authAxios,
     colorScale,
+    comparisonJobKey,
+    comparisonReady,
     etCustomMax,
     etCustomMin,
     etEtoCustomMax,
@@ -847,15 +1135,19 @@ const CustomDownloadModal = () => {
     etEtoCustomRangeSelected,
     etEtoScale,
     etUnits,
+    isComparisonMode,
     job,
     mapCustomRangeSelected,
+    mapTileMode,
+    mapTileMonth,
+    modalMode,
     pptCustomMax,
     pptCustomMin,
     pptCustomRangeSelected,
     pptScale,
     pptUnits,
     previewNeedsChartOptions,
-    previewNeedsReportOptions,
+    previewNeedsMapOptions,
     previewPage,
     previewUrl,
     showMonthlyAverages,
@@ -865,7 +1157,7 @@ const CustomDownloadModal = () => {
     deferMapCustomPreviewRef.current = false;
     deferEtEtoCustomPreviewRef.current = false;
     deferPptCustomPreviewRef.current = false;
-  }, [etUnits, pptUnits, previewPage, showMonthlyAverages]);
+  }, [etUnits, pptUnits, previewPage, showMonthlyAverages, mapTileMode, mapTileMonth]);
 
   useEffect(() => {
     if (mapCustomRangeSelected && etCustomMin.trim() && etCustomMax.trim()) {
@@ -890,7 +1182,7 @@ const CustomDownloadModal = () => {
   ]);
 
   useEffect(() => {
-    if (!open || !job || !previewPage) {
+    if (!open || !job || !previewPage || !comparisonReady) {
       return;
     }
 
@@ -923,11 +1215,27 @@ const CustomDownloadModal = () => {
     pptCustomMin,
     pptCustomMax,
     showMonthlyAverages,
+    mapTileMode,
+    mapTileMonth,
     loadPreview,
     mapCustomRangeSelected,
     etEtoCustomRangeSelected,
     pptCustomRangeSelected,
+    modalMode,
+    comparisonJobKey,
+    comparisonReady,
   ]);
+
+  useEffect(() => {
+    loadedPreviewKeyRef.current = null;
+    setPreviewUrl((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev);
+      }
+      return null;
+    });
+    setPreviewError(null);
+  }, [modalMode, comparisonJobKey]);
 
   useEffect(() => {
     return () => {
@@ -946,7 +1254,17 @@ const CustomDownloadModal = () => {
     if (!job) {
       return false;
     }
-    if (mapCustomRangeSelected && (!etCustomMin.trim() || !etCustomMax.trim())) {
+    if (isComparisonMode) {
+      if (!comparisonJobKey) {
+        setErrorMessage("Select a comparison job before downloading.");
+        return false;
+      }
+      if (yearOptions.length === 0) {
+        setErrorMessage("Selected jobs do not have overlapping years.");
+        return false;
+      }
+    }
+    if (previewPage.startsWith("year:") && mapCustomRangeSelected && (!etCustomMin.trim() || !etCustomMax.trim())) {
       setErrorMessage("Enter custom map color scale min and max values before downloading.");
       return false;
     }
@@ -973,23 +1291,43 @@ const CustomDownloadModal = () => {
 
     setDownloading(true);
     try {
-      const params = buildCustomDownloadParams({
-        jobKey: job.key,
-        etUnits,
-        pptUnits,
-        colorScale,
-        etCustomMin,
-        etCustomMax,
-        etEtoScale,
-        etEtoCustomMin,
-        etEtoCustomMax,
-        pptScale,
-        pptCustomMin,
-        pptCustomMax,
-        showMonthlyAverages,
-        includeYearlyCombined,
-        previewPage: target === "page" ? previewPage : undefined,
-      });
+      const params = isComparisonMode
+        ? buildComparisonDownloadParams({
+          jobKey: job.key,
+          comparisonJobKey,
+          etUnits,
+          pptUnits,
+          etEtoScale,
+          etEtoCustomMin,
+          etEtoCustomMax,
+          pptScale,
+          pptCustomMin,
+          pptCustomMax,
+          includeYearlyCombined,
+          previewPage: target === "page" ? previewPage : undefined,
+          mapTileMode,
+          mapTileMonth,
+          colorScale,
+          etCustomMin,
+          etCustomMax,
+        })
+        : buildCustomDownloadParams({
+          jobKey: job.key,
+          etUnits,
+          pptUnits,
+          colorScale,
+          etCustomMin,
+          etCustomMax,
+          etEtoScale,
+          etEtoCustomMin,
+          etEtoCustomMax,
+          pptScale,
+          pptCustomMin,
+          pptCustomMax,
+          showMonthlyAverages,
+          includeYearlyCombined,
+          previewPage: target === "page" ? previewPage : undefined,
+        });
 
       if (target === "csv-monthly") {
         params.set("csvKind", "monthly");
@@ -997,13 +1335,21 @@ const CustomDownloadModal = () => {
         params.set("csvKind", "yearly");
       }
 
-      const endpoints: Record<CustomDownloadTarget, string> = {
-        pdf: "/custom-report/download",
-        page: "/custom-report/download/page",
-        "csv-monthly": "/custom-report/download/csv",
-        "csv-yearly": "/custom-report/download/csv",
-        zip: "/custom-report/download/zip",
-      };
+      const endpoints: Record<CustomDownloadTarget, string> = isComparisonMode
+        ? {
+          pdf: "/comparison-report/download",
+          page: "/comparison-report/download/page",
+          "csv-monthly": "/comparison-report/download/csv",
+          "csv-yearly": "/comparison-report/download/csv",
+          zip: "/comparison-report/download/zip",
+        }
+        : {
+          pdf: "/custom-report/download",
+          page: "/custom-report/download/page",
+          "csv-monthly": "/custom-report/download/csv",
+          "csv-yearly": "/custom-report/download/csv",
+          zip: "/custom-report/download/zip",
+        };
 
       const mimeTypes: Record<CustomDownloadTarget, string> = {
         pdf: "application/pdf",
@@ -1013,13 +1359,22 @@ const CustomDownloadModal = () => {
         zip: "application/zip",
       };
 
-      const filenames: Record<CustomDownloadTarget, string> = {
-        pdf: `${job.name}_custom_report.pdf`,
-        page: getPreviewPageDownloadName(job.name, previewPage),
-        "csv-monthly": `${job.name}_combined.csv`,
-        "csv-yearly": `${job.name}_yearly_combined.csv`,
-        zip: `${job.name}_custom_report.zip`,
-      };
+      const comparisonName = selectedComparisonJob?.name ?? "comparison";
+      const filenames: Record<CustomDownloadTarget, string> = isComparisonMode
+        ? {
+          pdf: getComparisonDownloadFilename(job.name, comparisonName, "pdf", previewPage),
+          page: getComparisonDownloadFilename(job.name, comparisonName, "page", previewPage),
+          "csv-monthly": getComparisonDownloadFilename(job.name, comparisonName, "csv-monthly", previewPage),
+          "csv-yearly": getComparisonDownloadFilename(job.name, comparisonName, "csv-yearly", previewPage),
+          zip: getComparisonDownloadFilename(job.name, comparisonName, "zip", previewPage),
+        }
+        : {
+          pdf: `${job.name}_custom_report.pdf`,
+          page: getPreviewPageDownloadName(job.name, previewPage),
+          "csv-monthly": `${job.name}_combined.csv`,
+          "csv-yearly": `${job.name}_yearly_combined.csv`,
+          zip: `${job.name}_custom_report.zip`,
+        };
 
       const response = await axiosInstance.get(`${API_URL}${endpoints[target]}?${params.toString()}`, {
         responseType: "arraybuffer",
@@ -1029,7 +1384,9 @@ const CustomDownloadModal = () => {
     } catch (error: unknown) {
       const fallback =
         target === "pdf"
-          ? "Failed to download custom report"
+          ? isComparisonMode
+            ? "Failed to download comparison report"
+            : "Failed to download custom report"
           : target === "page"
             ? "Failed to download preview page"
             : target === "csv-monthly" || target === "csv-yearly"
@@ -1063,11 +1420,13 @@ const CustomDownloadModal = () => {
   }
 
   const selectedPreviewLabel = previewPageOptions.find((option) => option.value === previewPage)?.label ?? "Preview";
+  const comparisonOverlapMissing = isComparisonMode && comparisonJobKey !== "" && yearOptions.length === 0;
 
   return (
     <Modal
       open={open}
       onClose={onClose}
+      disableEnforceFocus
       slotProps={{
         backdrop: {
           sx: { backgroundColor: "rgb(0 0 0 / 50%)" },
@@ -1082,6 +1441,7 @@ const CustomDownloadModal = () => {
             </Typography>
             <Typography variant="body2" sx={{ color: "var(--st-gray-50)", mt: 0.25 }}>
               {job.name}
+              {isComparisonMode && selectedComparisonJob ? ` vs ${selectedComparisonJob.name}` : ""}
             </Typography>
           </Box>
           <IconButton onClick={onClose} aria-label="Close custom download" size="small" sx={{ color: "var(--st-gray-50)" }}>
@@ -1089,8 +1449,40 @@ const CustomDownloadModal = () => {
           </IconButton>
         </Box>
 
+        <Tabs
+          value={modalMode}
+          onChange={(_event, value: CustomDownloadModalMode) => setModalMode(value)}
+          className="custom-download-modal__tabs"
+        >
+          <Tab label="Custom Report" value="custom" disableRipple />
+          <Tab label="Comparison Report" value="comparison" disableRipple />
+        </Tabs>
+
         <Box className="custom-download-modal__body">
           <Box className="custom-download-modal__controls">
+            {isComparisonMode && job && (
+              <ComparisonJobPicker
+                primaryJob={job}
+                jobs={comparisonJobOptions}
+                selectedJobKey={comparisonJobKey}
+                onSelect={setComparisonJobKey}
+                disabled={comparisonJobOptions.length === 0}
+                authAxios={authAxios}
+              />
+            )}
+
+            {comparisonOverlapMissing && (
+              <Typography variant="body2" sx={{ color: "var(--st-red)" }}>
+                Selected jobs do not have overlapping years.
+              </Typography>
+            )}
+
+            {comparisonJobOptions.length === 0 && isComparisonMode && (
+              <Typography variant="body2" sx={{ color: "var(--st-gray-50)" }}>
+                No other completed jobs are available for comparison.
+              </Typography>
+            )}
+
             <FormControl size="small" fullWidth>
               <InputLabel id="custom-et-units-label">ET units</InputLabel>
               <Select
@@ -1139,16 +1531,57 @@ const CustomDownloadModal = () => {
               </Select>
             </FormControl>
 
-            <FormControlLabel
-              control={
-                <Checkbox
-                  size="small"
-                  checked={showMonthlyAverages}
-                  onChange={(event) => setShowMonthlyAverages(event.target.checked)}
-                />
-              }
-              label="Show monthly ET labels"
-            />
+            {isComparisonMode && previewPage.startsWith("year:") && (
+              <>
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="comparison-map-tile-mode-label">Map thumbnail</InputLabel>
+                  <Select
+                    labelId="comparison-map-tile-mode-label"
+                    label="Map thumbnail"
+                    value={mapTileMode}
+                    onChange={(event) => setMapTileMode(event.target.value as MapTileMode)}
+                  >
+                    <MenuItem value="yearly_total">Yearly total</MenuItem>
+                    <MenuItem value="spring">Spring total</MenuItem>
+                    <MenuItem value="summer">Summer total</MenuItem>
+                    <MenuItem value="fall">Fall total</MenuItem>
+                    <MenuItem value="winter">Winter total</MenuItem>
+                    <MenuItem value="month">Specific month</MenuItem>
+                  </Select>
+                </FormControl>
+
+                {mapTileMode === "month" && (
+                  <FormControl size="small" fullWidth>
+                    <InputLabel id="comparison-map-tile-month-label">Thumbnail month</InputLabel>
+                    <Select
+                      labelId="comparison-map-tile-month-label"
+                      label="Thumbnail month"
+                      value={String(mapTileMonth)}
+                      onChange={(event) => setMapTileMonth(Number(event.target.value))}
+                    >
+                      {MONTH_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={String(option.value)}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+              </>
+            )}
+
+            {!isComparisonMode && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={showMonthlyAverages}
+                    onChange={(event) => setShowMonthlyAverages(event.target.checked)}
+                  />
+                }
+                label="Show monthly ET labels"
+              />
+            )}
 
             <FormControlLabel
               control={
@@ -1301,7 +1734,7 @@ const CustomDownloadModal = () => {
           <ButtonGroup variant="contained" size="small" className="custom-download-modal__download-group">
             <Button
               onClick={handleDownloadPdf}
-              disabled={downloading || previewLoading}
+              disabled={downloading || previewLoading || comparisonOverlapMissing || !comparisonReady}
               startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
               {downloading ? "Generating..." : "Download report"}
@@ -1309,7 +1742,7 @@ const CustomDownloadModal = () => {
             <Button
               size="small"
               onClick={handleDownloadMenuOpen}
-              disabled={downloading || previewLoading}
+              disabled={downloading || previewLoading || comparisonOverlapMissing || !comparisonReady}
               aria-label="More download options"
             >
               <ArrowDropDownIcon />

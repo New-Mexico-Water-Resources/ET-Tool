@@ -3,7 +3,7 @@ import logging
 import shutil
 import subprocess
 import numpy as np
-from os import makedirs
+from os import makedirs, remove
 from os.path import join, basename, abspath, dirname, exists
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -168,14 +168,25 @@ def generate_acre_feet_report(figure_directory, ROI_name, status_filename, text_
 
 def append_data_documentation(report_filename):
     """Appends the data documentation to the report."""
-    # Merge data documentation into each report
     data_documentation_filename = join(abspath(dirname(__file__)), "et_tool_data_docs.pdf")
+    if not exists(data_documentation_filename):
+        logger.error("Documentation PDF not found: %s", data_documentation_filename)
+        raise FileNotFoundError(f"Documentation PDF not found: {data_documentation_filename}")
 
-    merger = PdfMerger()
-    merger.append(report_filename)
-    merger.append(data_documentation_filename)
-    merger.write(report_filename)
-    merger.close()
+    tmp_filename = f"{report_filename}.with_docs.tmp"
+    try:
+        merger = PdfMerger()
+        merger.append(report_filename)
+        merger.append(data_documentation_filename)
+        merger.write(tmp_filename)
+        merger.close()
+        shutil.move(tmp_filename, report_filename)
+    except Exception:
+        if exists(tmp_filename):
+            remove(tmp_filename)
+        raise
+
+    return report_filename
 
 
 DOC_PREVIEW_CACHE_DIR = join(abspath(dirname(__file__)), "documentation_preview_cache")
