@@ -296,6 +296,7 @@ interface Store {
   defaultDownloadOptions: DefaultDownloadOptionsConfig;
   fetchDefaultDownloadOptions: () => void;
   renameJob: (jobKey: string, newName: string) => Promise<QueueJob>;
+  renameJobGroup: (groupId: string, newName: string) => Promise<{ groupId: string; group_name: string }>;
 }
 
 const useStore = create<Store>()(
@@ -1131,6 +1132,46 @@ const useStore = create<Store>()(
         });
         get().fetchQueue();
         return updatedJob;
+      },
+      renameJobGroup: async (groupId, newName) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          throw new Error("Not authenticated");
+        }
+
+        const response = await axiosInstance.post(`${API_URL}/queue/rename_group`, {
+          groupId,
+          name: newName,
+        });
+
+        const { group_name: groupName } = response.data;
+        set((state) => {
+          const updateJobList = (jobs: QueueJob[]) =>
+            jobs.map((job) => (job.group_id === groupId ? { ...job, group_name: groupName } : job));
+
+          const activeJobGroup =
+            state.activeJobGroup?.groupId === groupId
+              ? {
+                  ...state.activeJobGroup,
+                  groupName,
+                  jobs: updateJobList(state.activeJobGroup.jobs),
+                }
+              : state.activeJobGroup;
+
+          const activeJob =
+            activeJobGroup && state.activeJob?.group_id === groupId
+              ? { ...state.activeJob, name: groupName }
+              : state.activeJob;
+
+          return {
+            queue: updateJobList(state.queue),
+            backlog: updateJobList(state.backlog),
+            activeJobGroup,
+            activeJob,
+          };
+        });
+        get().fetchQueue();
+        return response.data;
       },
       restartJob: (jobKey) => {
         const axiosInstance = get().authAxios();

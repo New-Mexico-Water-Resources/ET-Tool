@@ -514,7 +514,7 @@ def aggregate_landsat_pass_stats_from_layers(
             s3_client=s3_client,
         )
         if layer_path is None:
-            logger.info(f"Missing Landsat pass layer for tile {hv} {year}-{month:02d}")
+            logger.info(f"Missing Cloud Coverage Landsat pass layer for tile {hv} {year}-{month:02d}")
             return None
 
         with rasterio.open(layer_path) as src:
