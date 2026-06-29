@@ -92,6 +92,8 @@ export interface QueueJob {
   finished?: string | null;
   submitted?: string | null;
   submittedAt?: number | null;
+  startedAt?: number | null;
+  endedAt?: number | null;
   timeElapsed?: string | null;
   status_msg?: string | null;
   paused_year?: number | null;

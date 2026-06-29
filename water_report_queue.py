@@ -18,6 +18,8 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
+from water_rights_visualizer.job_notification import send_job_completion_notification
+
 load_dotenv()
 
 
@@ -356,6 +358,15 @@ def write_record(record):
     report_queue.replace_one(db_filter, record, upsert=True)
 
 
+def notify_job_submitter(record, status):
+    try:
+        if send_job_completion_notification(record, status, logger=dlog):
+            record["notification_sent_at"] = int(time.time() * 1000)
+            write_record(record)
+    except Exception as e:
+        dlog(f"Failed to send job notification for {record.get('key', 'unknown')}: {e}", warning=True)
+
+
 def process_report(record):
     try:
         status_msg = exec_report(record)
@@ -376,6 +387,7 @@ def process_report(record):
         # update the queue file again with the final status
         update_status(record, status)
         write_record(record)
+        notify_job_submitter(record, status)
     except Exception as e:
         if isinstance(e, WaterReportException) and e.manually_killed:
             dlog(f"Record {record['key']} has been killed. Skipping update...", fail=True)
@@ -385,6 +397,7 @@ def process_report(record):
         record["status_msg"] = status_msg
         update_status(record, "Failed")
         write_record(record)
+        notify_job_submitter(record, "Failed")
 
 
 # scan the report queue for any files that are "Pending"

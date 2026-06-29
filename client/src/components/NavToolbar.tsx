@@ -5,14 +5,17 @@ import {
   Box,
   CircularProgress,
   Divider,
+  FormControlLabel,
   IconButton,
   ListItemIcon,
   Menu,
   MenuItem,
   Modal,
   Skeleton,
+  Switch,
   Tab,
   Tabs,
+  TextField,
   Toolbar,
   Tooltip,
   Typography,
@@ -25,6 +28,7 @@ import Logout from "@mui/icons-material/Logout";
 import GroupIcon from "@mui/icons-material/Group";
 import CloseIcon from "@mui/icons-material/Close";
 import LayersIcon from "@mui/icons-material/Layers";
+import EmailIcon from "@mui/icons-material/Email";
 
 import Markdown from "react-markdown";
 
@@ -85,6 +89,10 @@ const Profile = () => {
   const { user, isAuthenticated, isLoading, logout } = useAuth0();
   const fetchQueue = useStore((state) => state.fetchQueue);
   const fetchUserInfo = useStore((state) => state.fetchUserInfo);
+  const userInfo = useStore((state) => state.userInfo);
+  const updateUserSettings = useStore((state) => state.updateUserSettings);
+  const updateAppSettings = useStore((state) => state.updateAppSettings);
+  const sendTestJobNotificationEmail = useStore((state) => state.sendTestJobNotificationEmail);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -94,7 +102,87 @@ const Profile = () => {
   }, [user, isAuthenticated]);
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [updatingAppSettings, setUpdatingAppSettings] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const open = Boolean(anchorEl);
+
+  const isAdmin = useMemo(() => userInfo?.permissions.includes("write:admin") || false, [userInfo?.permissions]);
+  const jobCompletionEmails = userInfo?.settings?.jobCompletionEmails ?? true;
+  const jobNotificationsEnabled = userInfo?.appFeatures?.jobNotificationsEnabled ?? false;
+  const displayName = userInfo?.settings?.displayName || userInfo?.name || user?.name || "";
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setFirstName(userInfo?.settings?.firstName || "");
+    setLastName(userInfo?.settings?.lastName || "");
+  }, [open, userInfo?.settings?.firstName, userInfo?.settings?.lastName]);
+
+  const handleJobCompletionEmailsChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    setUpdatingSettings(true);
+    try {
+      await updateUserSettings({ jobCompletionEmails: event.target.checked });
+    } finally {
+      setUpdatingSettings(false);
+    }
+  };
+
+  const handleAdminJobNotificationsChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    setUpdatingAppSettings(true);
+    try {
+      await updateAppSettings({ jobNotificationsEnabled: event.target.checked });
+    } finally {
+      setUpdatingAppSettings(false);
+    }
+  };
+
+  const saveNameField = async (field: "firstName" | "lastName", value: string) => {
+    const currentValue = field === "firstName" ? userInfo?.settings?.firstName || "" : userInfo?.settings?.lastName || "";
+    if (value.trim() === currentValue.trim()) {
+      return;
+    }
+
+    setUpdatingSettings(true);
+    try {
+      await updateUserSettings({ [field]: value.trim() });
+    } finally {
+      setUpdatingSettings(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    setSendingTestEmail(true);
+    try {
+      await sendTestJobNotificationEmail();
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
+  const emailToggle = (
+    <FormControlLabel
+      sx={{
+        m: 0,
+        width: "100%",
+        color: "var(--st-gray-10)",
+        "& .MuiFormControlLabel-label": { fontSize: "14px" },
+      }}
+      control={
+        <Switch
+          size="small"
+          checked={jobCompletionEmails}
+          onChange={handleJobCompletionEmailsChange}
+          disabled={updatingSettings || !userInfo || !jobNotificationsEnabled}
+        />
+      }
+      label="Email me when my jobs complete"
+    />
+  );
 
   if (isLoading) {
     return <Skeleton variant="circular" width={32} height={32} sx={{ marginRight: "8px" }} />;
@@ -115,13 +203,16 @@ const Profile = () => {
         id="account-menu"
         open={open}
         onClose={() => setAnchorEl(null)}
-        onClick={() => setAnchorEl(null)}
+        disableEnforceFocus
+        autoFocus={false}
+        MenuListProps={{ autoFocusItem: false }}
         sx={{
           "& .MuiPaper-root": {
             background: "var(--st-gray-100)",
             overflow: "visible",
             filter: "drop-shadow(0px 2px 8px rgba(0,0,0,0.32))",
             mt: 1.5,
+            minWidth: 300,
             "&::before": {
               content: '""',
               display: "block",
@@ -144,7 +235,7 @@ const Profile = () => {
             <img style={{ width: "32px", borderRadius: "50%" }} src={user?.picture} alt={user?.name} />
           </Avatar>
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <span className="name">{user?.name}</span>
+            <span className="name">{displayName}</span>
             <div
               className="info"
               style={{ display: "flex", flexDirection: "column", fontSize: "12px", color: "var(--st-gray-30)" }}
@@ -154,6 +245,103 @@ const Profile = () => {
             </div>
           </div>
         </MenuItem>
+        <Divider />
+        <Box
+          sx={{ px: 2, py: 1 }}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <TextField
+              size="small"
+              label="First name"
+              value={firstName}
+              onChange={(event) => setFirstName(event.target.value)}
+              onBlur={(event) => void saveNameField("firstName", event.target.value)}
+              disabled={updatingSettings || !userInfo}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              size="small"
+              label="Last name"
+              value={lastName}
+              onChange={(event) => setLastName(event.target.value)}
+              onBlur={(event) => void saveNameField("lastName", event.target.value)}
+              disabled={updatingSettings || !userInfo}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+              sx={{ flex: 1 }}
+            />
+          </Box>
+        </Box>
+        <MenuItem
+          onClick={(event) => event.stopPropagation()}
+          sx={{ py: 0.5, "&:hover": { backgroundColor: "transparent" } }}
+        >
+          {jobNotificationsEnabled ? (
+            emailToggle
+          ) : (
+            <Tooltip title="An administrator has disabled job notification emails." placement="left">
+              <span style={{ width: "100%" }}>{emailToggle}</span>
+            </Tooltip>
+          )}
+        </MenuItem>
+        {isAdmin && (
+          <>
+            <Box
+              sx={{
+                px: 2,
+                pt: 1.25,
+                pb: 0.75,
+                mb: "8px",
+                borderBottom: "1px solid var(--st-gray-80)",
+                color: "var(--st-gray-50)",
+                fontSize: "11px",
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                userSelect: "none",
+              }}
+            >
+              ADMIN
+            </Box>
+            <MenuItem
+              onClick={(event) => event.stopPropagation()}
+              sx={{ py: 0.5, "&:hover": { backgroundColor: "transparent" } }}
+            >
+              <FormControlLabel
+                sx={{
+                  m: 0,
+                  width: "100%",
+                  color: "var(--st-gray-10)",
+                  "& .MuiFormControlLabel-label": { fontSize: "14px" },
+                }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={jobNotificationsEnabled}
+                    onChange={handleAdminJobNotificationsChange}
+                    disabled={updatingAppSettings || !userInfo}
+                  />
+                }
+                label="Enable job notification emails"
+              />
+            </MenuItem>
+            <MenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleSendTestEmail();
+              }}
+              disabled={sendingTestEmail || !jobNotificationsEnabled}
+            >
+              <ListItemIcon>
+                {sendingTestEmail ? <CircularProgress size={18} /> : <EmailIcon fontSize="small" />}
+              </ListItemIcon>
+              Send test email
+            </MenuItem>
+          </>
+        )}
         <Divider />
         <MenuItem
           onClick={() => {

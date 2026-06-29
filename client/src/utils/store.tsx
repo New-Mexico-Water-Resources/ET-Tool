@@ -3,6 +3,7 @@ import { devtools, persist } from "zustand/middleware";
 import axios, { AxiosInstance } from "axios";
 import { API_URL, ARD_TILES_DATA_VERSION, DATA_END_YEAR, ROLES } from "./constants";
 import { formatElapsedTime, formJobForQueue } from "./helpers";
+import { processJobNotificationCatchUp, processJobNotificationUpdates, registerSubmittedJob } from "./browserNotifications";
 import {
   combineGeojsonsToFeatureCollection,
   generateGroupId,
@@ -64,6 +65,17 @@ export interface JobStatus {
   timeRemaining: number;
 }
 
+export interface UserSettings {
+  jobCompletionEmails: boolean;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+}
+
+export interface AppFeatures {
+  jobNotificationsEnabled: boolean;
+}
+
 export interface UserInfo {
   sub: string;
   nickname: string;
@@ -73,6 +85,8 @@ export interface UserInfo {
   email: string;
   email_verified: boolean;
   permissions: string[];
+  settings?: UserSettings;
+  appFeatures?: AppFeatures;
 }
 
 export interface UserIdentity {
@@ -227,6 +241,9 @@ interface Store {
   setAuthToken: (authToken: string) => void;
   userInfo: UserInfo | null;
   fetchUserInfo: () => void;
+  updateUserSettings: (settings: Partial<UserSettings>) => Promise<void>;
+  updateAppSettings: (settings: Partial<AppFeatures>) => Promise<void>;
+  sendTestJobNotificationEmail: () => Promise<void>;
   authAxios: () => AxiosInstance | null;
   users: UserListingDetails[];
   totalUsers: number;
@@ -395,7 +412,68 @@ const useStore = create<Store>()(
 
         axiosInstance.get(`${API_URL}/user_info`).then((response) => {
           set({ userInfo: response.data });
+          const { queue, backlog } = get();
+          processJobNotificationCatchUp([...queue, ...backlog], response.data);
         });
+      },
+      updateUserSettings: async (settings) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        try {
+          const response = await axiosInstance.patch(`${API_URL}/user/settings`, settings);
+          const currentUserInfo = get().userInfo;
+          if (currentUserInfo) {
+            set({
+              userInfo: {
+                ...currentUserInfo,
+                name: response.data.settings.displayName || currentUserInfo.name,
+                settings: response.data.settings,
+              },
+            });
+          }
+        } catch (error: any) {
+          set({ errorMessage: error?.response?.data?.error || error?.message || "Error updating user settings" });
+          throw error;
+        }
+      },
+      updateAppSettings: async (settings) => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        try {
+          const response = await axiosInstance.patch(`${API_URL}/admin/app_settings`, settings);
+          const currentUserInfo = get().userInfo;
+          if (currentUserInfo) {
+            set({
+              userInfo: {
+                ...currentUserInfo,
+                appFeatures: response.data.appFeatures,
+              },
+            });
+          }
+        } catch (error: any) {
+          set({ errorMessage: error?.response?.data?.error || error?.message || "Error updating app settings" });
+          throw error;
+        }
+      },
+      sendTestJobNotificationEmail: async () => {
+        const axiosInstance = get().authAxios();
+        if (!axiosInstance) {
+          return;
+        }
+
+        try {
+          const response = await axiosInstance.post(`${API_URL}/admin/test_job_notification_email`);
+          set({ successMessage: response.data?.message || "Test email sent" });
+        } catch (error: any) {
+          set({ errorMessage: error?.response?.data?.error || error?.message || "Error sending test email" });
+          throw error;
+        }
       },
       authAxios: () => {
         const token = get().authToken;
@@ -431,14 +509,18 @@ const useStore = create<Store>()(
                 : job.submitted
                   ? new Date(job.submitted).getTime()
                   : null;
+            const startedAt =
+              typeof job.started === "number" ? job.started : job.started ? new Date(job.started).getTime() : null;
+            const endedAt = typeof job.ended === "number" ? job.ended : job.ended ? new Date(job.ended).getTime() : null;
+
             job.submittedAt = Number.isFinite(submittedAt) ? submittedAt : null;
+            job.startedAt = Number.isFinite(startedAt) ? startedAt : null;
+            job.endedAt = Number.isFinite(endedAt) ? endedAt : null;
             job.submitted = job.submittedAt ? new Date(job.submittedAt).toLocaleString() : null;
-            job.started = job.started ? new Date(job.started).toLocaleString() : null;
-            job.ended = job.ended ? new Date(job.ended).toLocaleString() : null;
+            job.started = job.startedAt ? new Date(job.startedAt).toLocaleString() : null;
+            job.ended = job.endedAt ? new Date(job.endedAt).toLocaleString() : null;
             job.timeElapsed =
-              job.started && job.ended
-                ? formatElapsedTime(new Date(job.ended).getTime() - new Date(job.started).getTime())
-                : null;
+              job.startedAt && job.endedAt ? formatElapsedTime(job.endedAt - job.startedAt) : null;
             return job;
           });
 
@@ -474,6 +556,11 @@ const useStore = create<Store>()(
           }
 
           if (jobsChanged) {
+            processJobNotificationUpdates(
+              [...existingQueue, ...existingBacklog],
+              [...queue, ...backlog],
+              get().userInfo
+            );
             set({ queue, backlog });
           }
         });
@@ -571,6 +658,10 @@ const useStore = create<Store>()(
             let message = response?.data?.status || "";
             newJob = response.data?.entry || newJob;
 
+            if (newJob?.key) {
+              registerSubmittedJob(newJob.key);
+            }
+
             set({
               showUploadDialog: false,
               previewMode: false,
@@ -636,6 +727,9 @@ const useStore = create<Store>()(
               geojson: job.loaded_geo_json,
               ...(groupId ? { groupId, groupName } : {}),
             });
+            if (response.data?.entry?.key) {
+              registerSubmittedJob(response.data.entry.key);
+            }
             if (i === 0 && response.data?.entry) {
               activeJob = response.data.entry;
 

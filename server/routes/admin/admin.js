@@ -2,6 +2,9 @@ const express = require("express");
 const router = express.Router();
 const constants = require("../../constants");
 const { ManagementClient } = require("auth0");
+const { sendTestJobNotificationEmail } = require("../../utils/jobNotificationEmail");
+const { getAppFeatures, updateAppFeatures, areJobNotificationsActive } = require("../../utils/appSettings");
+const { ensureUserProfile } = require("../../utils/userPreferences");
 
 const cachedUsers = {
   data: [],
@@ -200,6 +203,91 @@ router.post("/update_user", async (req, res) => {
   } catch (error) {
     console.error("Failed to update user from Auth0:", error);
     res.status(500).send({ error: "Failed to update user" });
+  }
+});
+
+router.get("/app_settings", async (req, res) => {
+  let isAdmin = req.auth?.payload?.permissions?.includes("write:admin") || false;
+  if (!isAdmin) {
+    res.status(401).send({ error: "Unauthorized: missing write:admin permission" });
+    return;
+  }
+
+  try {
+    const appFeatures = await getAppFeatures();
+    res.status(200).send({ appFeatures });
+  } catch (error) {
+    console.error("Failed to fetch app settings:", error);
+    res.status(500).send({ error: "Failed to fetch app settings" });
+  }
+});
+
+router.patch("/app_settings", async (req, res) => {
+  let isAdmin = req.auth?.payload?.permissions?.includes("write:admin") || false;
+  if (!isAdmin) {
+    res.status(401).send({ error: "Unauthorized: missing write:admin permission" });
+    return;
+  }
+
+  const { jobNotificationsEnabled } = req.body || {};
+  if (jobNotificationsEnabled !== undefined && typeof jobNotificationsEnabled !== "boolean") {
+    res.status(400).send({ error: "jobNotificationsEnabled must be a boolean" });
+    return;
+  }
+
+  try {
+    const appFeatures = await updateAppFeatures(req.auth.payload.sub, { jobNotificationsEnabled });
+    res.status(200).send({ appFeatures });
+  } catch (error) {
+    console.error("Failed to update app settings:", error);
+    res.status(500).send({ error: "Failed to update app settings" });
+  }
+});
+
+router.post("/test_job_notification_email", async (req, res) => {
+  let isAdmin = req.auth?.payload?.permissions?.includes("write:admin") || false;
+  if (!isAdmin) {
+    res.status(401).send({ error: "Unauthorized: missing write:admin permission" });
+    return;
+  }
+
+  let userInfoEndpoint = req.auth?.payload?.aud?.find((aud) => aud.endsWith("/userinfo"));
+  if (!userInfoEndpoint) {
+    res.status(401).send({ error: "Unauthorized: missing userinfo endpoint" });
+    return;
+  }
+
+  try {
+    if (!(await areJobNotificationsActive())) {
+      res.status(400).send({ error: "Job notifications are disabled by an administrator" });
+      return;
+    }
+
+    const userInfo = await fetch(userInfoEndpoint, {
+      headers: {
+        Authorization: req.headers.authorization,
+      },
+    }).then((response) => response.json());
+
+    if (!userInfo?.email) {
+      res.status(400).send({ error: "No email address found for the current user" });
+      return;
+    }
+
+    const profile = await ensureUserProfile(userInfo.sub, {
+      email: userInfo.email,
+      auth0Name: userInfo.name,
+    });
+
+    await sendTestJobNotificationEmail({
+      name: profile.displayName || userInfo.name || userInfo.nickname,
+      email: userInfo.email,
+    });
+
+    res.status(200).send({ message: `Test email sent to ${userInfo.email}` });
+  } catch (error) {
+    console.error("Failed to send test job notification email:", error);
+    res.status(500).send({ error: error.message || "Failed to send test email" });
   }
 });
 
