@@ -36,6 +36,7 @@ import ColorScale from "../components/ColorScale";
 import { CdlHoverIdentify, CdlLegendFab } from "../components/CdlMapExtras";
 import useCurrentJobStore from "../utils/currentJobStore";
 import dayjs from "dayjs";
+import { enableNotificationPermissionOnUserGesture, initBrowserNotificationServiceWorker, isBrowserNotificationSupported, JOB_COMPLETION_NOTIFICATION_EVENT } from "../utils/browserNotifications";
 
 const QueuePollingEffect = memo(() => {
   const pollCount = useStore((s) => s.pollCount);
@@ -45,6 +46,53 @@ const QueuePollingEffect = memo(() => {
   useEffect(() => {
     fetchQueue();
   }, [pollCount, isAuthenticated, user?.email_verified, fetchQueue]);
+
+  return null;
+});
+
+const BrowserNotificationPermissionEffect = memo(() => {
+  const userInfo = useStore((state) => state.userInfo);
+  const fetchQueue = useStore((state) => state.fetchQueue);
+  const canReadJobs = useMemo(() => userInfo?.permissions.includes("read:jobs"), [userInfo?.permissions]);
+
+  useEffect(() => {
+    if (!canReadJobs || !isBrowserNotificationSupported()) {
+      return;
+    }
+
+    void initBrowserNotificationServiceWorker();
+    enableNotificationPermissionOnUserGesture();
+  }, [canReadJobs]);
+
+  useEffect(() => {
+    const handleJobNotification = (event: Event) => {
+      const detail = (event as CustomEvent<{ title?: string; body?: string }>).detail;
+      if (!detail?.title) {
+        return;
+      }
+
+      const message = detail.body ? `${detail.title} — ${detail.body}` : detail.title;
+      useStore.getState().setSuccessMessage(message);
+    };
+
+    window.addEventListener(JOB_COMPLETION_NOTIFICATION_EVENT, handleJobNotification);
+    return () => window.removeEventListener(JOB_COMPLETION_NOTIFICATION_EVENT, handleJobNotification);
+  }, []);
+
+  useEffect(() => {
+    if (!canReadJobs) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchQueue();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [canReadJobs, fetchQueue]);
 
   return null;
 });
@@ -320,6 +368,7 @@ const Dashboard = () => {
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <QueuePollingEffect />
+      <BrowserNotificationPermissionEffect />
       <NavToolbar />
       {isAuthenticated && <CustomDownloadModal />}
       {isAuthenticated && activeJob && (activeJobGroup || multipolygons.length <= 1) && <CurrentJobChip />}

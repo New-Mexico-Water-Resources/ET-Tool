@@ -32,14 +32,14 @@ from .pdf_report_generator import (
     get_documentation_preview_cache_path,
     render_documentation_page,
 )
-from .plotting_helpers import MetricETUnit, convert_to_nice_number_range, et_unit_from_name
+from .plotting_helpers import MetricETUnit, convert_to_nice_number_range, et_unit_from_name, fill_missing_report_columns
 from .ROI_area import ROI_area
 from .summary_figure_generator import generate_summary_figure
-from .yearly_combined_figure_generator import generate_yearly_combined_figure
+from .yearly_combined_figure_generator import calculate_yearly_totals_bounds, generate_yearly_combined_figure
 
 logger = logging.getLogger(__name__)
 
-CUSTOM_REPORT_PREVIEW_VERSION = 2
+CUSTOM_REPORT_PREVIEW_VERSION = 3
 
 ColorScaleMode = Literal["across_years", "per_year", "custom"]
 PreviewKind = Literal["year", "summary", "yearly_combined", "documentation"]
@@ -479,6 +479,75 @@ def _resolve_ppt_bounds(
     return bounds["ppt_min"], bounds["ppt_max"]
 
 
+def _months_in_report_range(config: CustomReportConfig) -> int:
+    return config.end_month - config.start_month + 1
+
+
+def _resolve_yearly_combined_bounds(
+    config: CustomReportConfig,
+    yearly_bounds: dict[str, float | None],
+    monthly_means_directory: Path,
+    monthly_nan_directory: Path,
+    year: int | None,
+    et_unit,
+) -> tuple[float | None, float | None]:
+    months_in_range = _months_in_report_range(config)
+
+    if config.et_eto_scale == "custom":
+        if config.et_eto_custom_min is None or config.et_eto_custom_max is None:
+            raise ValueError("Custom ET/ETo scale requires min and max values")
+        combined_vmin = et_unit.convert_to_metric(config.et_eto_custom_min) * months_in_range
+        combined_vmax = et_unit.convert_to_metric(config.et_eto_custom_max) * months_in_range
+        if combined_vmin >= combined_vmax:
+            raise ValueError("Custom ET/ETo scale max must be greater than min")
+        return combined_vmin, combined_vmax
+
+    if config.et_eto_scale == "per_year" and year is not None:
+        year_bounds = calculate_yearly_totals_bounds(
+            str(monthly_means_directory),
+            str(monthly_nan_directory),
+            year,
+            year,
+        )
+        return (
+            year_bounds["combined_abs_min"],
+            year_bounds["combined_abs_max"],
+        )
+
+    return yearly_bounds["combined_abs_min"], yearly_bounds["combined_abs_max"]
+
+
+def _resolve_yearly_ppt_bounds(
+    config: CustomReportConfig,
+    yearly_bounds: dict[str, float | None],
+    monthly_means_directory: Path,
+    monthly_nan_directory: Path,
+    year: int | None,
+    ppt_unit,
+) -> tuple[float | None, float | None]:
+    months_in_range = _months_in_report_range(config)
+
+    if config.ppt_scale == "custom":
+        if config.ppt_custom_min is None or config.ppt_custom_max is None:
+            raise ValueError("Custom precipitation scale requires min and max values")
+        ppt_vmin = ppt_unit.convert_to_metric(config.ppt_custom_min) * months_in_range
+        ppt_vmax = ppt_unit.convert_to_metric(config.ppt_custom_max) * months_in_range
+        if ppt_vmin >= ppt_vmax:
+            raise ValueError("Custom precipitation scale max must be greater than min")
+        return ppt_vmin, ppt_vmax
+
+    if config.ppt_scale == "per_year" and year is not None:
+        year_bounds = calculate_yearly_totals_bounds(
+            str(monthly_means_directory),
+            str(monthly_nan_directory),
+            year,
+            year,
+        )
+        return year_bounds["ppt_min"], year_bounds["ppt_max"]
+
+    return yearly_bounds["ppt_min"], yearly_bounds["ppt_max"]
+
+
 def _prepare_year_main_df(
     year: int,
     monthly_means_directory: Path,
@@ -505,7 +574,7 @@ def _prepare_year_main_df(
 
     if "Year" not in main_df.columns and "Year_x" in main_df.columns:
         main_df = main_df.rename(columns={"Year_x": "Year"})
-    return main_df.replace(np.nan, 100)
+    return fill_missing_report_columns(main_df)
 
 
 def _get_affine(subset_directory: Path, roi_name: str):
@@ -658,18 +727,25 @@ def generate_custom_figures(
         )
 
     if should_include_yearly_combined:
+        yearly_bounds = calculate_yearly_totals_bounds(
+            str(monthly_means_directory),
+            str(monthly_nan_directory),
+            config.start_year,
+            config.end_year,
+        )
         yearly_year = config.end_year
-        yearly_combined_min, yearly_combined_max = _resolve_combined_bounds(
+        yearly_combined_min, yearly_combined_max = _resolve_yearly_combined_bounds(
             config,
-            bounds,
+            yearly_bounds,
             monthly_means_directory,
             monthly_nan_directory,
             yearly_year,
             et_unit,
         )
-        yearly_ppt_min, yearly_ppt_max = _resolve_ppt_bounds(
+        yearly_ppt_min, yearly_ppt_max = _resolve_yearly_ppt_bounds(
             config,
-            bounds,
+            yearly_bounds,
+            monthly_means_directory,
             monthly_nan_directory,
             yearly_year,
             ppt_unit,

@@ -420,6 +420,47 @@ router.post("/rename_job", async (req, res) => {
   }
 });
 
+router.post("/rename_group", async (req, res) => {
+  const canWriteJobs = req.auth?.payload?.permissions?.includes("write:jobs") || false;
+  const groupId = req.body.groupId ? String(req.body.groupId).replace(/[^a-zA-Z0-9_-]/g, "") : "";
+  const newName = req.body.name ? String(req.body.name).replace(/[^a-zA-Z0-9_+. -]/g, "").trim() : "";
+
+  if (!groupId) {
+    res.status(400).send("Missing groupId");
+    return;
+  }
+
+  if (!newName) {
+    res.status(400).send("Missing or invalid group name");
+    return;
+  }
+
+  const db = await constants.connectToDatabase();
+  const collection = db.collection(constants.report_queue_collection);
+  const jobs = await collection.find({ group_id: groupId }).toArray();
+
+  if (jobs.length === 0) {
+    res.status(404).send("Group not found");
+    return;
+  }
+
+  const userOwnsAllJobs = jobs.every((job) => req.auth?.payload?.sub === job?.user?.sub);
+  if (!canWriteJobs && !userOwnsAllJobs) {
+    res.status(401).send("Unauthorized: missing write:jobs permission");
+    return;
+  }
+
+  const currentName = jobs.find((job) => job.group_name)?.group_name;
+  if (currentName === newName) {
+    res.status(400).send("New name must be different from the current name");
+    return;
+  }
+
+  const result = await collection.updateMany({ group_id: groupId }, { $set: { group_name: newName } });
+
+  res.status(200).send({ groupId, group_name: newName, updatedCount: result.modifiedCount });
+});
+
 router.post("/reorder_pending_jobs", async (req, res) => {
   let canWriteJobs = req.auth?.payload?.permissions?.includes("write:jobs") || false;
   if (!canWriteJobs) {

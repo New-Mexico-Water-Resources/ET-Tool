@@ -17,6 +17,10 @@ $report-landscape-aspect-ratio: math.div(11, 8.5);
   overflow: hidden;
   outline: none;
 
+  &:has(.comparison-job-picker__trigger--open) {
+    overflow: visible;
+  }
+
   &__header {
     display: flex;
     align-items: flex-start;
@@ -27,6 +31,37 @@ $report-landscape-aspect-ratio: math.div(11, 8.5);
     flex-shrink: 0;
   }
 
+  &__tabs {
+    flex-shrink: 0;
+    min-height: 40px;
+    align-items: center;
+    border-bottom: 1px solid var(--st-gray-80);
+    padding: 0 12px;
+
+    .MuiTab-root {
+      min-height: 40px;
+      color: var(--st-gray-50);
+      text-transform: none;
+      font-size: 0.875rem;
+      font-weight: 600;
+
+      &:focus,
+      &:focus-visible,
+      &.Mui-focusVisible {
+        outline: none;
+        box-shadow: none;
+      }
+    }
+
+    .Mui-selected {
+      color: var(--st-gray-20);
+    }
+
+    .MuiTabs-indicator {
+      background-color: var(--st-blue-50);
+    }
+  }
+
   &__body {
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr);
@@ -35,6 +70,10 @@ $report-landscape-aspect-ratio: math.div(11, 8.5);
     flex: 1;
     min-height: 0;
     overflow: hidden;
+
+    &:has(.comparison-job-picker__trigger--open) {
+      overflow: visible;
+    }
 
     @media (max-width: 800px) {
       grid-template-columns: 1fr;
@@ -50,6 +89,10 @@ $report-landscape-aspect-ratio: math.div(11, 8.5);
     padding: 10px 4px 0;
     min-height: 0;
     overflow-y: auto;
+
+    &:has(.comparison-job-picker__trigger--open) {
+      overflow: visible;
+    }
 
     .MuiFormControl-root {
       margin-top: 2px;
@@ -170,7 +213,7 @@ $report-landscape-aspect-ratio: math.div(11, 8.5);
     flex: 1 1 0;
     min-height: 0;
     min-width: 0;
-    width: 467px;
+    width: 430px;
     max-width: 100%;
     max-height: 100%;
     border: 1px solid var(--st-gray-70);
@@ -284,5 +327,179 @@ $report-landscape-aspect-ratio: math.div(11, 8.5);
       padding-left: 4px;
       padding-right: 4px;
     }
+  }
+}
+
+.comparison-job-picker {
+  position: relative;
+  background: var(--st-gray-90);
+  width: 100%;
+  z-index: 1;
+
+  &:has(.comparison-job-picker__trigger--open) {
+    z-index: 2;
+  }
+
+  &__trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8.5px 14px;
+    border: 1px solid rgb(255 255 255 / 23%);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--st-gray-20);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    transition: border-color 0.15s ease;
+
+    &:hover:not(:disabled) {
+      border-color: rgb(255 255 255 / 40%);
+    }
+
+    &:focus,
+    &:focus-visible,
+    &--open {
+      outline: none;
+      border-color: var(--st-blue-50);
+      border-width: 2px;
+      padding: 7.5px 13px;
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+
+    svg {
+      fill: white;
+      position: absolute;
+      right: 8px;
+    }
+  }
+
+  &__trigger-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  &__trigger-label {
+    color: var(--st-gray-50);
+    line-height: 1.2;
+
+    position: absolute;
+    top: -10px;
+    left: 10px;
+    background: var(--st-gray-90);
+    padding: 0 4px;
+  }
+
+  &__trigger-value {
+    color: var(--st-gray-20);
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 1400;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 4px;
+    background: var(--st-gray-100) !important;
+    color: var(--st-gray-20);
+    overflow: visible;
+    box-shadow:
+      0 5px 5px -3px rgb(0 0 0 / 20%),
+      0 8px 10px 1px rgb(0 0 0 / 14%),
+      0 3px 14px 2px rgb(0 0 0 / 12%);
+  }
+
+  &__filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: visible;
+  }
+
+  &__filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  &__loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+    color: var(--st-gray-50);
+  }
+
+  &__empty {
+    color: var(--st-gray-50);
+    padding: 8px 2px;
+  }
+
+  &__option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--st-gray-20);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+
+    &:hover {
+      background: rgb(255 255 255 / 6%);
+    }
+
+    &--selected {
+      border-color: var(--st-blue-50);
+      background: rgb(47 128 237 / 12%);
+    }
+  }
+
+  &__option-name {
+    color: var(--st-gray-20);
+    line-height: 1.3;
+  }
+
+  &__option-meta {
+    color: var(--st-gray-50);
+    line-height: 1.35;
+  }
+
+  .MuiPopover-root {
+    z-index: 1700;
   }
 }

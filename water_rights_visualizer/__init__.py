@@ -1,4 +1,4 @@
-__all__ = ["water_rights_visualizer", "count_landsat_passes_for_month"]
+__all__ = ["water_rights_visualizer", "count_landsat_passes_for_month", "get_landsat_month_stats"]
 
 
 def __getattr__(name: str):
@@ -6,6 +6,10 @@ def __getattr__(name: str):
         from .landsat_pass_count import count_landsat_passes_for_month
 
         return count_landsat_passes_for_month
+    if name == "get_landsat_month_stats":
+        from .landsat_pass_count import get_landsat_month_stats
+
+        return get_landsat_month_stats
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
