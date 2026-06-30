@@ -394,7 +394,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--region", default=DEFAULT_REGION, help="AWS region.")
     parser.add_argument(
         "--target-class",
-        default="DEEP_ARCHIVE",
+        default="GLACIER_IR",
         choices=["DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"],
         help="Destination storage class.",
     )

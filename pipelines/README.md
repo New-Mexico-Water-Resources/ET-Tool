@@ -4,7 +4,12 @@ This directory contains the pipelines to fetch new data from the sources and upl
 
 ## Running the Pipelines
 
-To run the pipelines, either use the `run_pipeline.py` script or use the `NewDataPipeline.ipynb` notebook.
+The main data-ingestion workflow is driven by `run_pipeline.py` or the `NewDataPipeline.ipynb` notebook. Additional standalone scripts are also available:
+
+- **`landsat/landsat_pass_pipeline.py`** — generate monthly Landsat pass-count COG layers for ARD tiles
+- **`archive_unused_s3_objects.py`** — transition unused S3 GeoTIFFs to Glacier storage tiers
+
+See the sections below for usage details on each pipeline.
 
 ## Installation
 
@@ -92,6 +97,101 @@ Examples:
 # Fetch only PRISM data for 2024
 python run_pipeline.py --start-year 2024 --end-year 2024 --skip-openet --skip-gridmet
 ```
+
+## Landsat Pass COG Pipeline
+
+`landsat/landsat_pass_pipeline.py` generates monthly Landsat pass-count Cloud Optimized GeoTIFF (COG) layers for ARD tiles. It queries the Microsoft Planetary Computer catalog for Landsat 5/7/8/9 scenes, counts observations per pixel, and writes one COG per tile per month.
+
+Each output file contains three bands:
+
+- **Band 1** (`total_observations`): total scene observations per pixel
+- **Band 2** (`non_cloudy_observations`): observations where the pixel is not flagged as cloud
+- **Band 3** (`pass_days`): unique calendar days with any observation per pixel
+
+These layers are used by the water-rights visualizer to cache Landsat pass statistics without re-querying Planetary Computer on every report run.
+
+```bash
+python landsat/landsat_pass_pipeline.py --help
+```
+
+```bash
+# Dry Run Mode to get ETA and total file counts for run before executing
+python landsat/landsat_pass_pipeline.py --start-year 2024 --end-year 2024 --dry-run
+
+# Generate cache data for all tiles in 2024
+python landsat/landsat_pass_pipeline.py --start-year 2024 --end-year 2024
+
+# Generate a single month for two tiles, then upload to S3
+python landsat/landsat_pass_pipeline.py \
+  --start-year 2024 --end-year 2024 --start-month 6 --end-month 6 \
+  --tile-ids 008014 009011 \
+  --upload
+
+# Upload existing local COG files without regenerating
+python landsat/landsat_pass_pipeline.py --upload-only
+
+# Retry tasks that failed on a previous run
+python landsat/landsat_pass_pipeline.py --retry-failures
+```
+
+Failed generation tasks are logged to `<output-dir>/landsat_pass_generation_failures.jsonl`. Use `--retry-failures` to re-run only those tasks (removed on success).
+
+Key options:
+
+| Flag | Description |
+|------|-------------|
+| `--start-year`, `--end-year` | Required year range (inclusive) |
+| `--output-dir` | Local output directory (default: `landsat_pass_layers_output`) |
+| `--tile-ids` | Subset of ARD tile `hv` IDs |
+| `--overwrite` | Regenerate layers even if they already exist locally or in S3 |
+| `--upload` / `--upload-only` | Upload to S3 after generation, or upload existing local files only |
+| `--dry-run` | Print planned work and exit without generating or uploading |
+| `--retry-failures` | Retry tasks listed in the failures JSONL file |
+
+## Archive Unused S3 Objects
+
+`archive_unused_s3_objects.py` scans an S3 input bucket and identifies GeoTIFF objects that are no longer needed in Standard storage. Matching objects can be transitioned to a Glacier storage tier to reduce monthly storage cost.
+
+By default the script runs in **dry-run** mode: it scans the bucket, prints a summary report with cost estimates, and makes no changes. Pass `--execute` to apply transitions.
+
+Objects are selected for archival when any of the following apply:
+
+- **Pre-cutoff data**: acquisition date is before the year in `openet_transition_date` from `variables.yaml` (1985)
+- **Legacy Landsat ESI/ET**: Landsat 4/5/7/8 scenes for the `ESI` or `ET` variables
+- **Unused variables**: `COUNT` or `CCOUNT` layers
+
+Objects already in `GLACIER`, `DEEP_ARCHIVE`, or `GLACIER_IR` are skipped. The report groups matched and kept objects by data source and variable, and estimates one-time transition cost and monthly storage savings.
+
+```bash
+python archive_unused_s3_objects.py --help
+```
+
+```bash
+# Dry Run: Use configured bucket and profile and generate count, file sizes, and transition cost estimates to move items to S3 Glacier Instant Retrieval Tier
+python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw  --target-class GLACIER_IR
+
+# Dry Run and log all files to be transitioned to a file
+python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw  --report-csv s3_transition_files.csv --target-class GLACIER_IR
+
+# Execute a full run transitioning matched items to Glacier Instant Retrieval Tier
+python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw  --target-class GLACIER_IR --execute
+```
+
+Key options:
+
+| Flag | Description |
+|------|-------------|
+| `--bucket` | S3 bucket to scan (default: `ose-dev-inputs`, or `S3_INPUT_BUCKET` env var) |
+| `--prefix` | Limit the scan to keys under this prefix |
+| `--profile` | AWS profile (default: `AWS_PROFILE` env var) |
+| `--target-class` | Destination storage class: `GLACIER_IR` (default), `GLACIER`, or `DEEP_ARCHIVE` |
+| `--cutoff-year` | Override the cutoff year from `variables.yaml` |
+| `--report-csv` | Write the full transition plan to a CSV file |
+| `--limit` | Stop scanning after this many matched objects (useful for testing) |
+| `--execute` | Actually transition objects (default is dry-run only) |
+| `--workers` | Parallel S3 copy workers when executing (default: 16) |
+
+Restoring objects from Glacier incurs retrieval fees and minimum-storage-duration charges. Review the dry-run report before executing.
 
 ## Run Pipeline Notebook
 
