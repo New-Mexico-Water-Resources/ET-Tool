@@ -25,7 +25,10 @@ CLOUD_COVERAGE_TOLERANCE_PP = 1.0
 
 @pytest.fixture(scope="module")
 def test_region_polygon():
-    return gpd.read_file(TEST_TARGET_GEOJSON).to_crs(WGS84).geometry.union_all()
+    geometries = gpd.read_file(TEST_TARGET_GEOJSON).to_crs(WGS84).geometry
+    if hasattr(geometries, "union_all"):
+        return geometries.union_all()
+    return geometries.unary_union
 
 
 @pytest.fixture(scope="module")
