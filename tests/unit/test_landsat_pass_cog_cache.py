@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import geopandas as gpd
@@ -7,7 +8,10 @@ import pytest
 
 from tests.support.paths import LANDSAT_PASS_CACHE_DIR, TEST_TARGET_GEOJSON
 from water_rights_visualizer.constants import WGS84
-from water_rights_visualizer.landsat_pass_count import _fetch_monthly_cloud_coverage_from_planetary_computer
+from water_rights_visualizer.landsat_pass_count import (
+    _fetch_monthly_cloud_coverage_from_planetary_computer,
+    get_landsat_month_stats,
+)
 from water_rights_visualizer.landsat_pass_layers import (
     aggregate_landsat_pass_stats_from_layers,
     landsat_pass_layer_path,
@@ -76,6 +80,23 @@ def test_cog_cache_report_metrics_for_test_case_region(test_region_polygon, janu
     assert metrics["days_with_landsat_passes"] > 0
     assert metrics["cloud_coverage_plus_missing_data_percent"] is not None
     assert metrics["cloud_coverage_plus_missing_data_percent"] > 0
+
+
+def test_get_landsat_month_stats_writes_cloud_coverage_cache(test_region_polygon, january_2024_tile_cache_path, tmp_path):
+    stats = get_landsat_month_stats(
+        test_region_polygon,
+        MONTH,
+        YEAR,
+        subset_directory=str(tmp_path),
+        layer_cache_directory=str(LANDSAT_PASS_CACHE_DIR),
+    )
+
+    cache_path = tmp_path / "cloud_coverage_cache" / f"cloud_coverage_{YEAR}_{MONTH:02d}.json"
+    assert cache_path.exists()
+
+    cached = json.loads(cache_path.read_text())
+    assert cached["pass_count"] == stats["pass_count"]
+    assert cached["pass_count"] > 0
 
 
 @pytest.mark.integration

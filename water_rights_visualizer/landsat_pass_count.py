@@ -102,6 +102,7 @@ def get_landsat_month_stats(
     s3_key_prefix: str = "",
     s3_client=None,
     prefer_layer_cache: bool = True,
+    write_json_cache: bool = True,
 ) -> dict:
     """
     Return monthly Landsat pass and cloud-coverage statistics for an ROI.
@@ -113,6 +114,7 @@ def get_landsat_month_stats(
         sat_ids = DEFAULT_SAT_IDS
 
     cache_directory = layer_cache_directory or os.environ.get("LANDSAT_PASS_LAYER_DIR") or subset_directory or "."
+    stats = None
     if prefer_layer_cache:
         from .landsat_pass_layers import aggregate_landsat_pass_stats_from_layers
 
@@ -131,19 +133,26 @@ def get_landsat_month_stats(
                 f"Retrieved Landsat pass stats for {year}-{month:02d} from layer cache "
                 f"(pass_count={cached_stats.get('pass_count')})"
             )
-            return cached_stats
+            stats = cached_stats
 
-    cloud_stats = _fetch_monthly_cloud_coverage_from_planetary_computer(
-        roi,
-        month,
-        year,
-        subset_directory=subset_directory,
-        sat_ids=sat_ids,
-        target_crs=target_crs,
-        write_json_cache=False,
-    )
-    cloud_stats["source"] = "planetary_computer"
-    return cloud_stats
+    if stats is None:
+        stats = _fetch_monthly_cloud_coverage_from_planetary_computer(
+            roi,
+            month,
+            year,
+            subset_directory=subset_directory,
+            sat_ids=sat_ids,
+            target_crs=target_crs,
+            write_json_cache=False,
+        )
+        stats["source"] = "planetary_computer"
+    elif "source" not in stats:
+        stats["source"] = "layer_cache"
+
+    if write_json_cache and subset_directory:
+        _write_cloud_coverage_cache(stats, subset_directory)
+
+    return stats
 
 
 def count_landsat_passes_for_month(
@@ -289,6 +298,29 @@ def _legacy_cloud_coverage_cache_path(subset_directory: str, year: int, month: i
         cache_directory = os.path.join(subset_directory, "cloud_coverage_cache")
     os.makedirs(cache_directory, exist_ok=True)
     return f"{cache_directory}/cloud_coverage_{year}_{month:02d}.json"
+
+
+def _write_cloud_coverage_cache(stats: dict, subset_directory: str) -> None:
+    year = int(stats["year"])
+    month = int(stats["month"])
+    cache_filename = _legacy_cloud_coverage_cache_path(subset_directory, year, month)
+    cache_payload = {
+        "year": year,
+        "month": month,
+        "mean_cloud_coverage": stats.get("mean_cloud_coverage"),
+        "total_observations": stats.get("total_observations", 0) or 0,
+        "cloudy_observations": stats.get("cloudy_observations", 0) or 0,
+        "pass_count": stats.get("pass_count", 0) or 0,
+        "pass_list": stats.get("pass_list", []),
+        "date_fetched": stats.get("date_fetched") or str(datetime.datetime.now()),
+        "source": stats.get("source"),
+    }
+    with open(cache_filename, "w") as cache_writer:
+        logger.info(
+            f"Writing cloud coverage to cache: {cache_filename} "
+            f"(pass_count={cache_payload['pass_count']})"
+        )
+        cache_writer.write(json.dumps(cache_payload))
 
 
 def _fetch_monthly_cloud_coverage_from_planetary_computer(

@@ -1,43 +1,10 @@
 openet_transition_date: 1985
 
 sources:
-  - id: "landsat_ptjpl_et"
-    name: "Landsat PT-JPL ET"
-    variable: "ET"
-    mapped_variable: "ET"
-    file_prefix: "LC08_"
-    monthly: false
-    parent_dir: ""
-    start: "1983-01-01"
-    end: "1985-01-01"
-    daylight_corrected: true
-
-  - id: "landsat_ptjpl_esi"
-    name: "Landsat PT-JPL ESI"
-    variable: "ESI"
-    mapped_variable: "ESI"
-    file_prefix: "LC08_"
-    monthly: false
-    parent_dir: ""
-    start: "1983-01-01"
-    end: "1985-01-01"
-    daylight_corrected: true
-
   - id: "openet_ensemble_et"
     name: "OpenET Ensemble ET"
     variable: "ET"
     mapped_variable: "ET"
-    file_prefix: "OPENET_ENSEMBLE_"
-    monthly: true
-    parent_dir: "monthly"
-    start: "1985-01-01"
-    end: "2026-01-01"
-    daylight_corrected: true
-
-  - id: "openet_ensemble_ccount"
-    name: "OpenET Ensemble CCOUNT"
-    variable: "CCOUNT"
-    mapped_variable: "CCOUNT"
     file_prefix: "OPENET_ENSEMBLE_"
     monthly: true
     parent_dir: "monthly"
@@ -61,17 +28,6 @@ sources:
     variable: "ET_MAX"
     mapped_variable: "ET_MAX"
     file_prefix: "OPENET_ENSEMBLE_"
-    monthly: true
-    parent_dir: "uncertainty/output/2019"
-    start: "1985-01-01"
-    end: "2026-01-01"
-    daylight_corrected: true
-
-  - id: "openet_ptjpl_cloud_count"
-    name: "OpenET PTJPL Cloud Count"
-    variable: "COUNT"
-    mapped_variable: "COUNT"
-    file_prefix: "OPENET_PTJPL_"
     monthly: true
     parent_dir: "uncertainty/output/2019"
     start: "1985-01-01"

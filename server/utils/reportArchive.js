@@ -174,7 +174,7 @@ const processLandsatPassCountCache = (runDir, key, jobName) => {
 
 const processLandsatPassCounts = (runDir, key, jobName) => {
   const landsatPassCountCache = processLandsatPassCountCache(runDir, key, jobName);
-  if (!landsatPassCountCache) {
+  if (!landsatPassCountCache || Object.keys(landsatPassCountCache).length === 0) {
     return processLandsatCloudCoverageCache(runDir, key, jobName);
   }
   return landsatPassCountCache;

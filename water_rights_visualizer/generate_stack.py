@@ -23,7 +23,6 @@ from .date_helpers import (
     calculate_hours_of_sunlight,
 )
 from .variable_types import get_available_variable_source_for_date
-import os
 
 logger = getLogger(__name__)
 
@@ -134,11 +133,9 @@ def generate_stack(
         ET_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_subset.tif")
         logger.info(f"ET subset file: {ET_subset_filename}")
 
-        count_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_COUNT_subset.tif")
         et_min_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_MIN_subset.tif")
         et_max_subset_filename = join(subset_directory, f"{date_step.strftime('%Y.%m.%d')}_{ROI_name}_ET_MAX_subset.tif")
         if not daily_interpolation:
-            logger.info(f"COUNT subset file: {count_subset_filename}")
             logger.info(f"ET MIN subset file: {et_min_subset_filename}")
             logger.info(f"ET MAX subset file: {et_max_subset_filename}")
 
@@ -190,19 +187,6 @@ def generate_stack(
                         ROI_acres=ROI_acres,
                         variable_name=variable_name,
                         subset_filename=subset_filename,
-                        target_CRS=target_CRS,
-                    )
-
-                # If we don't have a COUNT subset, then we'll just re-generate this later via cloudy observations
-                if os.path.exists(count_subset_filename):
-                    generate_subset(
-                        input_datastore=input_datastore,
-                        acquisition_date=date_step,
-                        ROI_name=ROI_name,
-                        ROI_latlon=ROI_latlon,
-                        ROI_acres=ROI_acres,
-                        variable_name="COUNT",
-                        subset_filename=count_subset_filename,
                         target_CRS=target_CRS,
                     )
         # Just keep processing as this only causes issues with showing uncertainty on the report

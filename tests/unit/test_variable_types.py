@@ -27,10 +27,9 @@ class TestVariableTypes:
         source = get_available_variable_source_for_date("ET", date(2021, 1, 1))
         assert source.file_prefix == "OPENET_ENSEMBLE_"
 
-    def test_pre_transition_date_uses_landsat_et(self):
+    def test_pre_transition_date_has_no_et_source(self):
         source = get_available_variable_source_for_date("ET", date(1984, 6, 1))
-        assert source.file_prefix == "LC08_"
-        assert source.monthly is False
+        assert source is None
 
     def test_post_transition_variables_include_core_products(self):
         variables = {source.variable for source in get_available_variables_for_date(date(2021, 1, 1))}
