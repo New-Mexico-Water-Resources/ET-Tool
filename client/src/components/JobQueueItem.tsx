@@ -8,6 +8,7 @@ import FileTextIcon from "@mui/icons-material/Description";
 import DriveFileRenameOutlineIcon from "@mui/icons-material/DriveFileRenameOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import StatusIcon from "./StatusIcon";
+import { JobLogWarningIcon, JobLogWarningsModal, useJobLogWarnings } from "./JobLogWarnings";
 
 import { useConfirm } from "material-ui-confirm";
 import useStore, { JobStatus } from "../utils/store";
@@ -179,27 +180,33 @@ const JobQueueItem = ({
     });
   };
 
+  const logWarnings = useJobLogWarnings(job.key, job.status);
+  const [warningsModalOpen, setWarningsModalOpen] = useState(false);
+  const openWarningsModal = () => setWarningsModalOpen(true);
+
   return (
     <div
       className={`queue-item${inGroupMember ? " queue-item--group-member" : ""}${isCompact ? " queue-item--compact" : ""}`}
       style={isCompact ? undefined : { height: "100%", justifyContent: "space-between" }}
     >
       <div className="item-header">
-        <Tooltip title={`${job.name}\nStatus: ${job.status}`}>
-          <Typography
-            variant="h6"
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            <StatusIcon status={job.status} />
+        <Typography
+          variant="h6"
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            minWidth: 0,
+          }}
+        >
+          <StatusIcon status={job.status} />
+          <JobLogWarningIcon warnings={logWarnings} jobName={job.name} onOpenModal={openWarningsModal} />
+          <Tooltip title={`${job.name}\nStatus: ${job.status}`}>
             <span style={{ maxWidth: "215px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "pre" }}>
               {job.name}
             </span>
-          </Typography>
-        </Tooltip>
+          </Tooltip>
+        </Typography>
         <IconButton
           size="small"
           aria-label="Job actions"
@@ -315,6 +322,12 @@ const JobQueueItem = ({
             Status: <b style={{ color: jobStatusColor }}>{job.status_msg || job.status}</b>
           </Typography>
         </Tooltip>
+        <JobLogWarningsModal
+          open={warningsModalOpen}
+          onClose={() => setWarningsModalOpen(false)}
+          warnings={logWarnings}
+          jobName={job.name}
+        />
         {job?.user?.name && (
           <Tooltip title={`Name: ${job.user.name}\nEmail: ${job.user.email}`}>
             <Typography variant="body2" style={{ marginTop: "8px" }}>

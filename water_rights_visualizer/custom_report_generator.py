@@ -32,14 +32,14 @@ from .pdf_report_generator import (
     get_documentation_preview_cache_path,
     render_documentation_page,
 )
-from .plotting_helpers import MetricETUnit, convert_to_nice_number_range, et_unit_from_name
+from .plotting_helpers import MetricETUnit, convert_to_nice_number_range, et_unit_from_name, fill_missing_report_columns
 from .ROI_area import ROI_area
 from .summary_figure_generator import generate_summary_figure
 from .yearly_combined_figure_generator import calculate_yearly_totals_bounds, generate_yearly_combined_figure
 
 logger = logging.getLogger(__name__)
 
-CUSTOM_REPORT_PREVIEW_VERSION = 2
+CUSTOM_REPORT_PREVIEW_VERSION = 3
 
 ColorScaleMode = Literal["across_years", "per_year", "custom"]
 PreviewKind = Literal["year", "summary", "yearly_combined", "documentation"]
@@ -574,7 +574,7 @@ def _prepare_year_main_df(
 
     if "Year" not in main_df.columns and "Year_x" in main_df.columns:
         main_df = main_df.rename(columns={"Year_x": "Year"})
-    return main_df.replace(np.nan, 100)
+    return fill_missing_report_columns(main_df)
 
 
 def _get_affine(subset_directory: Path, roi_name: str):

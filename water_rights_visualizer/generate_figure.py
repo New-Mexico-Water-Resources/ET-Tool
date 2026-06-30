@@ -22,7 +22,7 @@ from .write_status import write_status
 
 from .generate_patch import generate_patch
 from .variable_types import OPENET_TRANSITION_DATE, get_available_variable_source_for_date
-from .plotting_helpers import convert_to_nice_number_range, MetricETUnit, ETUnit, PercentageUnits
+from .plotting_helpers import convert_to_nice_number_range, MetricETUnit, ETUnit, PercentageUnits, cloud_coverage_data_unavailable, fill_cloud_coverage_area, format_requestor_name
 
 logger = getLogger(__name__)
 
@@ -110,16 +110,7 @@ def generate_figure(
     max_length_short = 15
     max_length_medium = 30
 
-    requestor_name = ""
-    if requestor:
-        requestor_name = requestor.get("name", "")
-        if not requestor_name:
-            requestor_name = requestor.get("email", "")
-        if not requestor_name:
-            requestor_name = requestor.get("sub", "")
-
-    if not requestor_name:
-        requestor_name = "Unknown"
+    requestor_name = format_requestor_name(requestor)
 
     if len(ROI_name) <= max_length_short:
         title = f"Evapotranspiration For {ROI_name}"
@@ -396,17 +387,14 @@ def generate_figure(
         combined_abs_max - combined_abs_min
     ) + combined_abs_min
 
-    is_confidence_data_null = (
-        df["percent_nan"].isnull().all() or df["percent_nan"].eq(0).all() or df["percent_nan"].eq(100).all()
-    )
+    is_confidence_data_null = cloud_coverage_data_unavailable(df)
 
     if not is_confidence_data_null:
         ci_color = "#7F7F7F"
-        # Mask out NaN values so they create gaps in the plot
-        mask = df["percent_nan"].notna()
+        fill_cloud_coverage_area(ax_cloud, x, df["percent_nan"], ci_color)
         sns.lineplot(
-            x=x[mask],
-            y=df["percent_nan"][mask],
+            x=x,
+            y=df["percent_nan"],
             ax=ax_cloud,
             color=ci_color,
             alpha=0.8,
@@ -414,17 +402,11 @@ def generate_figure(
             marker=marker,
             markersize=marker_size,
         )
-        # For the stackplot, we need to handle NaN values differently
-        # Create a masked array where NaN values are set to 0
-        stack_data = np.ma.masked_invalid(df["percent_nan"].values)
-        ax_cloud.stackplot(x, stack_data, colors=[ci_color + "80"])
 
         ax_cloud.set(xlabel="", ylabel="")
-        # Only consider non-NaN values when calculating limits
         valid_data = df["percent_nan"].dropna()
 
-        # Global min and max for cloud coverage across all years
-        normalized_cloud_cover_min = cloud_cover_min if not pd.isna(cloud_cover_min) and cloud_cover_min > 0 else 0
+        normalized_cloud_cover_min = 0
         normalized_cloud_cover_max = cloud_cover_max if not pd.isna(cloud_cover_max) and cloud_cover_max < 100 else 100
         nice_cloud_cover_range = convert_to_nice_number_range(
             normalized_cloud_cover_min, normalized_cloud_cover_max, PercentageUnits(), subdivisions=3

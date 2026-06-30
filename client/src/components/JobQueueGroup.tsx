@@ -11,7 +11,9 @@ import {
   Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import CloseIcon from "@mui/icons-material/Close";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import DriveFileRenameOutlineIcon from "@mui/icons-material/DriveFileRenameOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import MapIcon from "@mui/icons-material/Map";
 import DownloadIcon from "@mui/icons-material/Download";
 import { useEffect, useMemo, useState } from "react";
@@ -19,6 +21,7 @@ import { useConfirm } from "material-ui-confirm";
 import StatusIcon from "./StatusIcon";
 import JobQueueItem from "./JobQueueItem";
 import DefaultReportMenuItems from "./DefaultReportMenuItems";
+import RenameJobGroupDialog from "./RenameJobGroupDialog";
 import useStore from "../utils/store";
 import {
   QueueJob,
@@ -31,6 +34,8 @@ import {
   getQueueJobItemHeight,
 } from "../utils/jobGroups";
 import { formatElapsedTime } from "../utils/helpers";
+
+const MENU_ITEM_SX = { backgroundColor: "var(--st-gray-80)" } as const;
 
 interface JobQueueGroupProps {
   jobs: QueueJob[];
@@ -50,7 +55,7 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
   const activeJob = useStore((state) => state.activeJob);
   const setActiveJob = useStore((state) => state.setActiveJob);
   const currentUserInfo = useStore((state) => state.userInfo);
-  const canDeleteGroup = useMemo(() => {
+  const canManageGroup = useMemo(() => {
     const hasPermission = currentUserInfo?.permissions?.includes("write:jobs");
     if (hasPermission) {
       return true;
@@ -59,9 +64,16 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
   }, [currentUserInfo, jobs]);
 
   const groupHasKilledOnly = useMemo(() => jobs.every((job) => job.status === "Killed"), [jobs]);
+  const canRenameGroup = useMemo(
+    () => canManageGroup && !jobs.some((job) => ["In Progress", "Pending"].includes(job.status)),
+    [canManageGroup, jobs]
+  );
 
   const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
   const downloadMenuOpen = Boolean(downloadAnchorEl);
+  const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
+  const actionsMenuOpen = Boolean(actionsAnchorEl);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
 
   const groupId = jobs[0]?.group_id || groupName;
   const isDownloading = downloadingJobGroupId === groupId;
@@ -70,6 +82,7 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
   const statusSummary = useMemo(() => getGroupStatusSummary(jobs), [jobs]);
   const groupProgress = useMemo(() => computeGroupProgress(jobs, jobStatuses), [jobs, jobStatuses]);
   const percentComplete = Math.max(Math.min(Math.round(groupProgress * 1000) / 10, 100), 0);
+  const showProgressBar = groupStatus !== "Complete";
   const yearRangeLabel = useMemo(() => getGroupYearRangeLabel(jobs), [jobs]);
   const startedLabel = useMemo(() => getGroupStartedLabel(jobs), [jobs]);
   const submitter = useMemo(() => getGroupSubmitter(jobs), [jobs]);
@@ -110,6 +123,32 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
     void loadJobGroup(jobs, groupName);
   };
 
+  const closeActionsMenu = () => {
+    setActionsAnchorEl(null);
+  };
+
+  const handleDeleteGroup = () => {
+    closeActionsMenu();
+    confirm({
+      title: "Delete Job Group",
+      description: `Are you sure you want to delete all ${jobs.length} jobs in "${groupName}"?`,
+      confirmationButtonProps: { color: "primary", variant: "contained" },
+      cancellationButtonProps: { color: "secondary", variant: "contained" },
+      titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+      contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
+      dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
+    }).then(() => {
+      jobs.forEach((job) => {
+        if (job.status !== "Killed") {
+          deleteJob(job.key, true);
+        }
+      });
+      if (jobs.some((job) => job.key === activeJob?.key)) {
+        setActiveJob(null);
+      }
+    });
+  };
+
   return (
     <div className="queue-group">
       <div className="queue-group-header item-header">
@@ -124,40 +163,16 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
             {jobs.length} jobs
           </Typography>
         </Box>
-        {canDeleteGroup && (
-          <Tooltip
-            title={
-              groupHasKilledOnly
-                ? "These jobs will be cleaned up automatically and cannot be deleted"
-                : `Delete ${groupName}`
-            }
+        {canManageGroup && (
+          <IconButton
+            size="small"
+            aria-label="Group actions"
+            onClick={(event) => {
+              setActionsAnchorEl(event.currentTarget);
+            }}
           >
-            <IconButton
-              disabled={groupHasKilledOnly}
-              onClick={() => {
-                confirm({
-                  title: "Delete Job Group",
-                  description: `Are you sure you want to delete all ${jobs.length} jobs in "${groupName}"?`,
-                  confirmationButtonProps: { color: "primary", variant: "contained" },
-                  cancellationButtonProps: { color: "secondary", variant: "contained" },
-                  titleProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  contentProps: { sx: { backgroundColor: "var(--st-gray-90)", color: "var(--st-gray-10)" } },
-                  dialogActionsProps: { sx: { backgroundColor: "var(--st-gray-90)" } },
-                }).then(() => {
-                  jobs.forEach((job) => {
-                    if (job.status !== "Killed") {
-                      deleteJob(job.key, true);
-                    }
-                  });
-                  if (jobs.some((job) => job.key === activeJob?.key)) {
-                    setActiveJob(null);
-                  }
-                });
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Tooltip>
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
         )}
       </div>
       <div className="queue-group-body">
@@ -197,18 +212,20 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
             />
           </IconButton>
         </div>
-        <Tooltip title={progressTooltip}>
-          <Box className="queue-group-progress">
-            <Box sx={{ width: "100%", mr: 1 }}>
-              <LinearProgress value={percentComplete} variant="determinate" />
+        {showProgressBar && (
+          <Tooltip title={progressTooltip}>
+            <Box className="queue-group-progress">
+              <Box sx={{ width: "100%", mr: 1 }}>
+                <LinearProgress value={percentComplete} variant="determinate" />
+              </Box>
+              <Box sx={{ minWidth: 35 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {percentComplete}%
+                </Typography>
+              </Box>
             </Box>
-            <Box sx={{ minWidth: 35 }}>
-              <Typography variant="body2" color="text.secondary">
-                {percentComplete}%
-              </Typography>
-            </Box>
-          </Box>
-        </Tooltip>
+          </Tooltip>
+        )}
         <Box className="queue-group-actions">
           <Button
             size="small"
@@ -242,6 +259,42 @@ const JobQueueGroup = ({ jobs, groupName, expanded, onToggle, onOpenLogs }: JobQ
           ))}
         </div>
       </Collapse>
+      <Menu
+        anchorEl={actionsAnchorEl}
+        open={actionsMenuOpen}
+        onClose={closeActionsMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        sx={{ "& .MuiList-root": { backgroundColor: "var(--st-gray-80)" } }}
+      >
+        <MenuItem
+          sx={MENU_ITEM_SX}
+          disableRipple
+          disabled={!canRenameGroup}
+          onClick={() => {
+            closeActionsMenu();
+            setRenameDialogOpen(true);
+          }}
+        >
+          <DriveFileRenameOutlineIcon fontSize="small" sx={{ marginRight: "12px" }} />
+          Rename Group
+        </MenuItem>
+        <MenuItem
+          sx={MENU_ITEM_SX}
+          disableRipple
+          disabled={groupHasKilledOnly}
+          onClick={handleDeleteGroup}
+        >
+          <DeleteOutlineIcon fontSize="small" sx={{ marginRight: "12px" }} />
+          Delete Group
+        </MenuItem>
+      </Menu>
+      <RenameJobGroupDialog
+        groupId={groupId}
+        groupName={groupName}
+        open={renameDialogOpen}
+        onClose={() => setRenameDialogOpen(false)}
+      />
       <Menu
         anchorEl={downloadAnchorEl}
         open={downloadMenuOpen}

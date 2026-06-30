@@ -6,6 +6,7 @@ const fs = require("fs");
 const spawn_child = require("./spawn_child");
 
 const constants = require("../../constants");
+const { ensureUserProfile, enrichUserInfo } = require("../../utils/userPreferences");
 
 const project_directory = constants.project_directory;
 const run_directory_base = constants.run_directory_base;
@@ -32,6 +33,12 @@ router.post("/start_run", async (req, res) => {
       Authorization: req.headers.authorization,
     },
   }).then((res) => res.json());
+
+  const userSettings = await ensureUserProfile(userInfo.sub, {
+    email: userInfo.email,
+    auth0Name: userInfo.name,
+  });
+  enrichUserInfo(userInfo, userSettings);
 
   let name = req.body.name;
   name = name.replace(/[^a-zA-Z0-9_+. -]/g, "");

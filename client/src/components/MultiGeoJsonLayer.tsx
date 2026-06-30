@@ -13,7 +13,11 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
   const setLocations = useStore((state) => state.setLocations);
   const minimumValidArea = useStore((state) => state.minimumValidArea);
   const maximumValidArea = useStore((state) => state.maximumValidArea);
+  const activeJobGroup = useStore((state) => state.activeJobGroup);
+  const showUploadDialog = useStore((state) => state.showUploadDialog);
   const showPreview = useCurrentJobStore((state) => state.showPreview);
+
+  const isBulkConfigMode = showUploadDialog && !activeJobGroup;
 
   const [selectedMapLayer, setSelectedMapLayer] = useState<number | null>(null);
 
@@ -65,13 +69,19 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
           fitToBounds = false;
         }
 
+        // In group interactive preview, deselected jobs should not appear on the map.
+        if (activeJobGroup && !location.visible) {
+          return;
+        }
+
         const area = turfArea(layer);
         const isValidArea = area >= minimumValidArea && area <= maximumValidArea;
 
         const style: Record<string, any> = {};
         if (!location.visible) {
-          style.opacity = 0;
-          style.fillOpacity = 0;
+          style.fillOpacity = 0.5;
+          style.color = "black";
+          style.fillColor = "black";
         }
 
         if (!isValidArea && location.visible) {
@@ -94,15 +104,26 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
         });
 
         if (!previewOutline) {
-          geoJsonLayer.on({
-            dblclick: () => {
-              setSelectedMapLayer(location.id);
-              map.fitBounds(geoJsonLayer.getBounds());
-            },
-            click: () => {
-              setSelectedMapLayer(location.id);
-            },
-          });
+          if (isBulkConfigMode) {
+            geoJsonLayer.on({
+              click: () => {
+                const nextLocations = locations.map((row) =>
+                  row.id === location.id ? { ...row, visible: !row.visible, exists: true } : row
+                );
+                setLocations(nextLocations);
+              },
+            });
+          } else {
+            geoJsonLayer.on({
+              dblclick: () => {
+                setSelectedMapLayer(location.id);
+                map.fitBounds(geoJsonLayer.getBounds());
+              },
+              click: () => {
+                setSelectedMapLayer(location.id);
+              },
+            });
+          }
 
           const roundedAcres = Math.round(location.acres * 100) / 100;
           const roundedLat = location?.lat ? Math.round(location.lat * 1000000) / 1000000 : "NaN";
@@ -154,7 +175,7 @@ const MultiGeoJSONLayer: FC<{ data: any[]; locations: any[] }> = ({ data, locati
         destructor();
       });
     };
-  }, [data, map, loadedGeoJSON, locations, showPreview, minimumValidArea, maximumValidArea]);
+  }, [data, map, loadedGeoJSON, locations, activeJobGroup, isBulkConfigMode, showPreview, minimumValidArea, maximumValidArea, setLocations]);
 
   return null;
 };

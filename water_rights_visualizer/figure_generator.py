@@ -12,7 +12,7 @@ from .summary_figure_generator import generate_summary_figure
 from .ROI_area import ROI_area
 import geopandas as gpd
 from .constants import WGS84
-from .plotting_helpers import MetricETUnit, ImperialETUnit, AcreFeetETUnit
+from .plotting_helpers import MetricETUnit, ImperialETUnit, AcreFeetETUnit, fill_missing_report_columns
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ def generate_all_figures(
 
         if "Year" not in main_df.columns and "Year_x" in main_df.columns:
             main_df = main_df.rename(columns={"Year_x": "Year"})
-        main_df = main_df.replace(np.nan, 100)
+        main_df = fill_missing_report_columns(main_df)
 
         # Get affine transform from subset file
         affine = None

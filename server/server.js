@@ -21,6 +21,7 @@ const monthly_geojson = require("./routes/historical/monthly_geojson");
 const drought_monitor = require("./routes/auxiliary/drought_monitor");
 const cdl_year = require("./routes/auxiliary/cdl_year");
 const custom_report = require("./routes/custom_report/custom_report");
+const comparison_report = require("./routes/comparison_report/comparison_report");
 const config = require("./routes/config");
 const dataSourcesDocs = require("./routes/docs/data_sources");
 
@@ -69,6 +70,7 @@ app.use(`${basePath}/`, verifyAuthToken, start_run);
 app.use(`${basePath}/`, verifyAuthToken, runs);
 app.use(`${basePath}/`, verifyAuthToken, download);
 app.use(`${basePath}/custom-report`, verifyAuthToken, custom_report);
+app.use(`${basePath}/comparison-report`, verifyAuthToken, comparison_report);
 app.use(`${basePath}/historical`, verifyAuthToken, monthly_geojson);
 app.use(`${basePath}/auxiliary`, verifyAuthToken, drought_monitor);
 app.use(`${basePath}/auxiliary`, verifyAuthToken, cdl_year);

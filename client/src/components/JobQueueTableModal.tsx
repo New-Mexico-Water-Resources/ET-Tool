@@ -46,6 +46,7 @@ import dayjs, { Dayjs } from "dayjs";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConfirm } from "material-ui-confirm";
 import StatusIcon from "./StatusIcon";
+import JobLogWarnings from "./JobLogWarnings";
 import useStore from "../utils/store";
 import useCurrentJobStore from "../utils/currentJobStore";
 import { ALL_JOB_STATUSES, getJobStatusDisplayName, getJobStatusTooltip } from "../utils/constants";
@@ -244,23 +245,30 @@ function JobAuthorCell({ user }: { user: QueueJob["user"] }) {
 }
 
 function JobStatusCell({
+  jobKey,
+  jobName,
   status,
   statusMessage,
   queueOrder,
 }: {
+  jobKey: string;
+  jobName: string;
   status: string;
   statusMessage?: string | null;
   queueOrder?: number;
 }) {
   return (
-    <Tooltip
-      title={getJobStatusTooltip(status, statusMessage, queueOrder)}
-      slotProps={{ tooltip: { sx: { whiteSpace: "pre-line" } } }}
-    >
-      <Box sx={{ display: "flex", justifyContent: "center" }}>
-        <StatusIcon status={status} />
-      </Box>
-    </Tooltip>
+    <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "2px" }}>
+      <Tooltip
+        title={getJobStatusTooltip(status, statusMessage, queueOrder)}
+        slotProps={{ tooltip: { sx: { whiteSpace: "pre-line" } } }}
+      >
+        <Box sx={{ display: "flex" }}>
+          <StatusIcon status={status} />
+        </Box>
+      </Tooltip>
+      <JobLogWarnings jobKey={jobKey} jobName={jobName} status={status} />
+    </Box>
   );
 }
 
@@ -1191,6 +1199,8 @@ const JobQueueTableModal = ({ onClose, mode, onOpenLogs }: JobQueueTableModalPro
                     </TableCell>
                     <TableCell align="center" className="job-queue-table-view__status-cell">
                       <JobStatusCell
+                        jobKey={job.key}
+                        jobName={job.name}
                         status={job.status}
                         statusMessage={job.status_msg}
                         queueOrder={queueRunOrderByKey.get(job.key)}
