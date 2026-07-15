@@ -15,6 +15,7 @@
   - User first/last names are automatically added if email matches pattern "first.lastname@example.com"
 - **Cloud Coverage Cache Pipeline**
   - Implements backend pipeline for manually caching Planetary Computer Cloud Coverage and Landsat Pass data so that downstream issues dont hold up report generation
+  - Corrected cloud coverage/missing data results to only include pixels within the ROI
 - **S3 Data Analyzer/Archiver**
   - Backend script to analyze S3 bucket, breakdown cost and data size and transition artifacts to cheaper storage tiers
 
