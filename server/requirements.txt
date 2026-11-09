@@ -1,0 +1,13 @@
+affine
+area
+geojson
+geopandas
+matplotlib
+numpy
+pandas
+pillow
+PyPDF2
+PyYAML
+rasterio
+seaborn
+shapely
