@@ -160,7 +160,16 @@ Objects are selected for archival when any of the following apply:
 - **Legacy Landsat ESI/ET**: Landsat 4/5/7/8 scenes for the `ESI` or `ET` variables
 - **Unused variables**: `COUNT` or `CCOUNT` layers
 
-Objects already in `GLACIER`, `DEEP_ARCHIVE`, or `GLACIER_IR` are skipped. The report groups matched and kept objects by data source and variable, and estimates one-time transition cost and monthly storage savings.
+Objects already in `GLACIER`, `DEEP_ARCHIVE`, or `GLACIER_IR` are skipped. The report groups matched and kept objects by data source and variable, and estimates one-time transition cost, monthly storage savings, and **cost to reverse**.
+
+### Reversibility
+
+Transitions are reversible. For `GLACIER_IR` (the default), objects stay instantly readable — undo is a COPY of each object back to its original storage class (usually `STANDARD`). That incurs:
+
+- Data retrieval ($/GB) and GET/COPY request charges
+- A prorated early-deletion fee if you reverse before the **90-day** minimum storage duration (180 days for `DEEP_ARCHIVE`)
+
+`GLACIER` and `DEEP_ARCHIVE` also need a `RestoreObject` job (hours) before COPY can succeed. Keep the `--report-csv` from the archive dry-run/execute; `--reverse` uses that file as the restore plan.
 
 ```bash
 python archive_unused_s3_objects.py --help
@@ -174,7 +183,13 @@ python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile 
 python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw  --report-csv s3_transition_files.csv --target-class GLACIER_IR
 
 # Execute a full run transitioning matched items to Glacier Instant Retrieval Tier
-python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw  --target-class GLACIER_IR --execute
+python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw  --report-csv s3_transition_files.csv --target-class GLACIER_IR --execute
+
+# Estimate cost to undo using a prior report CSV (no changes)
+python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw --report-csv s3_transition_files.csv --target-class GLACIER_IR --reverse
+
+# Undo a prior transition using that CSV
+python -m pipelines.archive_unused_s3_objects --bucket ose-dev-inputs --profile ose-nmw --report-csv s3_transition_files.csv --target-class GLACIER_IR --reverse --execute
 ```
 
 Key options:
@@ -184,14 +199,15 @@ Key options:
 | `--bucket` | S3 bucket to scan (default: `ose-dev-inputs`, or `S3_INPUT_BUCKET` env var) |
 | `--prefix` | Limit the scan to keys under this prefix |
 | `--profile` | AWS profile (default: `AWS_PROFILE` env var) |
-| `--target-class` | Destination storage class: `GLACIER_IR` (default), `GLACIER`, or `DEEP_ARCHIVE` |
+| `--target-class` | Cold storage class to archive into, or reverse from: `GLACIER_IR` (default), `GLACIER`, or `DEEP_ARCHIVE` |
 | `--cutoff-year` | Override the cutoff year from `variables.yaml` |
-| `--report-csv` | Write the full transition plan to a CSV file |
+| `--report-csv` | Write the archive plan to a CSV, or (with `--reverse`) read that plan to restore |
+| `--reverse` | Undo a prior archive using `--report-csv` |
 | `--limit` | Stop scanning after this many matched objects (useful for testing) |
 | `--execute` | Actually transition objects (default is dry-run only) |
 | `--workers` | Parallel S3 copy workers when executing (default: 16) |
 
-Restoring objects from Glacier incurs retrieval fees and minimum-storage-duration charges. Review the dry-run report before executing.
+Review the dry-run report (including **Cost to reverse**) before executing.
 
 ## Run Pipeline Notebook
 
