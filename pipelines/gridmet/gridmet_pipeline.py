@@ -50,13 +50,69 @@ class GridMETPipeline:
         self.internal_band_mapping = {
             "pet": "potential_evapotranspiration",
         }
-        
+
         self.manifest = set()
 
         # Set up logging
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
         self.logger = logging.getLogger(__name__)
         self.update_manifest()
+
+    @staticmethod
+    def _build_cog_profile(
+        *,
+        height: int,
+        width: int,
+        count: int,
+        dtype,
+        crs,
+        transform,
+        nodata=None,
+    ) -> dict:
+        is_float = np.issubdtype(np.dtype(dtype), np.floating)
+        profile = {
+            "driver": "COG",
+            "height": height,
+            "width": width,
+            "count": count,
+            "dtype": dtype,
+            "crs": crs,
+            "transform": transform,
+            "compress": "DEFLATE",
+            "predictor": 3 if is_float else 2,
+            "blocksize": 512,
+            "overview_resampling": "average" if is_float else "nearest",
+        }
+        if nodata is not None:
+            profile["nodata"] = nodata
+        return profile
+
+    @staticmethod
+    def _is_cloud_optimized(path: str) -> bool:
+        try:
+            with rasterio.open(path) as src:
+                if not src.is_tiled:
+                    return False
+                if src.compression is None:
+                    return False
+                return all(block[0] == block[1] and block[0] in (256, 512) for block in src.block_shapes)
+        except Exception:
+            return False
+
+    def _write_cog(self, output_path: str, data: np.ndarray, crs, transform, nodata=None) -> None:
+        if data.ndim == 2:
+            data = data[np.newaxis, ...]
+        profile = self._build_cog_profile(
+            height=data.shape[1],
+            width=data.shape[2],
+            count=data.shape[0],
+            dtype=data.dtype,
+            crs=crs,
+            transform=transform,
+            nodata=nodata,
+        )
+        with rasterio.open(output_path, "w", **profile) as dst:
+            dst.write(data)
 
     def update_manifest(self):
         # Check AWS and store all keys in a set
@@ -293,24 +349,20 @@ class GridMETPipeline:
                 if not os.path.exists(self.output_dir):
                     os.makedirs(self.output_dir)
                 output_path = os.path.join(self.output_dir, filename)
-                if os.path.exists(output_path):
-                    self.logger.info(f"File {output_path} already exists, skipping")
+                if os.path.exists(output_path) and self._is_cloud_optimized(output_path):
+                    self.logger.info(f"File {output_path} already exists as COG, skipping")
                     paths.append(output_path)
                     continue
+                if os.path.exists(output_path):
+                    self.logger.info(f"File {output_path} exists but is not a COG; rewriting")
 
-                # Update profile with clipped data dimensions and transform
-                profile = src.profile.copy()
-                profile.update(
-                    {
-                        "height": clipped.shape[1],
-                        "width": clipped.shape[2],
-                        "transform": clipped_transform,
-                        "nodata": nodata_value,
-                    }
+                self._write_cog(
+                    output_path,
+                    clipped,
+                    crs=src.crs,
+                    transform=clipped_transform,
+                    nodata=nodata_value,
                 )
-
-                with rasterio.open(output_path, "w", **profile) as dst:
-                    dst.write(clipped)
                 paths.append(output_path)
 
         return paths
@@ -353,6 +405,17 @@ class GridMETPipeline:
             bool: True if upload was successful, False otherwise
         """
         file_name = os.path.basename(path)
+        if not path.lower().endswith((".tif", ".tiff")):
+            self.logger.info(f"Skipping non-GeoTIFF file {file_name}")
+            return False
+
+        if not self._is_cloud_optimized(path):
+            self.logger.error(
+                f"Refusing to upload {file_name}: local file is not a Cloud Optimized GeoTIFF. "
+                "Re-run tiling so outputs are written as COGs."
+            )
+            return False
+
         if not overwrite:
             # Check if the file already exists in the bucket
             if self.check_if_s3_key_exists(file_name):
@@ -361,7 +424,7 @@ class GridMETPipeline:
 
         try:
             self.s3.upload_file(path, self.aws_bucket, file_name)
-            self.logger.info(f"Uploaded file {file_name} to aws bucket {self.aws_bucket}")
+            self.logger.info(f"Uploaded COG {file_name} to aws bucket {self.aws_bucket}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to upload {file_name}: {str(e)}")
