@@ -2,13 +2,19 @@ FROM node:21-bookworm
 
 WORKDIR /app
 
+ENV MPLBACKEND=Agg
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3 \
-        python3-numpy \
-        python3-rasterio \
-    && rm -rf /var/lib/apt/lists/* \
-    && python3 -c "import rasterio, numpy"
+        python3-pip \
+        python3-tk \
+        poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY server/requirements.txt ./server/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r server/requirements.txt \
+    && python3 -c "import rasterio, numpy, pandas, geopandas, matplotlib, seaborn, PIL, PyPDF2, yaml, area, geojson, tkinter"
 
 COPY package.json package-lock.json ./
 RUN npm install
@@ -17,7 +23,8 @@ COPY init-api.sh /init-api.sh
 RUN chmod +x /init-api.sh
 
 COPY server ./server
-COPY water_rights_visualizer/ARD_tiles.geojson ./water_rights_visualizer/ARD_tiles.geojson
-COPY water_rights_visualizer/et_tool_data_docs.docx ./water_rights_visualizer/et_tool_data_docs.docx
+COPY variables.yaml ./variables.yaml
+COPY client/package.json ./client/package.json
+COPY water_rights_visualizer ./water_rights_visualizer
 
 EXPOSE 5000

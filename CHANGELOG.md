@@ -1,3 +1,8 @@
+## 1.42.0 (2026-11-10)
+### Bug Fixes
+- Fixes bug with custom report generator preview not showing up
+- Ensures gridMET pipeline tiles are COGs before writing
+
 ## 1.41.0 (2026-06-30)
 ### Features
 - **Comparison Job Reports**

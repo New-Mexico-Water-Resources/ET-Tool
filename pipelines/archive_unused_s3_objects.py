@@ -61,6 +61,28 @@ TRANSITION_REQUEST_USD_PER_1000 = {
     "GLACIER_IR": 0.02,
 }
 
+# Approx us-west-2 rates for undoing a cold-tier transition via COPY back to Standard.
+# GLACIER_IR is instantly readable (no RestoreObject). GLACIER / DEEP_ARCHIVE need a
+# RestoreObject job first; estimates below use Standard retrieval pricing.
+RETRIEVAL_USD_PER_GB = {
+    "GLACIER_IR": 0.03,
+    "GLACIER": 0.01,
+    "DEEP_ARCHIVE": 0.02,
+}
+RETRIEVAL_REQUEST_USD_PER_1000 = {
+    "GLACIER_IR": 0.01,  # GET
+    "GLACIER": 0.05,  # RestoreObject (Standard)
+    "DEEP_ARCHIVE": 0.10,  # RestoreObject (Standard)
+}
+STANDARD_PUT_USD_PER_1000 = 0.005
+MIN_STORAGE_DAYS = {
+    "GLACIER_IR": 90,
+    "GLACIER": 90,
+    "DEEP_ARCHIVE": 180,
+}
+INSTANT_REVERSE_CLASSES = {"GLACIER_IR"}
+DEFAULT_RESTORE_CLASS = "STANDARD"
+
 GLACIER_OVERHEAD_TIERS = {"GLACIER", "DEEP_ARCHIVE"}
 GLACIER_OVERHEAD_STANDARD_BYTES = 8 * 1024
 GLACIER_OVERHEAD_ARCHIVE_BYTES = 32 * 1024
@@ -279,6 +301,76 @@ def estimate_transition_cost(num_objects: int, target_class: str) -> float:
     return (num_objects / 1000.0) * rate_per_1000
 
 
+@dataclass
+class ReverseCostEstimate:
+    total_bytes: int
+    num_objects: int
+    cold_class: str
+    retrieval_data: float
+    retrieval_requests: float
+    put_requests: float
+    early_deletion_if_immediate: float
+    min_storage_days: int
+
+    @property
+    def total_if_immediate(self) -> float:
+        return self.retrieval_data + self.retrieval_requests + self.put_requests + self.early_deletion_if_immediate
+
+    @property
+    def total_after_min_duration(self) -> float:
+        return self.retrieval_data + self.retrieval_requests + self.put_requests
+
+
+def estimate_reverse_cost(plan: Iterable[PlannedAction], cold_class: str) -> ReverseCostEstimate:
+    actions = list(plan)
+    total_bytes = sum(action.size for action in actions)
+    num_objects = len(actions)
+    gb = total_bytes / 1024**3
+    min_days = MIN_STORAGE_DAYS.get(cold_class, 0)
+    cold_rate = STORAGE_RATES_USD_PER_GB_MONTH.get(cold_class, 0.0)
+
+    return ReverseCostEstimate(
+        total_bytes=total_bytes,
+        num_objects=num_objects,
+        cold_class=cold_class,
+        retrieval_data=gb * RETRIEVAL_USD_PER_GB.get(cold_class, 0.0),
+        retrieval_requests=(num_objects / 1000.0) * RETRIEVAL_REQUEST_USD_PER_1000.get(cold_class, 0.0),
+        put_requests=(num_objects / 1000.0) * STANDARD_PUT_USD_PER_1000,
+        early_deletion_if_immediate=gb * cold_rate * (min_days / 30.0) if min_days else 0.0,
+        min_storage_days=min_days,
+    )
+
+
+def print_reverse_cost_section(reverse: ReverseCostEstimate) -> None:
+    instant = reverse.cold_class in INSTANT_REVERSE_CLASSES
+    print("\nCost to reverse (approx, us-west-2 rates):")
+    if instant:
+        print(
+            f"  reversibility:         {reverse.cold_class} is instantly readable; "
+            f"undo = COPY each object back to {DEFAULT_RESTORE_CLASS}"
+        )
+    else:
+        print(
+            f"  reversibility:         {reverse.cold_class} requires RestoreObject first "
+            f"(hours), then COPY back to {DEFAULT_RESTORE_CLASS}"
+        )
+    print(f"  data retrieval:        ${reverse.retrieval_data:,.2f}  ({format_bytes(reverse.total_bytes)} @ ${RETRIEVAL_USD_PER_GB.get(reverse.cold_class, 0.0):.2f}/GB)")
+    print(f"  retrieval requests:    ${reverse.retrieval_requests:,.2f}  ({reverse.num_objects:,} requests)")
+    print(f"  COPY/PUT to Standard:  ${reverse.put_requests:,.2f}  ({reverse.num_objects:,} requests)")
+    if reverse.min_storage_days:
+        print(
+            f"  early-deletion fee:    ${reverse.early_deletion_if_immediate:,.2f}  "
+            f"(if reversed before {reverse.min_storage_days}-day minimum)"
+        )
+    print(f"  total if reverse now:  ${reverse.total_if_immediate:,.2f}")
+    if reverse.min_storage_days:
+        after_label = f"total after {reverse.min_storage_days}d:"
+        print(
+            f"  {after_label:<22} ${reverse.total_after_min_duration:,.2f}  "
+            "(same ops, no early-deletion fee)"
+        )
+
+
 def print_dataset_table(title: str, datasets: dict[str, DatasetAggregate]) -> None:
     if not datasets:
         return
@@ -293,6 +385,7 @@ def print_report(result: ScanResult, target_class: str, cutoff_year: int) -> Non
     current_cost, target_cost = estimate_monthly_cost(result.plan, target_class)
     transition_cost = estimate_transition_cost(result.matched, target_class)
     monthly_savings = current_cost - target_cost
+    reverse = estimate_reverse_cost(result.plan, target_class)
 
     print("\n" + "=" * 70)
     print("ARCHIVE PLAN SUMMARY")
@@ -320,6 +413,30 @@ def print_report(result: ScanResult, target_class: str, cutoff_year: int) -> Non
     print(f"  monthly savings:     ${monthly_savings:,.2f}/mo  (${monthly_savings * 12:,.2f}/yr)")
     if monthly_savings > 0:
         print(f"  payback period:      {transition_cost / monthly_savings:,.1f} months to recoup the transition cost")
+
+    if result.plan:
+        print_reverse_cost_section(reverse)
+
+    print("=" * 70)
+
+
+def print_reverse_report(plan: list[PlannedAction], cold_class: str, report_csv: str) -> None:
+    reverse = estimate_reverse_cost(plan, cold_class)
+    restore_classes: dict[str, int] = {}
+    for action in plan:
+        restore_classes[action.current_class] = restore_classes.get(action.current_class, 0) + 1
+
+    print("\n" + "=" * 70)
+    print("REVERSE PLAN SUMMARY")
+    print("=" * 70)
+    print(f"Plan CSV:                          {report_csv}")
+    print(f"Cold class to reverse from:        {cold_class}")
+    print(f"Objects to restore:                {len(plan):,}  ({format_bytes(reverse.total_bytes)})")
+    print("Restore destination (from CSV current_storage_class):")
+    for storage_class, count in sorted(restore_classes.items(), key=lambda kv: -kv[1]):
+        print(f"  {storage_class:<28} {count:,}")
+
+    print_reverse_cost_section(reverse)
     print("=" * 70)
 
 
@@ -339,6 +456,39 @@ def write_report_csv(plan: list[PlannedAction], path: str) -> None:
                 ]
             )
     logger.info("Wrote plan for %d objects to %s", len(plan), path)
+
+
+def load_plan_csv(path: str) -> list[PlannedAction]:
+    plan: list[PlannedAction] = []
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        required = {"key", "size_bytes", "current_storage_class"}
+        if reader.fieldnames is None or not required.issubset(set(reader.fieldnames)):
+            missing = sorted(required - set(reader.fieldnames or []))
+            raise ValueError(f"CSV is missing required columns: {', '.join(missing)}")
+
+        for row in reader:
+            raw_date = (row.get("acquisition_date") or "").strip()
+            acquisition_date: Optional[date] = None
+            if raw_date:
+                try:
+                    acquisition_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+                except ValueError:
+                    acquisition_date = None
+
+            variable = (row.get("variable") or "").strip() or None
+            plan.append(
+                PlannedAction(
+                    key=row["key"],
+                    size=int(row["size_bytes"]),
+                    current_class=(row.get("current_storage_class") or DEFAULT_RESTORE_CLASS).strip()
+                    or DEFAULT_RESTORE_CLASS,
+                    variable=variable,
+                    acquisition_date=acquisition_date,
+                    reason=(row.get("reason") or "").strip(),
+                )
+            )
+    return plan
 
 
 def transition_object(s3_client, bucket: str, action: PlannedAction, target_class: str) -> tuple[PlannedAction, Optional[str]]:
@@ -362,14 +512,25 @@ def execute_plan(
     s3_client,
     bucket: str,
     plan: list[PlannedAction],
-    target_class: str,
     workers: int,
+    *,
+    target_class: Optional[str] = None,
+    use_original_class: bool = False,
 ) -> tuple[int, list[tuple[PlannedAction, str]]]:
+    if use_original_class == (target_class is not None):
+        raise ValueError("Specify exactly one of target_class or use_original_class=True")
+
     succeeded = 0
     failures: list[tuple[PlannedAction, str]] = []
 
+    def destination_for(action: PlannedAction) -> str:
+        return action.current_class if use_original_class else target_class  # type: ignore[return-value]
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(transition_object, s3_client, bucket, action, target_class): action for action in plan}
+        futures = {
+            pool.submit(transition_object, s3_client, bucket, action, destination_for(action)): action
+            for action in plan
+        }
         for i, future in enumerate(as_completed(futures), start=1):
             action, error = future.result()
             if error:
@@ -385,7 +546,10 @@ def execute_plan(
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Move unused (pre-cutoff / legacy Landsat ESI-ET) S3 objects to a Glacier tier.",
+        description=(
+            "Move unused (pre-cutoff / legacy Landsat ESI-ET) S3 objects to a Glacier tier, "
+            "or reverse a prior transition using a report CSV."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--bucket", default=DEFAULT_BUCKET, help="S3 bucket to scan.")
@@ -394,13 +558,22 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--region", default=DEFAULT_REGION, help="AWS region.")
     parser.add_argument(
         "--target-class",
-        default="DEEP_ARCHIVE",
+        default="GLACIER_IR",
         choices=["DEEP_ARCHIVE", "GLACIER", "GLACIER_IR"],
-        help="Destination storage class.",
+        help="Cold storage class to archive into (or reverse from when using --reverse).",
     )
     parser.add_argument("--variables-yaml", default=DEFAULT_VARIABLES_YAML, help="Path to variables.yaml.")
     parser.add_argument("--cutoff-year", type=int, default=None, help="Override the cutoff year from variables.yaml.")
-    parser.add_argument("--report-csv", default=None, help="Write the full plan to this CSV path.")
+    parser.add_argument(
+        "--report-csv",
+        default=None,
+        help="Write the archive plan to this CSV, or (with --reverse) read the plan to restore from.",
+    )
+    parser.add_argument(
+        "--reverse",
+        action="store_true",
+        help="Undo a prior archive using --report-csv (COPY each object back to its original storage class).",
+    )
     parser.add_argument("--limit", type=int, default=None, help="Stop after this many matched objects.")
     parser.add_argument("--workers", type=int, default=16, help="Parallel copy workers (used only with --execute).")
     parser.add_argument("--execute", action="store_true", help="Actually transition objects (default is dry-run).")
@@ -409,21 +582,84 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    args = parse_args(argv)
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
+def confirm_or_abort(message: str, *, skip: bool) -> bool:
+    if skip:
+        return True
+    print(message)
+    if input("Type 'yes' to proceed: ").strip().lower() != "yes":
+        print("Aborted.")
+        return False
+    return True
+
+
+def run_reverse(args: argparse.Namespace, s3_client=None) -> int:
+    if not args.report_csv:
+        logger.error("--reverse requires --report-csv pointing at a prior archive plan CSV.")
+        return 2
+
+    try:
+        plan = load_plan_csv(args.report_csv)
+    except (OSError, ValueError) as e:
+        logger.error("Failed to load plan CSV %s: %s", args.report_csv, e)
+        return 2
+
+    if args.limit is not None:
+        plan = plan[: args.limit]
+
+    mode = "REVERSE-EXECUTE" if args.execute else "REVERSE-DRY-RUN"
+    logger.info(
+        "[%s] bucket=%s profile=%s region=%s from=%s csv=%s objects=%d",
+        mode, args.bucket, args.profile, args.region, args.target_class, args.report_csv, len(plan),
     )
 
+    print_reverse_report(plan, args.target_class, args.report_csv)
+
+    if not plan:
+        logger.info("Nothing to reverse. Done.")
+        return 0
+
+    if not args.execute:
+        print("\nDRY-RUN: no changes made. Re-run with --reverse --execute to apply.")
+        print(
+            f"Example:\n  python -m pipelines.archive_unused_s3_objects "
+            f"--bucket {args.bucket} --profile {args.profile or 'PROFILE'} "
+            f"--report-csv {args.report_csv} --target-class {args.target_class} --reverse --execute"
+        )
+        return 0
+
+    if args.target_class not in INSTANT_REVERSE_CLASSES:
+        print(
+            f"\nWARNING: {args.target_class} is not instantly readable. "
+            "Objects must already be restored (RestoreObject completed) or COPY will fail."
+        )
+
+    reverse = estimate_reverse_cost(plan, args.target_class)
+    prompt = (
+        f"\nAbout to COPY {len(plan):,} objects ({format_bytes(reverse.total_bytes)}) "
+        f"in bucket '{args.bucket}' from {args.target_class} back to their original storage class "
+        f"(from {args.report_csv}).\n"
+        f"Estimated reverse cost if done now: ${reverse.total_if_immediate:,.2f} "
+        f"(${reverse.total_after_min_duration:,.2f} after the {reverse.min_storage_days}-day minimum)."
+    )
+    if not confirm_or_abort(prompt, skip=args.yes):
+        return 1
+
+    logger.info("Restoring %d objects with %d workers...", len(plan), args.workers)
+    succeeded, failures = execute_plan(
+        s3_client, args.bucket, plan, args.workers, use_original_class=True
+    )
+
+    print(f"\nDone. {succeeded:,} restored, {len(failures):,} failed.")
+    if failures:
+        print("Failures (first 20):")
+        for action, error in failures[:20]:
+            print(f"  {action.key}: {error}")
+        return 1
+    return 0
+
+
+def run_archive(args: argparse.Namespace, s3_client) -> int:
     cutoff_year = args.cutoff_year if args.cutoff_year is not None else load_cutoff_year(args.variables_yaml)
-
-    session = boto3.Session(profile_name=args.profile) if args.profile else boto3.Session()
-    s3_client = session.client(
-        "s3",
-        region_name=args.region,
-        config=BotoConfig(retries={"max_attempts": 10, "mode": "adaptive"}),
-    )
 
     mode = "EXECUTE" if args.execute else "DRY-RUN"
     logger.info(
@@ -445,23 +681,35 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if not args.execute:
         print("\nDRY-RUN: no changes made. Re-run with --execute to apply.")
+        if args.report_csv:
+            print(
+                "To undo later:\n"
+                f"  python -m pipelines.archive_unused_s3_objects "
+                f"--bucket {args.bucket} --profile {args.profile or 'PROFILE'} "
+                f"--report-csv {args.report_csv} --target-class {args.target_class} --reverse [--execute]"
+            )
         return 0
 
-    if not args.yes:
-        print(
-            f"\nAbout to transition {result.matched:,} objects ({format_bytes(result.matched_bytes)}) "
-            f"to {args.target_class} in bucket '{args.bucket}'."
+    reverse = estimate_reverse_cost(result.plan, args.target_class)
+    prompt = (
+        f"\nAbout to transition {result.matched:,} objects ({format_bytes(result.matched_bytes)}) "
+        f"to {args.target_class} in bucket '{args.bucket}'.\n"
+        f"This is reversible via COPY back to Standard, but undoing now would cost about "
+        f"${reverse.total_if_immediate:,.2f} (retrieval + requests"
+        + (
+            f" + {reverse.min_storage_days}-day early-deletion fee"
+            if reverse.min_storage_days
+            else ""
         )
-        print(
-            f"This is hard to reverse: restoring from {args.target_class} incurs retrieval fees "
-            "and a minimum-storage-duration charge."
-        )
-        if input("Type 'yes' to proceed: ").strip().lower() != "yes":
-            print("Aborted.")
-            return 1
+        + ")."
+    )
+    if not confirm_or_abort(prompt, skip=args.yes):
+        return 1
 
     logger.info("Transitioning %d objects with %d workers...", result.matched, args.workers)
-    succeeded, failures = execute_plan(s3_client, args.bucket, result.plan, args.target_class, args.workers)
+    succeeded, failures = execute_plan(
+        s3_client, args.bucket, result.plan, args.workers, target_class=args.target_class
+    )
 
     print(f"\nDone. {succeeded:,} transitioned, {len(failures):,} failed.")
     if failures:
@@ -470,6 +718,32 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(f"  {action.key}: {error}")
         return 1
     return 0
+
+
+def build_s3_client(args: argparse.Namespace):
+    session = boto3.Session(profile_name=args.profile) if args.profile else boto3.Session()
+    return session.client(
+        "s3",
+        region_name=args.region,
+        config=BotoConfig(retries={"max_attempts": 10, "mode": "adaptive"}),
+    )
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    args = parse_args(argv)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+    # Reverse dry-run only needs the CSV; skip AWS until --execute (or archive scan).
+    if args.reverse and not args.execute:
+        return run_reverse(args, s3_client=None)
+
+    s3_client = build_s3_client(args)
+    if args.reverse:
+        return run_reverse(args, s3_client)
+    return run_archive(args, s3_client)
 
 
 if __name__ == "__main__":
