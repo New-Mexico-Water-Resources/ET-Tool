@@ -1,3 +1,10 @@
+## 1.43.0 (2026-11-25)
+### Bug Fixes
+- Supports more generic geojson/shapefile properties (fixes bug on Properties accordion for active job)
+- Adds custom error boundary to prevent app errors from being unrecoverable without a page refresh
+- Fixes email notification wording
+- Changes Landsat Cloud Coverage source prioritization (local, S3, then live Planetary Computer cache)
+
 ## 1.42.0 (2026-11-10)
 ### Bug Fixes
 - Fixes bug with custom report generator preview not showing up
