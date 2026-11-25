@@ -21,7 +21,8 @@ def generate_patch(polygon: Polygon, affine: Affine | None = None) -> PatchPolyg
         polygon = list(polygon.geoms)[0]
 
     if affine is None:
-        polygon_coords = list(polygon.exterior.coords)
+        # Drop any z (elevation) values; matplotlib patches require 2D (x, y) vertices
+        polygon_coords = [coords[:2] for coords in polygon.exterior.coords]
     else:
         # Apply the affine transformation to the coordinates of the polygon
         polygon_coords = [~affine * coords[:2] for coords in polygon.exterior.coords]
