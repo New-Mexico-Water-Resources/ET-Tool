@@ -114,4 +114,54 @@ export function formatSubmitBulkJobsConfirmTitle(jobCount: number): string {
   return `Submit ${jobCount} job${jobCount === 1 ? "" : "s"}?`;
 }
 
+type GeoJsonWithProperties = {
+  features?: { properties?: unknown }[] | null;
+  properties?: unknown;
+};
+
+export function readFeatureProperties(geojson: unknown): Record<string, unknown> {
+  if (!geojson || typeof geojson !== "object") {
+    return {};
+  }
+
+  const record = geojson as GeoJsonWithProperties;
+  const features = record.features;
+  let raw: unknown;
+  if (Array.isArray(features) && features.length > 0) {
+    raw = features[0]?.properties;
+  } else if (!features) {
+    raw = record.properties;
+  }
+
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  return raw as Record<string, unknown>;
+}
+
+export function formatPropertyValue(value: unknown): string {
+  if (value == null) {
+    return "";
+  }
+
+  switch (typeof value) {
+    case "string":
+      return value;
+    case "number":
+    case "boolean":
+    case "bigint":
+      return String(value);
+    default:
+      break;
+  }
+
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof serialized === "string" ? serialized : "[unknown value]";
+  } catch {
+    return "[unknown value]";
+  }
+}
+
 export default {};
