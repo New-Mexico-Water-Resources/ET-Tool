@@ -47,3 +47,4 @@ tests/output
 pipelines/fix_manifest_gaps.ipynb
 **/_*.ipynb
 landsat_pass_layers_output
+s3_transition_files.csv
