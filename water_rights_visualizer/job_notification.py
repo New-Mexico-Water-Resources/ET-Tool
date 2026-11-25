@@ -116,10 +116,9 @@ def build_email_body(record: dict[str, Any], status: str) -> tuple[str, str]:
     text_body = "\n".join(text_lines)
 
     status_color = "#1a9641" if status == "Complete" else "#d7191c"
-    html_status = "ready to view and download" if status == "Complete" else "finished with an error"
     html_lines = [
         f"<p>Hello {recipient_name},</p>",
-        f"<p>Your ET report has {html_status}.</p>",
+        f"<p>{status_line}</p>",
         "<ul>",
         f"<li><strong>Job name:</strong> {job_name}</li>",
         f"<li><strong>Years:</strong> {start_year} to {end_year}</li>",
