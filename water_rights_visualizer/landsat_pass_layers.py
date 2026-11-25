@@ -8,7 +8,9 @@ from contextlib import contextmanager
 from logging import getLogger
 from os.path import exists, join
 
+import boto3
 import geopandas as gpd
+from dotenv import load_dotenv
 import numpy as np
 import planetary_computer
 import rasterio
@@ -21,18 +23,23 @@ from rasterio.warp import Resampling, reproject, transform_geom
 from shapely.geometry import MultiPolygon, Polygon, mapping, shape
 
 from .constants import ARD_TILES_FILENAME, CELL_SIZE_DEGREES, WGS84
-from .landsat_pass_count import (
+from .landsat_pass_catalog import (
     create_planetary_computer_catalog,
     extract_cloud_mask_from_qa,
     fetch_landsat_items_for_geometry,
     normalize_roi_geometries,
 )
+from .select_tiles import select_tiles
 
 logger = getLogger(__name__)
 
 PRODUCT_PREFIX = "LANDSAT_PASS"
 DEFAULT_LAYER_SUBDIR = "landsat_pass_layers"
 DEFAULT_SAT_IDS = ["landsat-5", "landsat-7", "landsat-8", "landsat-9"]
+
+_default_s3_client = None
+_default_s3_client_key: tuple[str, str, str | None, str | None] | None = None
+_logged_missing_s3_bucket = False
 
 BAND_TOTAL_OBSERVATIONS = 1
 BAND_NON_CLOUDY_OBSERVATIONS = 2
@@ -382,6 +389,61 @@ def generate_landsat_pass_layers(
     return generated_layers
 
 
+def landsat_pass_layer_s3_key(key_prefix: str, hv: str, year: int, month: int) -> str:
+    filename = f"{landsat_pass_layer_basename(hv, year, month)}.tif"
+    prefix = (key_prefix or "").strip("/")
+    if not prefix:
+        return filename
+    return f"{prefix}/{filename}"
+
+
+def _env_value(*names: str) -> str | None:
+    for name in names:
+        value = (os.environ.get(name) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def resolve_default_landsat_pass_s3() -> tuple[str, str, object] | None:
+    """Return the configured S3 location of cached Landsat pass COGs, plus a client.
+
+    Bucket and region come from the process environment or a .env file.
+    When S3_INPUT_BUCKET is unset, S3 is skipped.
+    """
+    global _default_s3_client, _default_s3_client_key, _logged_missing_s3_bucket
+
+    load_dotenv()
+    bucket = _env_value("S3_INPUT_BUCKET")
+    if bucket is None:
+        if not _logged_missing_s3_bucket:
+            logger.info("S3_INPUT_BUCKET is unset; skipping the S3 Landsat pass cache")
+            _logged_missing_s3_bucket = True
+        return None
+
+    prefix = _env_value("LANDSAT_PASS_S3_PREFIX") or DEFAULT_LAYER_SUBDIR
+    profile = _env_value("AWS_PROFILE")
+    region = _env_value("S3_REGION", "AWS_REGION", "AWS_DEFAULT_REGION")
+    client_key = (bucket, prefix, profile, region)
+
+    if _default_s3_client is not None and _default_s3_client_key == client_key:
+        return bucket, prefix, _default_s3_client
+
+    try:
+        session = boto3.Session(profile_name=profile) if profile else boto3.Session()
+        if region:
+            client = session.client("s3", region_name=region)
+        else:
+            client = session.client("s3")
+    except Exception as exc:
+        logger.warning(f"Unable to create S3 client for cached Landsat pass layers: {exc}")
+        return None
+
+    _default_s3_client = client
+    _default_s3_client_key = client_key
+    return bucket, prefix, client
+
+
 def _try_download_layer_from_s3(
     s3_client,
     bucket: str,
@@ -391,15 +453,15 @@ def _try_download_layer_from_s3(
     year: int,
     month: int,
 ) -> bool:
-    basename = landsat_pass_layer_basename(hv, year, month)
-    layer_key = join(key_prefix, f"{basename}.tif").lstrip("/")
+    layer_key = landsat_pass_layer_s3_key(key_prefix, hv, year, month)
 
     try:
         os.makedirs(os.path.dirname(layer_path), exist_ok=True)
+        logger.info(f"Downloading cached Landsat pass layer s3://{bucket}/{layer_key}")
         s3_client.download_file(bucket, layer_key, layer_path)
         return True
     except Exception as exc:
-        logger.debug(f"Unable to download Landsat pass layer for tile {hv} from S3: {exc}")
+        logger.warning(f"Unable to download Landsat pass layer s3://{bucket}/{layer_key}: {exc}")
         if exists(layer_path):
             os.remove(layer_path)
         return False
@@ -421,7 +483,7 @@ def resolve_landsat_pass_layer(
     if s3_bucket and s3_client is not None:
         if _try_download_layer_from_s3(
             s3_client,
-            bucket,
+            s3_bucket,
             s3_key_prefix,
             layer_path,
             hv,
@@ -441,8 +503,6 @@ def _roi_union(roi: Polygon | list[Polygon] | MultiPolygon) -> Polygon | MultiPo
 
 
 def _tiles_for_roi(roi: Polygon | list[Polygon] | MultiPolygon, tiles_geojson: str | None = None) -> gpd.GeoDataFrame:
-    from .select_tiles import select_tiles
-
     roi_geometry = _roi_union(roi)
     tile_hvs = select_tiles(roi_geometry)
     if not tile_hvs:
