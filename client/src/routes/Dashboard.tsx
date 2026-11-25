@@ -7,6 +7,7 @@ import GeoJSONLayer from "../components/GeoJsonLayer";
 import "../scss/Dashboard.scss";
 import NavToolbar from "../components/NavToolbar";
 import CurrentJobChip from "../components/CurrentJobChip";
+import { JobSummaryError, PanelErrorBoundary } from "../components/AppErrorBoundary";
 import CustomDownloadModal from "../components/CustomDownloadModal";
 import JobQueue from "../components/JobQueue";
 import MultiGeoJSONLayer from "../components/MultiGeoJsonLayer";
@@ -371,7 +372,14 @@ const Dashboard = () => {
       <BrowserNotificationPermissionEffect />
       <NavToolbar />
       {isAuthenticated && <CustomDownloadModal />}
-      {isAuthenticated && activeJob && (activeJobGroup || multipolygons.length <= 1) && <CurrentJobChip />}
+      {isAuthenticated && activeJob && (activeJobGroup || multipolygons.length <= 1) && (
+        <PanelErrorBoundary
+          resetKey={activeJobGroup?.groupId ?? activeJob.key}
+          fallback={({ reset }) => <JobSummaryError onRetry={reset} />}
+        >
+          <CurrentJobChip />
+        </PanelErrorBoundary>
+      )}
       {isAuthenticated && showUploadDialog && <LayersControl />}
       {(!isAuthenticated || (!canReadJobs && userInfo)) && (
         <div

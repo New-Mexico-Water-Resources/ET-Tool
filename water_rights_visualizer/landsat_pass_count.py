@@ -2,8 +2,6 @@ import os
 import time
 import json
 import datetime
-import calendar
-import pystac_client
 import planetary_computer
 import geopandas as gpd
 import numpy as np
@@ -11,10 +9,6 @@ import rasterio
 from rasterio.mask import mask
 from rasterio.crs import CRS
 from rasterio.features import geometry_mask
-from requests.adapters import HTTPAdapter, Retry
-from pystac_client.stac_api_io import StacApiIO
-import pyproj
-from shapely.ops import transform
 from rasterio.warp import transform_geom
 
 # Set environment variables to fix PROJ database issues
@@ -24,69 +18,18 @@ os.environ.setdefault("GTIFF_SRS_SOURCE", "EPSG")
 from shapely.geometry import Polygon, MultiPolygon, shape
 from logging import getLogger
 
+from .landsat_pass_catalog import (
+    create_planetary_computer_catalog,
+    extract_cloud_mask_from_qa,
+    fetch_landsat_items_for_geometry,
+    normalize_roi_geometries,
+)
+from .landsat_pass_layers import aggregate_landsat_pass_stats_from_layers, resolve_default_landsat_pass_s3
+
 logger = getLogger(__name__)
 
 WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 DEFAULT_SAT_IDS = ["landsat-5", "landsat-7", "landsat-8", "landsat-9"]
-
-
-def normalize_roi_geometries(roi: Polygon | list[Polygon] | MultiPolygon) -> list[Polygon]:
-    if isinstance(roi, Polygon):
-        return [roi]
-    if isinstance(roi, MultiPolygon):
-        return list(roi.geoms)
-    return list(roi)
-
-
-def search_catalog_with_retries(catalog, bbox, datetime, collections=["landsat-c2-l2"], retries=3):
-    for i in range(retries):
-        try:
-            return catalog.search(collections=collections, bbox=bbox, datetime=datetime)
-        except Exception as e:
-            logger.error(f"Error searching for Landsat passes: {e}")
-            time.sleep(i + 1)
-            continue
-    raise Exception("Failed to search for Landsat passes")
-
-
-def get_items_with_retries(search, retries=3):
-    for i in range(retries):
-        try:
-            return search.items()
-        except Exception as e:
-            logger.error(f"Error getting items: {e}")
-            time.sleep(i + 1)
-            continue
-
-
-def create_planetary_computer_catalog() -> tuple[pystac_client.Client, StacApiIO]:
-    stac_api_io = StacApiIO()
-    retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
-    stac_api_io.session.mount("http://", HTTPAdapter(max_retries=retries))
-    stac_api_io.session.mount("https://", HTTPAdapter(max_retries=retries))
-
-    catalog = pystac_client.Client.open(
-        "https://planetarycomputer.microsoft.com/api/stac/v1",
-        modifier=planetary_computer.sign_inplace,
-        stac_io=stac_api_io,
-    )
-    return catalog, stac_api_io
-
-
-def fetch_landsat_items_for_geometry(catalog, geometry: Polygon, month: int, year: int):
-    start_date = f"{year}-{month:02d}-01"
-    end_date = f"{year}-{month:02d}-{calendar.monthrange(year, month)[1]}"
-
-    search = search_catalog_with_retries(catalog, geometry.bounds, f"{start_date}/{end_date}")
-    for i in range(3):
-        try:
-            items = get_items_with_retries(search, retries=3)
-            return list(items) if items else []
-        except Exception as e:
-            logger.error(f"Error getting items: {e}")
-            time.sleep(i + 1)
-            continue
-    return []
 
 
 def get_landsat_month_stats(
@@ -102,13 +45,15 @@ def get_landsat_month_stats(
     s3_key_prefix: str = "",
     s3_client=None,
     prefer_layer_cache: bool = True,
+    use_s3_cache: bool = True,
     write_json_cache: bool = True,
 ) -> dict:
     """
     Return monthly Landsat pass and cloud-coverage statistics for an ROI.
 
-    Uses pre-generated monthly Landsat pass COG layers when available for all
-    intersecting ARD tiles, otherwise falls back to querying the Planetary Computer directly.
+    Uses a local copy of the Landsat pass COG when one is already on disk, then
+    the S3 cache when S3_INPUT_BUCKET is set. A Planetary Computer connection is
+    opened only when a required tile is still missing.
     """
     if sat_ids is None:
         sat_ids = DEFAULT_SAT_IDS
@@ -116,7 +61,12 @@ def get_landsat_month_stats(
     cache_directory = layer_cache_directory or os.environ.get("LANDSAT_PASS_LAYER_DIR") or subset_directory or "."
     stats = None
     if prefer_layer_cache:
-        from .landsat_pass_layers import aggregate_landsat_pass_stats_from_layers
+        if use_s3_cache and s3_client is None:
+            defaults = resolve_default_landsat_pass_s3()
+            if defaults is not None:
+                default_bucket, default_prefix, s3_client = defaults
+                s3_bucket = s3_bucket or default_bucket
+                s3_key_prefix = s3_key_prefix or default_prefix
 
         cached_stats = aggregate_landsat_pass_stats_from_layers(
             roi,
@@ -130,12 +80,13 @@ def get_landsat_month_stats(
         )
         if cached_stats is not None:
             logger.info(
-                f"Retrieved Landsat pass stats for {year}-{month:02d} from layer cache "
+                f"Retrieved Landsat pass stats for {year}-{month:02d} from cached layers "
                 f"(pass_count={cached_stats.get('pass_count')})"
             )
             stats = cached_stats
 
     if stats is None:
+        logger.info(f"Landsat pass cache miss for {year}-{month:02d}; querying Planetary Computer")
         stats = _fetch_monthly_cloud_coverage_from_planetary_computer(
             roi,
             month,
@@ -165,6 +116,7 @@ def count_landsat_passes_for_month(
     s3_bucket: str | None = None,
     s3_key_prefix: str = "",
     s3_client=None,
+    use_s3_cache: bool = True,
 ) -> int:
     """
     Count the number of unique Landsat passes for a given month and year within a specified region of interest (ROI).
@@ -186,51 +138,9 @@ def count_landsat_passes_for_month(
         s3_bucket=s3_bucket,
         s3_key_prefix=s3_key_prefix,
         s3_client=s3_client,
+        use_s3_cache=use_s3_cache,
     )
     return stats.get("pass_count", 0) or 0
-
-
-def extract_cloud_mask_from_qa(qa_array: np.ndarray) -> np.ndarray:
-    """
-    Extract cloud and cloud shadow mask from Landsat Collection 2 QA_PIXEL band.
-
-    For Landsat Collection 2 Level 2, cloud and cloud shadow information is in:
-    - Bit 3: Cloud confidence bit 0
-    - Bit 4: Cloud confidence bit 1
-    - Bit 5: Cloud shadow confidence
-
-    Cloud confidence values:
-    - 00 (0): No confidence level set (not determined)
-    - 01 (1): Low confidence cloud
-    - 10 (2): Medium confidence cloud
-    - 11 (3): High confidence cloud
-
-    Cloud shadow confidence:
-    - 0: No cloud shadow
-    - 1: Cloud shadow
-
-    Args:
-        qa_array (np.ndarray): QA_PIXEL band array
-
-    Returns:
-        np.ndarray: Boolean array where True indicates cloud or cloud shadow pixels
-    """
-    # Extract bits 3-4 for cloud confidence
-    cloud_confidence = (qa_array >> 3) & 0b11
-
-    # Extract bit 5 for cloud shadow
-    cloud_shadow = (qa_array >> 5) & 0b1
-
-    # Consider medium and high confidence as clouds (values 2 and 3)
-    cloud_mask = cloud_confidence >= 2
-
-    # Include cloud shadows in the mask
-    cloud_shadow_mask = cloud_shadow == 1
-
-    # Combine cloud and cloud shadow masks
-    combined_mask = cloud_mask | cloud_shadow_mask
-
-    return combined_mask
 
 
 def calculate_monthly_cloud_coverage(
@@ -245,6 +155,7 @@ def calculate_monthly_cloud_coverage(
     s3_bucket: str | None = None,
     s3_key_prefix: str = "",
     s3_client=None,
+    use_s3_cache: bool = True,
 ) -> dict:
     """
     Calculate average cloud and cloud shadow coverage for a given month using QA_PIXEL band.
@@ -279,6 +190,7 @@ def calculate_monthly_cloud_coverage(
         s3_bucket=s3_bucket,
         s3_key_prefix=s3_key_prefix,
         s3_client=s3_client,
+        use_s3_cache=use_s3_cache,
     )
 
 

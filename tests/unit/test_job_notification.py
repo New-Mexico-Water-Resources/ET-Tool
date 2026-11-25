@@ -43,7 +43,13 @@ def test_build_email_body_includes_job_details(monkeypatch):
     assert "Test Farm" in text_body
     assert "2020 to 2024" in text_body
     assert "https://ettool.ose.nm.gov" in text_body
+    assert "Your ET report has finished processing and is ready to view and download." in text_body
     assert "Test Farm" in html_body
+    assert "Your ET report has finished processing and is ready to view and download." in html_body
+    assert "has ready" not in html_body
+
+    _, failed_html = build_email_body(sample_record(), "Failed")
+    assert "Your ET report job finished with an error." in failed_html
 
 
 @patch("water_rights_visualizer.job_notification.admin_job_notifications_enabled", return_value=True)

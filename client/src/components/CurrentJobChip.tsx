@@ -48,6 +48,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useAtomValue } from "jotai";
 import { tooltipAtom } from "../utils/atoms";
 import DefaultReportMenuItems from "./DefaultReportMenuItems";
+import { formatPropertyValue, readFeatureProperties } from "../utils/helpers";
 
 const CurrentJobChip = () => {
   const [activeJob, setActiveJob] = useStore((state) => [state.activeJob, state.setActiveJob]);
@@ -211,23 +212,15 @@ const CurrentJobChip = () => {
     return jobStatus;
   }, [activeJob?.key, activeJob?.status, jobStatuses]);
 
-  const activeJobProperties: { property: string; value: unknown }[] = useMemo(() => {
-    if (!activeJob?.loaded_geo_json) return [];
-
-    let properties = {};
-    const features = activeJob.loaded_geo_json?.features;
-    if (features && features.length > 0) {
-      properties = activeJob.loaded_geo_json.features[0].properties;
-    } else if (!features && activeJob.loaded_geo_json?.properties) {
-      properties = activeJob.loaded_geo_json.properties;
-    }
+  const activeJobProperties: { property: string; value: string }[] = useMemo(() => {
+    const properties = readFeatureProperties(activeJob?.loaded_geo_json);
 
     return Object.entries(properties).map(([key, value]) => {
       const propertyName = key
         .split(" ")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
-      return { property: propertyName, value };
+      return { property: propertyName, value: formatPropertyValue(value) };
     });
   }, [activeJob?.loaded_geo_json]);
 
@@ -531,14 +524,14 @@ const CurrentJobChip = () => {
               border: "2px solid #404243",
               borderRadius: "8px",
               padding: "4px",
-              textOverflow: "ellipsis",
-              whiteSpace: "pre",
+              overflowWrap: "anywhere",
+              whiteSpace: "pre-wrap",
               marginBottom: "4px",
             }}
           >
             {activeJobProperties.map((property, index) => (
-              <Typography key={index} variant="body2" style={{ color: "var(--st-gray-40)" }}>
-                {property.property}: <b>{property.value as string}</b>
+              <Typography key={`${property.property}-${index}`} variant="body2" style={{ color: "var(--st-gray-40)" }}>
+                {property.property}: <b>{property.value}</b>
               </Typography>
             ))}
           </div>

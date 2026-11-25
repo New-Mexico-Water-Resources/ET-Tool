@@ -7,15 +7,18 @@ import theme from "./theme";
 import Dashboard from "./routes/Dashboard";
 import { ConfirmProvider } from "material-ui-confirm";
 import NotFoundPage from "./routes/404";
+import { RouteErrorPage } from "./components/AppErrorBoundary";
 
 const router = createBrowserRouter([
   {
     path: "/",
     element: <Dashboard />,
+    errorElement: <RouteErrorPage />,
   },
   {
     path: "*",
     element: <NotFoundPage />,
+    errorElement: <RouteErrorPage />,
   },
 ]);
 
